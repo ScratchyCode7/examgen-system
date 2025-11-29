@@ -16,10 +16,12 @@ public sealed class GetQuestionsEndpoint : IEndpoint
                 string? search,
                 QuestionDifficulty? difficulty,
                 string? category,
-                PaginationParams pagination,
-                AppDbContext dbContext,
-                CancellationToken ct) =>
+                int pageNumber = 1,
+                int pageSize = 10,
+                AppDbContext dbContext = null!,
+                CancellationToken ct = default) =>
         {
+            var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
             var query = dbContext.Questions.AsNoTracking();
 
             if (testId.HasValue)

@@ -12,10 +12,12 @@ public sealed class GetTestResultsEndpoint : IEndpoint
         app.MapGet("/api/test-results", async Task<IResult> (
                 Guid? userId,
                 int? testId,
-                PaginationParams pagination,
-                AppDbContext dbContext,
-                CancellationToken ct) =>
+                int pageNumber = 1,
+                int pageSize = 10,
+                AppDbContext dbContext = null!,
+                CancellationToken ct = default) =>
         {
+            var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
             var query = dbContext.TestResults.AsNoTracking();
 
             if (userId.HasValue)

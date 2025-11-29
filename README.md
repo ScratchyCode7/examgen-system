@@ -1,10 +1,11 @@
 # Databank - Test Management System
 
-Backend API for managing exam/test databank built with C# ASP.NET Core and PostgreSQL.
+Full-stack application for managing exam/test databank with C# ASP.NET Core backend and React frontend.
 
 ## 📦 Project Structure
 
 - `src/` - Backend (C# ASP.NET Core Web API)
+- `client/` - Frontend (React + TypeScript)
 - `postman/` - API testing collection
 
 ## 🔑 Commit Standards
@@ -153,13 +154,87 @@ All list endpoints support pagination:
 - **Activity Logging**: System logs written to `ActivityLog` table with severity levels (Info, Warning, Error)
 - **CORS Configuration**: Pre-configured for frontend integration (localhost:3000, 5173, 5174)
 
+## 🎨 Frontend Setup
+
+The React frontend is located in the `client/` directory.
+
+### Quick Start
+
+1. Navigate to client directory:
+```bash
+cd client
+```
+
+2. Install dependencies:
+```bash
+npm install
+```
+
+3. Create `.env` file (if not already created):
+```
+VITE_API_BASE_URL=https://localhost:7088
+```
+
+4. Start development server:
+```bash
+npm run dev
+```
+
+The frontend will be available at `http://localhost:5173`
+
+### Frontend Features (Current Status)
+
+✅ **Completed:**
+- Login page with email/password authentication
+- Temporary signup page for testing (requires admin token)
+- Welcome/Home page skeleton with:
+  - Header with navigation (Home, Data Entry, Reports)
+  - User profile section
+  - Welcome message
+  - Search bar for Program/Course
+  - View options (list, grid, calendar)
+  - College cards grid (Computer Studies, Criminology, Arts and Sciences)
+- Protected routes with authentication
+- API service with JWT token management
+- Authentication context for state management
+
+🚧 **In Progress:**
+- Styling and design implementation
+- Additional pages (Data Entry, Reports)
+
 ## 🧪 Testing
+
+### How to Login as Admin
+
+1. **First, create the admin user** (one-time setup):
+   ```bash
+   curl -X POST https://localhost:7088/api/users/seed-admin
+   ```
+   This creates an admin user with:
+   - Username: `admin`
+   - Password: `Admin123!`
+   - Email: `admin@databank.dev`
+
+2. **Login via Frontend:**
+   - Start the frontend: `cd client && npm run dev`
+   - Navigate to `http://localhost:5173/login`
+   - Enter email: `admin@databank.dev` (or username: `admin`)
+   - Enter password: `Admin123!`
+   - Click "Login"
+
+3. **Login via API (for testing):**
+   ```bash
+   curl -X POST https://localhost:7088/api/auth/login \
+     -H "Content-Type: application/json" \
+     -d '{"username":"admin","password":"Admin123!"}'
+   ```
+   Copy the `accessToken` from the response and use it in subsequent requests.
 
 ### Postman Collection
 A complete Postman collection is available at `postman/Databank.postman_collection.json`:
 1. Import the collection into Postman
 2. Set environment variables:
-   - `baseUrl`: `https://localhost:5001` (or your API URL)
+   - `baseUrl`: `https://localhost:7088` (or your API URL)
    - `token`: (auto-populated after login)
 3. Run the "Login" request first to capture the token
 4. All other requests will use the token automatically
@@ -170,3 +245,27 @@ The collection includes:
 - Bulk import examples
 - Exam generation examples
 - Search/filter examples
+
+## ✅ Current Status
+
+### Backend (100% Complete)
+- ✅ Database setup with PostgreSQL
+- ✅ All entities and migrations
+- ✅ Authentication & Authorization (JWT)
+- ✅ All CRUD endpoints
+- ✅ Question databank features (bulk import, search, filters)
+- ✅ Exam generation
+- ✅ Pagination on all list endpoints
+- ✅ Global exception handling
+- ✅ Activity logging
+- ✅ CORS configuration
+
+### Frontend (Skeleton Complete)
+- ✅ Project setup with Vite + React + TypeScript
+- ✅ Authentication flow (login, protected routes)
+- ✅ Login page
+- ✅ Temporary signup page (for testing)
+- ✅ Welcome/Home page skeleton
+- ✅ API service integration
+- 🚧 Styling and design (pending)
+- 🚧 Additional pages (Data Entry, Reports)

@@ -10,10 +10,12 @@ public sealed class GetTestsEndpoint : IEndpoint
     public void Endpoint(IEndpointRouteBuilder app)
     {
         app.MapGet("/api/tests", async Task<IResult> (
-                PaginationParams pagination,
-                AppDbContext dbContext,
-                CancellationToken ct) =>
+                int pageNumber = 1,
+                int pageSize = 10,
+                AppDbContext dbContext = null!,
+                CancellationToken ct = default) =>
         {
+            var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
             var query = dbContext.Tests.AsNoTracking();
 
             var totalCount = await query.CountAsync(ct);

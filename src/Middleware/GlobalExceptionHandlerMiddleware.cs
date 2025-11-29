@@ -8,16 +8,16 @@ public sealed class GlobalExceptionHandlerMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<GlobalExceptionHandlerMiddleware> _logger;
-    private readonly ILoggingService? _loggingService;
+    private readonly IServiceScopeFactory _serviceScopeFactory;
 
     public GlobalExceptionHandlerMiddleware(
         RequestDelegate next,
         ILogger<GlobalExceptionHandlerMiddleware> logger,
-        ILoggingService? loggingService = null)
+        IServiceScopeFactory serviceScopeFactory)
     {
         _next = next;
         _logger = logger;
-        _loggingService = loggingService;
+        _serviceScopeFactory = serviceScopeFactory;
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -68,17 +68,26 @@ public sealed class GlobalExceptionHandlerMiddleware
 
         context.Response.StatusCode = response.StatusCode;
 
-        // Log to ActivityLog if service is available
-        if (_loggingService != null)
+        // Log to ActivityLog using a scope
+        try
         {
-            var userId = context.User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            await _loggingService.LogErrorAsync(
-                userId,
-                "System",
-                $"Exception: {exception.GetType().Name}",
-                exception.Message,
-                "Error"
-            );
+            using var scope = _serviceScopeFactory.CreateScope();
+            var loggingService = scope.ServiceProvider.GetService<ILoggingService>();
+            if (loggingService != null)
+            {
+                var userId = context.User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                await loggingService.LogErrorAsync(
+                    userId,
+                    "System",
+                    $"Exception: {exception.GetType().Name}",
+                    exception.Message,
+                    "Error"
+                );
+            }
+        }
+        catch (Exception logEx)
+        {
+            _logger.LogWarning(logEx, "Failed to log exception to ActivityLog");
         }
 
         var jsonResponse = JsonSerializer.Serialize(response, new JsonSerializerOptions
