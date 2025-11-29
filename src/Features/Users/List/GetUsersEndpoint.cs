@@ -34,7 +34,7 @@ public sealed class GetUsersEndpoint : IEndpoint
             };
 
             return TypedResults.Ok(response);
-        }).RequireAuthorization("AdminOnly");
+        }).RequireAuthorization();
     }
 }
 

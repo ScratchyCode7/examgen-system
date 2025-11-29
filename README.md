@@ -1,11 +1,10 @@
 # Databank - Test Management System
 
-Full-stack application for managing exam/test databank with C# ASP.NET Core backend and React frontend.
+Backend API for managing exam/test databank built with C# ASP.NET Core and PostgreSQL.
 
 ## 📦 Project Structure
 
 - `src/` - Backend (C# ASP.NET Core Web API)
-- `client/` - Frontend (React + TypeScript)
 - `postman/` - API testing collection
 
 ## 🔑 Commit Standards
@@ -48,24 +47,36 @@ Full-stack application for managing exam/test databank with C# ASP.NET Core back
 
 ## 🔐 Authentication / Authorization
 1. Update `Jwt` settings in `src/appsettings.Development.json` (issuer, audience, signing key).
-2. Register a user:
+2. **Create the first admin user** (one-time setup):
    ```bash
-   curl -X POST https://localhost:5001/api/users \
-     -H "Content-Type: application/json" \
-     -d '{"firstName":"Admin","lastName":"User","department":"IT","username":"admin","password":"Secret123!","email":"admin@databank.dev","isAdmin":true}'
+   curl -X POST https://localhost:5001/api/users/seed-admin
    ```
-3. Login and capture the token:
+   This creates an admin user with:
+   - Username: `admin`
+   - Password: `Admin123!`
+   - Email: `admin@databank.dev`
+   
+   **Note:** This endpoint only works if no admin exists. After creating the first admin, use the regular registration endpoint.
+3. **Login and capture the token**:
    ```bash
    curl -X POST https://localhost:5001/api/auth/login \
      -H "Content-Type: application/json" \
-     -d '{"username":"admin","password":"Secret123!"}'
+     -d '{"username":"admin","password":"Admin123!"}'
    ```
-4. Call admin-only endpoints with the `Authorization: Bearer <token>` header (e.g., `GET /api/admin/health`).
-5. JWT payload includes `isAdmin` claim; policies enforce admin access (`RequireAuthorization("AdminOnly")`).
+4. **Register additional users** (requires admin token):
+   ```bash
+   curl -X POST https://localhost:5001/api/users \
+     -H "Content-Type: application/json" \
+     -H "Authorization: Bearer <your-token>" \
+     -d '{"firstName":"John","lastName":"Doe","department":"IT","username":"johndoe","password":"Secret123!","email":"john@example.com","isAdmin":false}'
+   ```
+5. Call admin-only endpoints with the `Authorization: Bearer <token>` header (e.g., `GET /api/admin/health`).
+6. JWT payload includes `isAdmin` claim; policies enforce admin access (`RequireAuthorization("AdminOnly")`).
 
 ## 📡 API Endpoints
 
 ### Users (`/api/users`)
+- `POST /api/users/seed-admin` - Create first admin user (Public, one-time use)
 - `POST /api/users` - Create user (Admin only)
 - `GET /api/users` - List all users with pagination (Requires auth)
   - Query params: `pageNumber`, `pageSize`
@@ -140,37 +151,7 @@ All list endpoints support pagination:
 ### System Utilities
 - **Global Exception Handling**: Centralized error handling with consistent error responses
 - **Activity Logging**: System logs written to `ActivityLog` table with severity levels (Info, Warning, Error)
-- **CORS Configuration**: Pre-configured for React frontend (localhost:3000, 5173, 5174)
-
-## 🎨 Frontend Setup
-
-The React frontend is located in the `client/` directory.
-
-### Quick Start
-
-1. Navigate to client directory:
-```bash
-cd client
-```
-
-2. Install dependencies:
-```bash
-npm install
-```
-
-3. Create `.env` file:
-```
-VITE_API_BASE_URL=https://localhost:5001
-```
-
-4. Start development server:
-```bash
-npm run dev
-```
-
-The frontend will be available at `http://localhost:5173`
-
-See `client/README.md` for detailed frontend documentation.
+- **CORS Configuration**: Pre-configured for frontend integration (localhost:3000, 5173, 5174)
 
 ## 🧪 Testing
 

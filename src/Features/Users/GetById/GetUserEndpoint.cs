@@ -17,7 +17,7 @@ public sealed class GetUserEndpoint : IEndpoint
             return user is null
                 ? TypedResults.NotFound()
                 : TypedResults.Ok(user.ToResponse());
-        }).RequireAuthorization("AdminOnly");
+        }).RequireAuthorization();
     }
 }
 
