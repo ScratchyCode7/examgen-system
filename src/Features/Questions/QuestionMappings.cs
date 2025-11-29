@@ -12,7 +12,9 @@ public static class QuestionMappings
             question.Content,
             question.Type,
             question.Points,
-            question.DisplayOrder
+            question.DisplayOrder,
+            question.Difficulty,
+            question.Category
         );
     }
 }

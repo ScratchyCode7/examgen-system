@@ -1,4 +1,5 @@
 using Databank.Abstract;
+using Databank.Common;
 using Databank.Database;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,6 +12,7 @@ public sealed class GetTestResultsEndpoint : IEndpoint
         app.MapGet("/api/test-results", async Task<IResult> (
                 Guid? userId,
                 int? testId,
+                PaginationParams pagination,
                 AppDbContext dbContext,
                 CancellationToken ct) =>
         {
@@ -26,12 +28,24 @@ public sealed class GetTestResultsEndpoint : IEndpoint
                 query = query.Where(r => r.TestId == testId.Value);
             }
 
+            var totalCount = await query.CountAsync(ct);
+
             var results = await query
                 .OrderByDescending(r => r.CompletedAt)
+                .Skip(pagination.Skip)
+                .Take(pagination.Take)
                 .Select(r => r.ToResponse())
                 .ToListAsync(ct);
 
-            return TypedResults.Ok(results);
+            var response = new PagedResponse<TestResultResponse>
+            {
+                Items = results,
+                PageNumber = pagination.PageNumber,
+                PageSize = pagination.PageSize,
+                TotalCount = totalCount
+            };
+
+            return TypedResults.Ok(response);
         }).RequireAuthorization();
     }
 }

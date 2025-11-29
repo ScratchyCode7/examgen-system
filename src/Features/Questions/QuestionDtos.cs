@@ -1,3 +1,5 @@
+using Databank.Entities;
+
 namespace Databank.Features.Questions;
 
 public sealed record QuestionRequest(
@@ -14,6 +16,8 @@ public sealed record QuestionResponse(
     string Content,
     string Type,
     int Points,
-    int DisplayOrder
+    int DisplayOrder,
+    QuestionDifficulty? Difficulty,
+    string? Category
 );
 

@@ -8,6 +8,8 @@ public sealed class Question
     public string Type { get; set; } = "MultipleChoice";
     public int Points { get; set; }
     public int DisplayOrder { get; set; }
+    public QuestionDifficulty? Difficulty { get; set; }
+    public string? Category { get; set; }
 
     // Navigation
     public Test Test { get; set; } = null!;

@@ -31,6 +31,12 @@ public sealed class QuestionConfiguration : IEntityTypeConfiguration<Question>
         builder.Property(x => x.DisplayOrder)
             .HasDefaultValue(0);
 
+        builder.Property(x => x.Difficulty)
+            .HasConversion<int>();
+
+        builder.Property(x => x.Category)
+            .HasMaxLength(100);
+
         builder.HasOne(x => x.Test)
             .WithMany(x => x.Questions)
             .HasForeignKey(x => x.TestId)

@@ -1,0 +1,752 @@
+{
+	"info": {
+		"name": "Databank API",
+		"description": "Complete API collection for Databank Test Management System",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Login",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"admin\",\n  \"password\": \"Secret123!\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/login",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "auth", "login"]
+						}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    pm.environment.set(\"token\", jsonData.accessToken);",
+									"}"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Register User (Admin Only)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"department\": \"IT\",\n  \"username\": \"johndoe\",\n  \"password\": \"Password123!\",\n  \"email\": \"john@example.com\",\n  \"isAdmin\": false\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/users",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "users"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Users",
+			"item": [
+				{
+					"name": "Get All Users",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/users?pageNumber=1&pageSize=10",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "users"],
+							"query": [
+								{
+									"key": "pageNumber",
+									"value": "1"
+								},
+								{
+									"key": "pageSize",
+									"value": "10"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get User By ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/users/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "users", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": ""
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Update User",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"firstName\": \"John Updated\",\n  \"lastName\": \"Doe\",\n  \"department\": \"HR\",\n  \"email\": \"john.updated@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/users/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "users", ":id"]
+						}
+					}
+				},
+				{
+					"name": "Delete User",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/users/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "users", ":id"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Subjects",
+			"item": [
+				{
+					"name": "Get All Subjects",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/subjects?pageNumber=1&pageSize=10",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "subjects"],
+							"query": [
+								{
+									"key": "pageNumber",
+									"value": "1"
+								},
+								{
+									"key": "pageSize",
+									"value": "10"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Create Subject",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Mathematics\",\n  \"description\": \"Math subject\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/subjects",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "subjects"]
+						}
+					}
+				},
+				{
+					"name": "Get Subject By ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/subjects/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "subjects", ":id"]
+						}
+					}
+				},
+				{
+					"name": "Update Subject",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Advanced Mathematics\",\n  \"description\": \"Updated description\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/subjects/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "subjects", ":id"]
+						}
+					}
+				},
+				{
+					"name": "Delete Subject",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/subjects/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "subjects", ":id"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Tests",
+			"item": [
+				{
+					"name": "Get All Tests",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/tests?pageNumber=1&pageSize=10",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "tests"],
+							"query": [
+								{
+									"key": "pageNumber",
+									"value": "1"
+								},
+								{
+									"key": "pageSize",
+									"value": "10"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Create Test",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subjectId\": 1,\n  \"title\": \"Math Test 1\",\n  \"description\": \"Basic math test\",\n  \"durationMinutes\": 60,\n  \"isPublished\": true,\n  \"availableFrom\": \"2024-01-01T00:00:00Z\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/tests",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "tests"]
+						}
+					}
+				},
+				{
+					"name": "Generate Test from Databank",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subjectId\": 1,\n  \"title\": \"Generated Math Test\",\n  \"description\": \"Auto-generated test\",\n  \"questionCount\": 10,\n  \"durationMinutes\": 60,\n  \"isPublished\": false,\n  \"difficulty\": 2,\n  \"category\": \"Algebra\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/tests/generate",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "tests", "generate"]
+						}
+					}
+				},
+				{
+					"name": "Get Test By ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/tests/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "tests", ":id"]
+						}
+					}
+				},
+				{
+					"name": "Update Test",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subjectId\": 1,\n  \"title\": \"Updated Test Title\",\n  \"description\": \"Updated description\",\n  \"durationMinutes\": 90,\n  \"isPublished\": true,\n  \"availableFrom\": \"2024-01-01T00:00:00Z\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/tests/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "tests", ":id"]
+						}
+					}
+				},
+				{
+					"name": "Delete Test",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/tests/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "tests", ":id"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Questions",
+			"item": [
+				{
+					"name": "Get All Questions (with filters)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/questions?pageNumber=1&pageSize=10&search=&difficulty=&category=&testId=&subjectId=",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "questions"],
+							"query": [
+								{
+									"key": "pageNumber",
+									"value": "1"
+								},
+								{
+									"key": "pageSize",
+									"value": "10"
+								},
+								{
+									"key": "search",
+									"value": "",
+									"description": "Search in question content"
+								},
+								{
+									"key": "difficulty",
+									"value": "",
+									"description": "1=Easy, 2=Medium, 3=Hard"
+								},
+								{
+									"key": "category",
+									"value": "",
+									"description": "Filter by category"
+								},
+								{
+									"key": "testId",
+									"value": "",
+									"description": "Filter by test ID"
+								},
+								{
+									"key": "subjectId",
+									"value": "",
+									"description": "Filter by subject ID"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Create Question",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"testId\": 1,\n  \"content\": \"What is 2 + 2?\",\n  \"type\": \"MultipleChoice\",\n  \"points\": 1,\n  \"displayOrder\": 0,\n  \"difficulty\": 1,\n  \"category\": \"Basic Math\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/questions",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "questions"]
+						}
+					}
+				},
+				{
+					"name": "Bulk Import Questions",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"testId\": 1,\n  \"questions\": [\n    {\n      \"content\": \"What is 2 + 2?\",\n      \"type\": \"MultipleChoice\",\n      \"points\": 1,\n      \"displayOrder\": 0,\n      \"difficulty\": 1,\n      \"category\": \"Basic Math\",\n      \"options\": [\n        {\"content\": \"3\", \"isCorrect\": false, \"displayOrder\": 0},\n        {\"content\": \"4\", \"isCorrect\": true, \"displayOrder\": 1},\n        {\"content\": \"5\", \"isCorrect\": false, \"displayOrder\": 2}\n      ]\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/questions/bulk",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "questions", "bulk"]
+						}
+					}
+				},
+				{
+					"name": "Get Question By ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/questions/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "questions", ":id"]
+						}
+					}
+				},
+				{
+					"name": "Update Question",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"testId\": 1,\n  \"content\": \"Updated question content\",\n  \"type\": \"MultipleChoice\",\n  \"points\": 2,\n  \"displayOrder\": 0,\n  \"difficulty\": 2,\n  \"category\": \"Advanced Math\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/questions/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "questions", ":id"]
+						}
+					}
+				},
+				{
+					"name": "Delete Question",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/questions/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "questions", ":id"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Test Results",
+			"item": [
+				{
+					"name": "Get All Test Results",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/test-results?pageNumber=1&pageSize=10&userId=&testId=",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "test-results"],
+							"query": [
+								{
+									"key": "pageNumber",
+									"value": "1"
+								},
+								{
+									"key": "pageSize",
+									"value": "10"
+								},
+								{
+									"key": "userId",
+									"value": ""
+								},
+								{
+									"key": "testId",
+									"value": ""
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Create Test Result",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"userId\": \"00000000-0000-0000-0000-000000000000\",\n  \"testId\": 1,\n  \"score\": 85.5,\n  \"correctAnswers\": 17,\n  \"totalQuestions\": 20,\n  \"duration\": \"00:30:00\",\n  \"completedAt\": \"2024-01-01T12:00:00Z\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/test-results",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "test-results"]
+						}
+					}
+				},
+				{
+					"name": "Get Test Result By ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/test-results/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "test-results", ":id"]
+						}
+					}
+				},
+				{
+					"name": "Update Test Result",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"userId\": \"00000000-0000-0000-0000-000000000000\",\n  \"testId\": 1,\n  \"score\": 90.0,\n  \"correctAnswers\": 18,\n  \"totalQuestions\": 20,\n  \"duration\": \"00:30:00\",\n  \"completedAt\": \"2024-01-01T12:00:00Z\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/test-results/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "test-results", ":id"]
+						}
+					}
+				},
+				{
+					"name": "Delete Test Result",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/test-results/:id",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "test-results", ":id"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Admin",
+			"item": [
+				{
+					"name": "Admin Health Check",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/admin/health",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "admin", "health"]
+						}
+					}
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "https://localhost:5001",
+			"type": "string"
+		},
+		{
+			"key": "token",
+			"value": "",
+			"type": "string"
+		}
+	]
+}
+
