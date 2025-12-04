@@ -1,0 +1,234 @@
+@import './Dashboard.css';
+
+.course-topic-container {
+  width: 100%;
+  max-width: 1800px; /* same as navbar width */
+  margin: -40px auto 20px auto; /* reduce top margin from 20px to 10px */
+  background-color: #ffffff;
+  border-radius: 12px;
+  padding: 30px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+/* Header */
+.course-topic-container h2 {
+  text-align: center;
+  color: #1C4DA1; /* blue color */
+  margin-bottom: 30px;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+/* Program header */
+.program-header-line {
+  display: flex;
+  align-items: center; /* vertical center */
+  justify-content: center; /* center horizontally */
+  gap: 15px; /* space between logo and text */
+  border-top: 1px solid #1C4DA1;
+  border-bottom: 1px solid #1C4DA1;
+  padding: 5px 20px;
+  margin-bottom: 15px;
+}
+
+.program-logo.large-logo {
+  width: 250px;
+  height: auto;
+  margin-right: -50px;
+}
+
+.program-name.large-name {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0;
+  line-height: 1;
+}
+
+.program-header-line {
+  padding: 0px;
+}
+
+/* Fields */
+.field-container {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 20px;
+}
+
+.field-container label {
+  margin-bottom: 6px;
+  font-weight: 500;
+  color: #333;
+}
+
+.field-container input,
+.field-container select {
+  padding: 10px 12px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+/* Row fields */
+.row-fields {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.half-width {
+  flex: 1;
+}
+
+.flex-2 {
+  flex: 2;
+}
+
+.flex-1 {
+  flex: 1;
+}
+
+/* Save button below Hours Per Topic */
+.save-btn {
+  padding: 12px 30px;
+  background-color: #1C4DA1;
+  color: #fff;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  margin-top: -50px;
+  float: right;
+}
+
+.save-btn:hover {
+  background-color: #FFC63E;
+  color: #1C4DA1;
+}
+
+.history-table {
+  width: 100%;
+  border-top: 2px solid #1C4DA1;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.history-row {
+  display: grid;
+  grid-template-columns: 1fr 2fr 3fr 1fr;
+  padding: 10px 15px;
+  border-bottom: 1px solid #ccc;
+  font-size: 14px;
+  align-items: center;
+}
+
+.history-row.header {
+  background-color: #1C4DA1;
+  color: #fff;
+  font-weight: 600;
+}
+
+.history-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard.dark .course-topic-container {
+  background-color: #0f1724;
+  color: #E5E5E5;
+}
+
+.dashboard.dark .field-container input,
+.dashboard.dark .field-container select {
+  background-color: #14202b;
+  border-color: #263244;
+  color: #E5E5E5;
+}
+
+.dashboard.dark .history-row.header {
+  background-color: #FFC63E;
+  color: #1C4DA1;
+}
+
+.dashboard.dark .history-row {
+  border-color: rgba(255,198,62,0.3);
+}
+
+/* Position search bar below navbar */
+.search-bar {
+  position: relative;
+  flex: 1;
+  max-width: 600px;
+  margin: 20px auto;
+  z-index: 1;
+}
+
+.search-bar input {
+  width: 100%;
+  padding: 0.75rem 2.5rem 0.75rem 1rem;
+  border-radius: 9999px !important; /* force fully rounded corners */
+  border: 1px solid #d1d5db;
+  background: #fff;
+  color: inherit;
+  font-size: 0.95rem;
+  transition: all 0.2s;
+  box-sizing: border-box; /* ensures padding doesn't break the shape */
+}
+
+.search-bar .search-icon {
+  position: absolute;
+  right: 1rem;
+  top: 30%;
+  transform: translateY(-50%);
+  color: #888;
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+/* ----------------------------- */
+/* Added Dark Mode Text Fixes    */
+/* ----------------------------- */
+
+.dashboard.dark .course-topic-container {
+  background-color: #0f1724;
+  color: #ffffff;
+}
+
+.dashboard.dark .program-name.large-name {
+  color: #ffffff;
+}
+
+.dashboard.dark .program-header-line {
+  border-top: 1px solid #ffffff;
+  border-bottom: 1px solid #ffffff;
+}
+
+.dashboard.dark .field-container label {
+  color: #ffffff;
+}
+
+.dashboard.dark .history-row span {
+  color: #ffffff;
+}
+
+.dashboard.dark .save-btn {
+  color: #ffffff;
+}
+
+.dashboard.dark .search-bar input {
+  background-color: #14202b;
+  border-color: #263244;
+  color: #ffffff;
+}
+
+.dashboard.dark .search-bar .search-icon {
+  color: #ffffff;
+}
+
+.dashboard.dark h2 {
+  color: #facc15;
+}
+

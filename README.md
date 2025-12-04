@@ -156,13 +156,16 @@ All list endpoints support pagination:
 
 ## 🎨 Frontend Setup
 
-The React frontend is located in the `client/` directory.
+Two frontend projects exist in this repository:
 
-### Quick Start
+- `client/` – legacy Vite + React + TypeScript prototype (no longer used)
+- `tdb-frontend/` – **current** production React frontend (Create React App)
 
-1. Navigate to client directory:
+### Current Frontend (`tdb-frontend/`)
+
+1. Navigate to the folder:
 ```bash
-cd client
+cd tdb-frontend
 ```
 
 2. Install dependencies:
@@ -170,37 +173,57 @@ cd client
 npm install
 ```
 
-3. Create `.env` file (if not already created):
-```
-VITE_API_BASE_URL=https://localhost:7088
+3. Configure backend API URL in `.env`:
+```bash
+REACT_APP_API_BASE_URL=http://localhost:5012
 ```
 
 4. Start development server:
 ```bash
-npm run dev
+npm start
 ```
 
-The frontend will be available at `http://localhost:5173`
+The frontend will be available at `http://localhost:3000`.
 
 ### Frontend Features (Current Status)
 
-✅ **Completed:**
-- Login page with email/password authentication
-- Temporary signup page for testing (requires admin token)
-- Welcome/Home page skeleton with:
-  - Header with navigation (Home, Data Entry, Reports)
-  - User profile section
-  - Welcome message
-  - Search bar for Program/Course
-  - View options (list, grid, calendar)
-  - College cards grid (Computer Studies, Criminology, Arts and Sciences)
-- Protected routes with authentication
-- API service with JWT token management
-- Authentication context for state management
+✅ **Completed (tdb-frontend):**
+- Login page with username/email + password authentication
+- JWT-based auth:
+  - Token stored in `localStorage`
+  - Axios interceptor attaches `Authorization: Bearer <token>`
+  - Auth context decodes JWT and exposes `user`, `isAuthenticated`, `isAdmin`
+- Protected routes:
+  - `/login` – public login page (redirects if already authenticated)
+  - `/` – user dashboard (requires auth)
+  - `/admin` – admin dashboard (requires `isAdmin`)
+  - `/course-topic` – Course & Topic management (requires auth)
+  - `/test-encoding` – Test Question Encoding & Editing workspace (requires auth)
+- Dashboards:
+  - Regular dashboard with program cards, search, grid/list view, dark mode, user menu
+  - Admin dashboard with extended program list and same UX
+- Data Entry – **Course & Topic** (`/course-topic`):
+  - Form for selecting Course + entering Topic Code, Value, Topic Description, Hours per Topic
+  - Persists entries to backend `Subject` table via `POST /api/subjects` (Admin only)
+  - Uses `Subject.Description` JSON metadata to store course/topic/value/hours
+  - History table shows all topics previously created through this page
+- Data Entry – **Test Encoding & Editing** (`/test-encoding`):
+  - Rich-text question editor with toolbar (bold/italic/underline, lists, headings, links, images, math symbols)
+  - Multiple-choice A–D answer entry with rich-text
+  - Answer key explanation editor
+  - Cognitive level selection (Remembering & Understanding / Applying & Analyzing / Evaluation & Creating)
+  - Local in-page history grouped by cognitive level for the selected Subject + Topic
+- Global:
+  - Dark mode toggle
+  - Logout modal and flow
+  - Consistent navigation bar (Home, Data Entry, Reports) across pages
 
-🚧 **In Progress:**
-- Styling and design implementation
-- Additional pages (Data Entry, Reports)
+🚧 **Planned/Next Steps:**
+- Wire `TestEncodingAndEditing.jsx` to real backend questions/tests using:
+  - `POST /api/questions/bulk` for saving encoded questions + options
+  - `GET /api/questions` for loading existing questions per Subject/Topic
+- Add true Subject/Test-driven filtering instead of MOCK_SUBJECTS/MOCK_TOPICS
+- Replace remaining mock data (e.g., program lists) with API-driven content
 
 ## 🧪 Testing
 
@@ -260,12 +283,12 @@ The collection includes:
 - ✅ Activity logging
 - ✅ CORS configuration
 
-### Frontend (Skeleton Complete)
-- ✅ Project setup with Vite + React + TypeScript
-- ✅ Authentication flow (login, protected routes)
-- ✅ Login page
-- ✅ Temporary signup page (for testing)
-- ✅ Welcome/Home page skeleton
-- ✅ API service integration
-- 🚧 Styling and design (pending)
-- 🚧 Additional pages (Data Entry, Reports)
+### Frontend (tdb-frontend) – Current Status
+- ✅ Project setup with Create React App (React 18)
+- ✅ Authentication flow (login, protected routes, JWT handling)
+- ✅ User & Admin dashboards with dark mode and navigation
+- ✅ Course & Topic management page wired to backend `Subject` table
+- ✅ Test Encoding & Editing UI with rich-text question editor and local history
+- ✅ API service integration using Axios + interceptors
+- 🚧 Questions/Test integration with backend endpoints
+- 🚧 Advanced reporting and analytics views
