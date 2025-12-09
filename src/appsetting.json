@@ -1,0 +1,19 @@
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "AllowedHosts": "*",
+  "ConnectionStrings": {
+    "PostgresConnection": "Host=localhost;Port=5432;Database=databank_db;Username=postgres;Password=password;Include Error Detail=true;"
+  },
+  "Jwt": {
+    "Issuer": "Databank",
+    "Audience": "Databank",
+    "SigningKey": "super-secret-signing-key-change-me",
+    "ExpiresInMinutes": 60
+  }
+}
+

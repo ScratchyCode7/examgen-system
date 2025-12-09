@@ -4,6 +4,7 @@ import { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Searc
 import NavItem from '../components/NavItem';
 import DropdownNavItem from '../components/DropdownNavItem';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import '../styles/Dashboard.css';
 
 import TDBLogo from '../assets/TDB logo.png';
@@ -19,9 +20,9 @@ const MOCK_PROGRAMS = [
 
 const Dashboard = () => {
   const { user, logout, isAdmin } = useAuth();
+  const { isDarkMode, toggleDarkMode } = useTheme();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('Home');
-  const [isDarkMode, setIsDarkMode] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [programView, setProgramView] = useState('grid');
@@ -59,8 +60,6 @@ const Dashboard = () => {
   const dataEntryItems = ["Course - Topic", "Test Encoding", "Test Question Editing"];
   const isDataEntryActive = dataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
 
-  useEffect(() => { document.body.className = isDarkMode ? 'dark' : ''; }, [isDarkMode]);
-
   return (
     <div className={`dashboard ${isDarkMode ? 'dark' : ''}`}>
       <div className="background" style={{ backgroundImage: `url(${UPHSL})` }} />
@@ -94,7 +93,7 @@ const Dashboard = () => {
           </div>
 
           <div className="nav-right" ref={userMenuRef}>
-            <button onClick={() => setIsDarkMode(!isDarkMode)} className={`mode-switch ${isDarkMode ? 'dark' : ''}`}>
+            <button onClick={toggleDarkMode} className={`mode-switch ${isDarkMode ? 'dark' : ''}`}>
               <div className="circle">{isDarkMode ? <Moon /> : <Sun />}</div>
             </button>
 

@@ -50,7 +50,7 @@ Full-stack application for managing exam/test databank with C# ASP.NET Core back
 1. Update `Jwt` settings in `src/appsettings.Development.json` (issuer, audience, signing key).
 2. **Create the first admin user** (one-time setup):
    ```bash
-   curl -X POST https://localhost:5001/api/users/seed-admin
+   `curl -X POST https://localhost:5012/api/users/seed-admin`
    ```
    This creates an admin user with:
    - Username: `admin`
@@ -292,3 +292,21 @@ The collection includes:
 - ✅ API service integration using Axios + interceptors
 - 🚧 Questions/Test integration with backend endpoints
 - 🚧 Advanced reporting and analytics views
+
+## 🔄 Recent Changes (Dec 8-9, 2025)
+
+- Migrated the working Create-React-App frontend into `client/` and updated `client/package.json` to use `react-scripts` so the `client/` folder now hosts the active frontend (backup copy kept in `tdb-frontend/`).
+- Implemented a global `ThemeContext` to persist dark-mode preference across pages (`client/src/contexts/ThemeContext.js`).
+- Fixed dark-mode persistence and replaced per-page theme state with the ThemeProvider in `client/src/App.js`.
+- Fixed Test Encoding & Editing page (`client/src/pages/TestEncodingAndEditing.jsx`): now displays the correct logged-in username, uses `useAuth()` and performs proper logout.
+- Home navigation on encoding page is now admin-aware: Admin users are redirected to `/admin`.
+- Fixed Course & Topic page navigation so the Data Entry dropdown correctly navigates to `/test-encoding` when selecting Test Encoding or Test Question Editing (`client/src/pages/CourseTopic.jsx`).
+
+Files changed (high level):
+- `client/src/pages/TestEncodingAndEditing.jsx` — auth & navigation fixes, UI improvements
+- `client/src/pages/CourseTopic.jsx` — dropdown navigation and theme usage
+- `client/src/contexts/ThemeContext.js` — new central theme provider
+- `client/src/App.js` — wrapped app with `ThemeProvider`
+- `client/package.json`, `client/index.html` — migrated to CRA structure
+
+If you want me to push these changes to the remote branch now, I will commit and push to `Databank-Testing-Branch`.

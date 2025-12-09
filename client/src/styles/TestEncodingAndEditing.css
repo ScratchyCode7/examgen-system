@@ -1,0 +1,1562 @@
+/* ======================================= */
+/* I. BASE STYLES FROM DASHBOARD.CSS (Kept for completeness) */
+/* ======================================= */
+/* Base and Typography */
+:root {
+    --color-primary: #007bff;
+    --color-secondary: #6c757d;
+    --color-success: #28a745;
+    --color-danger: #dc3545;
+    --color-light: #f8f9fa;
+    --color-dark: #343a40;
+
+    --bg-light: #ffffff;
+    --bg-dark: #121212;
+    --text-light: #333333;
+    --text-dark: #e0e0e0;
+    --card-bg-light: #ffffff;
+    --card-bg-dark: #1e1e1e;
+    --border-light: #dddddd;
+    --border-dark: #3a3a3a;
+    
+    /* New variable for Bloom's cards consistency */
+    --bloom-color-1: #007bff;
+    --bloom-color-2: #28a745;
+    --bloom-color-3: #ffc107;
+
+    --nav-height: 5rem;
+    
+    /* --- CRITICAL ADDITIONS FOR NEW STYLES --- */
+    --primary-color: #1C4DA1; /* Main blue color */
+    --secondary-color: #FFC63E; /* Main yellow color */
+    --primary-light-color: #f0f4f8; /* Light background for primary boxes */
+    --secondary-light-color: #e9ecef; /* Light background for secondary boxes */
+    --border-color: #d1d5db; /* General border color */
+    --background-light: #f8f9fa; /* Light background */
+    --background-hover: #e9ecef; /* Light hover color */
+    --text-color-secondary: #6c757d; /* Secondary text color */
+    --color-blue: #007bff; /* Action blue */
+    --color-red: #dc3545; /* Action red */
+
+    /* Dark Mode variables for new styles */
+    --dark-primary-color: #4A90E2;
+    --dark-border-color: #263244;
+    --dark-background-light: #1e293b;
+    --dark-background-hover: #14202b;
+    --dark-primary-dark: #0f172a;
+    --text-color-secondary-dark: #94a3b8;
+}
+
+/* Dark Mode Transition */
+.dashboard, .navbar, .search-bar, .main-card, .input-group select, .input-group input, .content-editable-area {
+    transition: background-color 0.3s, color 0.3s, border-color 0.3s;
+}
+/* Base */
+.dashboard {
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    background-color: #1C4DA1;
+    color: #3B3B3B;
+    transition: all 0.3s;
+    position: relative;
+    overflow-x: hidden;
+}
+
+.dashboard.dark {
+    background-color: #12254d;
+    color: #E5E5E5;
+}
+
+/* Background watermark */
+.background {
+    position: absolute;
+    inset: 0;
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
+    opacity: 0.05;
+    z-index: 0;
+}
+
+.main-container {
+    position: relative;
+    z-index: 10;
+    padding: 1rem 2rem;
+}
+
+/* Navbar */
+.navbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: white;
+    padding: 0.5rem 2rem 0.5rem 3rem;
+    border-radius: 50px;
+    box-shadow: 0 6px 18px rgba(28, 77, 161, 0.08);
+    position: relative;
+    z-index: 20;
+    margin-top: 0;
+}
+
+.navbar.dark {
+    background: #0f172a;
+    color: #E5E5E5;
+}
+
+/* Nav Left */
+.logo-btn {
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+}
+
+.nav-left .logo {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: white;
+    object-fit: contain;
+    padding: 10px;
+    box-sizing: border-box;
+}
+
+.nav-left .logo-text {
+    font-weight: 800;
+    font-size: 1.75rem;
+    color: #1C4DA1;
+    margin-left: 0.75rem;
+}
+
+.navbar.dark .logo-text {
+    color: #E5E5E5;
+}
+
+/* Nav Center */
+.nav-center {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.nav-center .nav-item,
+.nav-center .dropdown-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 1.2rem;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: background 0.18s, color 0.18s, transform 0.12s;
+    color: inherit;
+    font-weight: 700;
+    font-size: 1.1rem;
+    border: none;
+    background: transparent;
+}
+
+/* Hover/Active Fixes */
+.nav-center .nav-item:hover,
+.nav-center .dropdown-btn:hover {
+    background-color: #FFC63E;
+    color: #1C4DA1;
+    transform: translateY(-1px);
+}
+
+.nav-center .nav-item.active,
+.nav-center .dropdown-nav-item.active .dropdown-btn {
+    background-color: #FFC63E;
+    color: #1C4DA1;
+}
+
+.dropdown-nav-item {
+    position: relative;
+}
+
+.dropdown-nav-item .dropdown-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    display: flex;
+    flex-direction: column;
+    z-index: 50;
+    min-width: 180px;
+    overflow: hidden;
+}
+
+.dropdown-menu-item {
+    padding: 0.6rem 0.9rem;
+    border: none;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.12s;
+    font-size: 0.95rem;
+}
+
+.dropdown-menu-item:hover {
+    background: #FFD066;
+}
+
+/* Nav Right (User/Mode Switch) */
+.nav-right {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    position: relative;
+}
+
+.mode-switch {
+    position: relative;
+    width: 60px;
+    height: 28px;
+    border-radius: 50px;
+    background: #ddd;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    padding: 0 4px;
+}
+
+.mode-switch .circle {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #fff;
+    transition: all 0.3s;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.mode-switch.dark {
+    background: #1C4DA1;
+}
+
+.mode-switch.dark .circle {
+    transform: translateX(32px);
+    background: #fff;
+}
+
+.user-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 1rem;
+    border-radius: 12px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: inherit;
+    font-weight: 700;
+    font-size: 1.1rem;
+    transition: all 0.15s;
+}
+
+/* Hover/Active Fixes */
+.user-btn:hover {
+    background-color: rgba(255,198,62,0.2);
+}
+
+.user-btn.active {
+    background-color: #FFC63E;
+    color: #1C4DA1;
+}
+
+.user-pic {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: #ddd;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: #1C4DA1;
+    font-weight: bold;
+    font-size: 1.2rem;
+}
+
+.user-dropdown {
+    position: absolute;
+    right: 0;
+    top: 60px;
+    width: 220px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.2);
+    z-index: 60;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.user-dropdown.show {
+    display: flex;
+}
+
+.user-dropdown button {
+    width: 100%;
+    text-align: left;
+    padding: 0.7rem 1rem;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 1rem;
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+/* Hover Fixes */
+.user-dropdown button:hover {
+    background-color: #FFC63E;
+    color: #1C4DA1;
+}
+
+/* Dark Mode Overrides for Nav Bar */
+.navbar.dark .nav-center .nav-item,
+.navbar.dark .nav-center .dropdown-btn {
+    color: #E5E5E5;
+}
+
+.navbar.dark .nav-center .nav-item:hover,
+.navbar.dark .nav-center .dropdown-btn:hover {
+    color: #1C4DA1;
+}
+
+.dashboard.dark .user-dropdown {
+    background: #1e293b;
+    color: #fff;
+}
+
+/* FIX APPLIED HERE */
+.dashboard.dark .user-dropdown button {
+    color: #E5E5E5; /* Ensures the button text is visible and light in dark mode */
+}
+
+.dashboard.dark .user-dropdown button:hover {
+    background-color: #FFC63E;
+    color: #1C4DA1;
+}
+
+/* Main Card */
+.main-card {
+    margin-top: 1rem;
+    background: white;
+    border-radius: 30px;
+    padding: 2rem;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.08);
+    color: inherit;
+}
+
+.dashboard.dark .main-card {
+    background: #0f1724;
+    color: #E5E5E5;
+}
+
+/* Search Bar (Replicated from Dashboard.css) */
+.search-bar {
+    position: relative;
+    flex: 1;
+    max-width: 600px;
+    margin: 20px auto;
+    z-index: 1;
+}
+
+.search-bar input {
+    width: 100%;
+    padding: 0.75rem 2.5rem 0.75rem 1rem;
+    border-radius: 9999px !important;
+    border: 1px solid #d1d5db;
+    background: #fff;
+    color: inherit;
+    font-size: 0.95rem;
+    transition: all 0.2s;
+    box-sizing: border-box;
+}
+
+.search-bar .search-icon {
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #888;
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+
+/* Dark Mode Overrides (optional, keeps same style) */
+.dashboard.dark .search-bar input {
+    background-color: #14202b;
+    color: #ffffff;
+    border-color: #263244;
+}
+
+.search-bar .search-icon {
+    color: #ffffff; /* icon always visible */
+}
+
+
+/* --- Logout Modal Styles --- */
+.logout-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.logout-modal {
+    background: white;
+    padding: 2rem;
+    border-radius: 15px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    width: 90%;
+    max-width: 400px;
+    text-align: center;
+    transition: background 0.3s;
+}
+
+.logout-modal.dark {
+    background: #1e293b;
+    color: #E5E5E5;
+}
+
+.logout-modal h2 {
+    color: #1C4DA1;
+    margin-top: 0;
+}
+
+.logout-modal.dark h2 {
+    color: #FFC63E;
+}
+
+.logout-modal p {
+    margin-bottom: 1.5rem;
+    font-size: 1.1rem;
+}
+
+.logout-actions {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+}
+
+.logout-actions button {
+    padding: 0.7rem 1.5rem;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background 0.2s, transform 0.1s;
+    font-size: 1rem;
+}
+
+.btn-cancel {
+    background: #e9ecef;
+    color: #3B3B3B;
+}
+
+.btn-cancel:hover {
+    background: #FFC63E;
+    color: #1C4DA1;
+}
+
+/* 🔄 UPDATED: Change confirmation button to blue/primary color */
+.btn-confirm {
+    background: var(--primary-color, #1C4DA1);
+    color: white;
+}
+
+.btn-confirm:hover {
+    /* Slightly darker blue on hover */
+    background: #163C7B; 
+    transform: translateY(-1px);
+}
+
+/* Dark Mode Modal Button Overrides */
+.logout-modal.dark .btn-cancel {
+    background: #334155;
+    color: #E5E5E5;
+}
+
+.logout-modal.dark .btn-cancel:hover {
+    background: #FFC63E;
+    color: #1C4DA1;
+}
+
+/* 🔄 UPDATED: Change confirmation button to dark primary color */
+.logout-modal.dark .btn-confirm {
+    background: var(--dark-primary-color, #4A90E2);
+    color: white;
+}
+
+.logout-modal.dark .btn-confirm:hover {
+    /* Slightly darker dark primary blue on hover */
+    background: #3B72B5; 
+}
+/* --- Logout Modal Styles End --- */
+
+/* ======================================= */
+/* II. CUSTOM STYLES FOR ENCODING/EDITING */
+/* ======================================= */
+
+.test-encoding .main-card {
+    padding: 1.5rem 3rem;
+    margin-top: -1.7rem;
+}
+
+/* Header Section */
+.header-section {
+    /* Ensures vertical stack and centers everything */
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    margin: 1.5rem 0 3rem !important;
+    width: 100% !important;
+}
+
+.page-title {
+    color: #1C4DA1;
+    font-size: 1.8rem;
+    font-weight: 700;
+    white-space: nowrap;
+    margin: 0 0 1rem 0 !important;
+    display: block !important;
+    text-align: center;
+}
+
+.test-encoding.dark .page-title {
+    color: #E5E5E5;
+}
+
+/* UPDATED: Full-Width Separator Line */
+.header-separator-line {
+    width: 100%;
+    height: 0;
+    border: none;
+    border-top: 2px solid #1C4DA1;
+    margin: 0.2rem 0;
+    padding: 0;
+}
+
+/* Dark mode for the line */
+.test-encoding.dark .header-separator-line {
+    border-top-color: #4A90E2;
+}
+
+/* --- UPDATED: STYLES FOR COLLEGE BLOCK --- */
+.college-title-block {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: auto;
+    padding: 0.5rem 0;
+    gap: 1.75rem;
+    margin: 0;
+}
+
+.dept-logo {
+    height: 160px;
+    width: 160px;
+    object-fit: contain;
+}
+
+.college-text {
+    font-weight: 700;
+    color: #3B3B3B;
+    font-size: 1.6rem;
+    white-space: nowrap;
+}
+
+.college-title-block.dark .college-text {
+    color: #E5E5E5;
+}
+
+/* --- END STYLES --- */
+
+
+/* Selection Fields (Subject, Topic, Type) */
+.selection-fields {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+    padding: 1rem 0;
+    border-radius: 10px;
+}
+
+/* 🚀 NEW: Two-column filter specifically for the Editing View (Subject & Topic) */
+.selection-fields.two-col-filter {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+}
+
+
+.selection-fields .input-group,
+.selection-fields .input-group-topic {
+    display: flex;
+    flex-direction: column;
+}
+
+.selection-fields label {
+    font-weight: 600;
+    margin-bottom: 0.4rem;
+    color: #1C4DA1;
+}
+
+.test-encoding.dark .selection-fields label {
+    color: #FFC63E;
+}
+
+.selection-fields input,
+.selection-fields select {
+    padding: 0.75rem 1rem;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 1rem;
+    background: white;
+    color: #3B3B3B;
+    transition: border-color 0.2s;
+}
+
+.test-encoding.dark .selection-fields input,
+.test-encoding.dark .selection-fields select {
+    background: #14202b;
+    border-color: #263244;
+    color: #E5E5E5;
+}
+
+/* 🚀 NEW FEATURE: Topic Description Dropdown (Placeholder styles) 🚀 */
+.topic-description-dropdown {
+    position: absolute;
+    top: calc(100% + 5px);
+    left: 0;
+    width: 100%;
+    max-height: 200px;
+    overflow-y: auto;
+    background: white;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    z-index: 50;
+    display: none;
+}
+
+/* Dark Mode Topic Description Dropdown */
+.test-encoding.dark .topic-description-dropdown {
+    background: #1e293b;
+    border-color: #263244;
+}
+
+.topic-description-dropdown.show {
+    display: block;
+}
+
+.topic-description-dropdown button {
+    display: block;
+    width: 100%;
+    padding: 0.6rem 1rem;
+    text-align: left;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 0.95rem;
+    color: #3B3B3B;
+    transition: background 0.15s;
+}
+
+.topic-description-dropdown button:hover {
+    background: #FFC63E;
+    color: #1C4DA1;
+}
+
+/* Dark Mode Button in Dropdown */
+.test-encoding.dark .topic-description-dropdown button {
+    color: #E5E5E5;
+}
+.test-encoding.dark .topic-description-dropdown button:hover {
+    background: #FFC63E;
+    color: #1C4DA1;
+}
+/* 🚀 END NEW FEATURE: Topic Description Dropdown 🚀 */
+
+
+/* Databank Summary */
+.databank-summary {
+    background: #f0f4f8;
+    padding: 1.5rem;
+    border-radius: 15px;
+    margin-bottom: 2rem;
+}
+
+.test-encoding.dark .databank-summary {
+    background: #1e293b;
+}
+
+.databank-summary h3 {
+    color: #1C4DA1;
+    margin-top: 0;
+    margin-bottom: 1rem;
+    border-bottom: 2px solid #ddd;
+    padding-bottom: 0.5rem;
+}
+
+.test-encoding.dark .databank-summary h3 {
+    color: #E5E5E5;
+    border-bottom: 2px solid #263244;
+}
+
+.summary-grid {
+    /* DEPRECATED: Use summary-details-grid */
+    display: none; 
+}
+
+
+/* Question Encoding Fields */
+.question-block, .choice-block {
+    margin-bottom: 1.5rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 1rem;
+}
+
+.test-encoding.dark .question-block, .test-encoding.dark .choice-block {
+    border-color: #263244;
+}
+
+.question-block label, .choice-block label {
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: #1C4DA1;
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.test-encoding.dark .question-block label, .test-encoding.dark .choice-block label {
+    color: #E5E5E5;
+}
+
+/* --- UPDATED: Rich Text Toolbar Styles (REWORKED) --- */
+.rich-text-toolbar {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.5rem 0;
+    margin-bottom: 0.5rem;
+    border-bottom: 1px solid #e2e8f0;
+    flex-wrap: wrap;
+    align-items: center; 
+}
+
+.test-encoding.dark .rich-text-toolbar {
+    border-bottom: 1px solid #263244;
+}
+
+/* Vertical Separator for the Toolbar */
+.rich-text-toolbar .separator {
+    width: 1px;
+    background-color: #e2e8f0;
+    height: 1.2rem; 
+    margin: 0 0.5rem;
+}
+
+.test-encoding.dark .rich-text-toolbar .separator {
+    background-color: #475569;
+}
+
+.rich-text-toolbar button {
+    background: transparent;
+    border: none;
+    padding: 0.4rem;
+    border-radius: 6px;
+    cursor: pointer;
+    color: #64748b;
+    transition: background 0.15s, color 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 1rem; 
+}
+
+.rich-text-toolbar button:hover {
+    background: #FFC63E;
+    color: #1C4DA1;
+}
+
+/* 🚀 NEW: Active State for Toolbar Buttons */
+.rich-text-toolbar button.active {
+    background: #1C4DA1;
+    color: white;
+}
+.test-encoding.dark .rich-text-toolbar button.active {
+    background: #FFC63E;
+    color: #1C4DA1;
+}
+
+/* --- END UPDATED: Rich Text Toolbar Styles --- */
+
+
+/* --- CRITICAL: Content Editable Area Styles (REWORKED) --- */
+.content-editable-area {
+    width: 100%;
+    min-height: 100px;
+    padding: 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+
+    /* CRITICAL FONT FIX: Ensure symbol support and readability */
+    font-family:
+        'Segoe UI',
+        'Arial Unicode MS',
+        'Lucida Grande',
+        'Segoe UI Symbol',
+        'Inter',
+        sans-serif;
+
+    font-size: 1rem;
+    resize: vertical;
+    box-sizing: border-box;
+    background: white;
+    color: #3B3B3B;
+    overflow-y: auto;
+    outline: none;
+    line-height: 1.6; /* Increased line height for better readability */
+    position: relative;
+    -webkit-user-select: text; 
+    user-select: text;
+}
+
+/* Add focus styling */
+.content-editable-area:focus {
+    border-color: #1C4DA1;
+    box-shadow: 0 0 0 2px rgba(28, 77, 161, 0.2);
+}
+
+/* Dark Mode styles for content editable */
+.test-encoding.dark .content-editable-area {
+    background: #0f172a;
+    border-color: #263244;
+    color: #E5E5E5;
+}
+
+/* 🚀 NEW: Placeholder for contenteditable DIVs */
+.content-editable-area[contenteditable="true"]:empty::before {
+    content: attr(data-placeholder); /* Uses the attribute passed from the component */
+    position: absolute;
+    top: 0.75rem;
+    left: 0.75rem;
+    color: #94a3b8;
+    pointer-events: none;
+    font-style: italic;
+    opacity: 0.8;
+}
+
+/* Dark Mode Placeholder Override */
+.test-encoding.dark .content-editable-area[contenteditable="true"]:empty::before {
+    color: #64748b;
+}
+
+/* --- Custom Styles for Headings and Paragraphs inside the Editor --- */
+.content-editable-area h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 1rem 0 0.5rem 0;
+}
+
+.content-editable-area h2 {
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin: 0.8rem 0 0.4rem 0;
+}
+
+/* Ensures the 'P' button works visually */
+.content-editable-area p {
+    margin: 0.25rem 0;
+    font-size: 1rem;
+    font-weight: normal;
+}
+
+.test-encoding.dark .content-editable-area h1,
+.test-encoding.dark .content-editable-area h2 {
+    color: #FFC63E;
+}
+
+/* 🚀 FIX FOR LIST MARKERS (BULLETS/NUMBERS) 🚀 */
+.content-editable-area ul,
+.content-editable-area ol {
+    margin: 0.5rem 0 0.5rem 0;
+    padding-left: 20px;
+}
+
+.content-editable-area li {
+    /* Key fix: Forces the marker inside the content flow of the list item */
+    list-style-position: inside;
+    margin-left: 5px;
+    padding-left: 0;
+}
+
+/* --- END CONTENT EDITABLE STYLES --- */
+
+
+.placeholder-rt-icon {
+    display: none; 
+}
+
+.choices-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+}
+
+/* Answer Key Section */
+.answer-key-section {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.correct-answer-field input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 1.2rem;
+    text-transform: uppercase;
+    font-weight: 700;
+    text-align: center;
+    background: white;
+    color: #1C4DA1;
+}
+
+.test-encoding.dark .correct-answer-field input {
+    background: #0f172a;
+    border-color: #263244;
+    color: #FFC63E;
+}
+
+/* Action Buttons */
+.action-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e2e8f0;
+}
+
+.test-encoding.dark .action-buttons {
+    border-top: 1px solid #263244;
+}
+
+.action-buttons button {
+    padding: 0.8rem 1.5rem;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 1rem;
+    transition: background 0.2s, transform 0.1s;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn-save {
+    background: #1C4DA1;
+    color: white;
+}
+
+.btn-save:hover {
+    background: #FFC63E;
+    color: #1C4DA1;
+    transform: translateY(-1px);
+}
+
+.btn-add {
+    background: #28a745;
+    color: white;
+}
+
+.btn-add:hover {
+    background: #218838;
+}
+
+.editing-banner {
+    background: #FFC63E;
+    color: #1C4DA1;
+    padding: 0.7rem;
+    border-radius: 10px;
+    text-align: center;
+    margin-bottom: 1.5rem;
+    font-size: 1.2rem;
+    font-weight: 700;
+}
+
+/* Question Editing List View */
+.question-editing-list h3 {
+    color: #1C4DA1;
+    margin-bottom: 1.5rem;
+}
+
+.test-encoding.dark .question-editing-list h3 {
+    color: #E5E5E5;
+}
+
+.history-table-container {
+    overflow-x: auto;
+    margin-bottom: 1.5rem;
+}
+
+.history-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+.test-encoding.dark .history-table {
+    background: #14202b;
+}
+
+.history-table th, .history-table td {
+    padding: 0.9rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.test-encoding.dark .history-table th, .test-encoding.dark .history-table td {
+    border-bottom: 1px solid #263244;
+}
+
+.history-table th {
+    background: #1C4DA1;
+    color: white;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.9rem;
+}
+
+.history-table tr:hover {
+    background: #f8fafd;
+}
+
+.test-encoding.dark .history-table tr:hover {
+    background: #1e293b;
+}
+
+.actions-cell {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.actions-cell button {
+    padding: 0.4rem 0.8rem;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    transition: all 0.2s;
+}
+
+.action-edit {
+    background: #FFC63E;
+    color: #1C4DA1;
+}
+
+.action-delete {
+    background: #dc3545;
+    color: white;
+    padding: 0.4rem;
+}
+
+.no-questions {
+    text-align: center;
+    font-style: italic;
+    color: #94a3b8;
+}
+
+.list-actions {
+    justify-content: flex-start;
+}
+
+
+/* ======================================= */
+/* III. NEW MATH SYMBOL PICKER STYLES (CLEANED AND FIXED) */
+/* ======================================= */
+
+.math-symbol-picker {
+    position: fixed;
+    z-index: 2000; /* High z-index is correct */
+    width: 280px;
+    background-color: white;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+    font-family: 'Inter', sans-serif;
+    /* FIX: Ensure it is visible when component is rendered by React */
+    display: flex;
+    flex-direction: column;
+}
+
+/* Dark Mode support for Picker */
+.dashboard.dark .math-symbol-picker {
+    background-color: #1e293b;
+    border-color: #334155;
+    color: #E5E5E5;
+}
+
+.picker-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    font-weight: 600;
+    background-color: #f8fafd;
+    border-bottom: 1px solid #e2e8f0;
+    color: #1C4DA1;
+}
+
+.dashboard.dark .picker-header {
+    background-color: #0f172a;
+    border-bottom: 1px solid #263244;
+    color: #FFC63E;
+}
+
+.picker-header .close-btn {
+    background: transparent;
+    border: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: #64748b;
+    padding: 0 0.5rem;
+    transition: color 0.1s;
+}
+
+.picker-header .close-btn:hover {
+    color: #dc3545;
+}
+
+.symbol-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    padding: 0.75rem;
+    gap: 0.5rem;
+}
+
+.symbol-btn {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    padding: 0.5rem 0.2rem;
+    font-size: 1.2rem;
+    font-weight: 400;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background-color 0.15s, border-color 0.15s;
+    line-height: 1;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    /* CRITICAL FONT FIX: Use fonts known to support mathematical symbols (Unicode) */
+    font-family:
+        'Segoe UI',
+        'Arial Unicode MS',
+        'Segoe UI Symbol',
+        'Inter',
+        sans-serif;
+}
+
+.dashboard.dark .symbol-btn {
+    background: #14202b;
+    border-color: #334155;
+    color: #E5E5E5;
+}
+
+.symbol-btn:hover {
+    background: #FFC63E;
+    border-color: #FFC63E;
+    color: #1C4DA1;
+}
+
+/* --- END MATH SYMBOL PICKER STYLES --- */
+
+/* ======================================= */
+/* IV. DATA SUMMARY STYLES (Bloom's Taxonomy) */
+/* ======================================= */
+.data-summary-block {
+    margin-top: 30px;
+    padding: 20px;
+    /* Using explicit colors instead of variables for stability */
+    border: 1px solid #e2e8f0; 
+    border-radius: 8px;
+    background-color: #f8fafd;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.dashboard.dark .data-summary-block {
+    border: 1px solid #263244; 
+    background-color: #1e293b;
+}
+
+
+.data-summary-block h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    color: #1C4DA1;
+    border-bottom: 2px solid #ddd;
+    padding-bottom: 5px;
+}
+
+/* CRITICAL FIX: Specificity for Dark Mode Header */
+.dark .main-card .data-summary-block .data-summary-heading {
+    color: #ffc107 !important; 
+    border-bottom: 2px solid #263244 !important;
+}
+
+/* --- DATA SUMMARY GRID REDEFINITION --- */
+
+.summary-details-grid.three-col-blooms {
+    display: grid;
+    /* 4 columns: 1 for Total, 3 for Blooms */
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 15px;
+}
+
+.summary-card {
+    padding: 15px;
+    border-radius: 6px;
+    background-color: white; /* Default light background */
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+.dashboard.dark .summary-card {
+    background-color: #14202b; 
+    color: #E5E5E5;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+/* Ensure the total stats card looks good in the first column */
+.summary-details-grid.three-col-blooms .total-stats {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+/* --- NEW BLOOM'S CARD STYLING --- */
+
+.bloom-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 15px;
+    border-left: 5px solid;
+    transition: transform 0.2s;
+}
+
+.bloom-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.bloom-card-title {
+    font-size: 1.1em;
+    font-weight: 700;
+    margin-bottom: 5px;
+}
+
+.bloom-card-count {
+    font-size: 1.5em;
+    font-weight: bold;
+    color: #3B3B3B; /* Light text color */
+    margin-bottom: 10px;
+}
+.dashboard.dark .bloom-card-count {
+    color: #E5E5E5; /* Dark text color */
+}
+
+.bloom-progress-info {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8em;
+    margin-bottom: 5px;
+}
+
+.target-percent {
+    color: #64748b;
+}
+
+/* --- PROGRESS BAR STYLING WITHIN THE CARDS --- */
+
+.aesthetic-progress-bar-container.compact {
+    height: 8px;
+    background-color: #e0e0e0;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.dashboard.dark .aesthetic-progress-bar-container.compact {
+    background-color: #3b3b3b;
+}
+
+.aesthetic-progress-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.5s ease-out;
+}
+
+/* Color definitions for the cards and bars using CSS variables for consistency */
+.bloom-card.color-1 { border-left-color: var(--bloom-color-1); }
+.bloom-card.color-2 { border-left-color: var(--bloom-color-2); }
+.bloom-card.color-3 { border-left-color: var(--bloom-color-3); }
+
+.aesthetic-progress-fill.color-1 { background-color: var(--bloom-color-1); }
+.aesthetic-progress-fill.color-2 { background-color: var(--bloom-color-2); }
+.aesthetic-progress-fill.color-3 { background-color: var(--bloom-color-3); }
+
+/* Status coloring on the achieved text */
+.bloom-card.color-1 .achieved-percent { color: var(--bloom-color-1); }
+.bloom-card.color-2 .achieved-percent { color: var(--bloom-color-2); }
+.bloom-card.color-3 .achieved-percent { color: var(--bloom-color-3); }
+
+/* Section Separator (Retained for visual break) */
+.section-separator {
+    border: 0;
+    height: 1px;
+    background-color: #e2e8f0;
+    margin: 20px 0;
+}
+
+.dashboard.dark .section-separator {
+    background-color: #263244;
+}
+
+/* --- Styles for the Editing View (Test Question Editing) --- */
+
+.editing-view-container {
+    padding: 20px 0;
+}
+
+/* REMOVED: .editing-list-heading to use the styled .filter-display-box instead. */
+
+/* 🚀 NEW/UPDATED: Filter Prompt (Used when selection is incomplete) */
+.filter-prompt {
+    padding: 40px;
+    border: 2px dashed var(--border-color);
+    border-radius: 8px;
+    background-color: var(--background-light);
+    text-align: center;
+    color: var(--text-color-secondary);
+    font-size: 1.1rem;
+    font-style: italic;
+    margin: 40px 0;
+}
+.dark .filter-prompt {
+    border-color: var(--dark-border-color);
+    background-color: var(--dark-background-light);
+    color: var(--text-color-secondary-dark);
+}
+
+/* --- Filter Display Box (The main heading for Subject/Topic in Editing View) --- */
+.filter-display-box {
+    background-color: var(--primary-light-color); 
+    color: var(--primary-color); 
+    padding: 12px 20px;
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 25px;
+    border-radius: 8px;
+    display: inline-block; 
+    border: 1px solid var(--primary-color);
+}
+
+.dark .filter-display-box {
+    background-color: var(--dark-primary-dark);
+    color: var(--primary-light-color);
+    border: 1px solid var(--dark-border-color);
+}
+
+/* --- Type Display Box (The styled box for the Bloom's Level subheader) --- */
+.type-display-box {
+    background-color: var(--secondary-light-color); 
+    color: var(--primary-color);
+    padding: 8px 15px;
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin-bottom: 15px;
+    border-radius: 6px;
+    display: inline-block;
+    border: 1px solid var(--secondary-color);
+}
+
+.dark .type-display-box {
+    background-color: var(--dark-background-hover);
+    color: var(--primary-light-color);
+    border: 1px solid var(--dark-border-color);
+}
+
+/* ======================================= */
+/* ======== EDITING LIST GROUPING ======== */
+/* ======================================= */
+
+.question-group-section {
+    margin-top: 15px;
+    margin-bottom: 25px;
+}
+
+/* --- Question Type Subheader (Now just a container for type-display-box) --- */
+.question-type-subheader {
+    color: var(--text-color);
+    padding: 0;
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin: 0;
+    border-bottom: none;
+}
+
+.question-type-subheader .question-count {
+    font-weight: 400;
+    font-size: 1rem;
+    color: var(--text-color-secondary);
+}
+
+.dark .question-type-subheader .question-count {
+    color: var(--text-color-secondary-dark);
+}
+
+/* --- Table Container (Holds the border and overflow) --- */
+.question-group-section .history-table-container {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+}
+.dark .question-group-section .history-table-container {
+    border-color: var(--dark-border-color);
+}
+
+/* Remove padding from the list wrapper */
+.question-group-section .question-editing-list {
+    padding: 0;
+}
+
+/* ======================================= */
+/* ============ TABLE STYLING ============ */
+/* ======================================= */
+
+/* Adjust table in editing view */
+.question-editing-list .history-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.question-editing-list .history-table th {
+    background-color: var(--primary-color);
+    color: white;
+    padding: 12px 15px;
+    text-align: left;
+}
+
+.question-editing-list .history-table td {
+    padding: 12px 15px;
+    border-bottom: 1px solid var(--border-color);
+    vertical-align: top;
+}
+
+.question-editing-list .history-table .no-data {
+    text-align: center;
+    padding: 30px 15px;
+    font-style: italic;
+    color: var(--text-color-secondary);
+}
+
+/* Ensure actions column is narrow */
+.question-editing-list .history-table th:last-child,
+.question-editing-list .history-table td:last-child {
+    width: 100px;
+    text-align: center;
+}
+
+/* --- Action Buttons --- */
+.question-editing-list .actions-cell button {
+    margin: 0 5px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    padding: 5px;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+.question-editing-list .action-edit { color: var(--color-blue); }
+.question-editing-list .action-delete { color: var(--color-red); }
+
+.question-editing-list .actions-cell button:hover {
+    background-color: var(--background-hover);
+}
+
+/* ======================================= */
+/* ========== DARK MODE ADJUSTMENTS ====== */
+/* ======================================= */
+
+/* Redundant but kept for safety with older code:
+.dark .editing-list-heading {
+    color: var(--text-color);
+    border-bottom-color: var(--dark-border-color);
+}
+*/
+.dark .question-editing-list .history-table th {
+    background-color: var(--dark-primary-color);
+}
+.dark .question-editing-list .history-table td {
+    border-bottom-color: var(--dark-border-color);
+}
+.dark .question-editing-list .actions-cell button:hover {
+    background-color: var(--dark-background-hover);
+}
+
+/* ======================================= */
+/* V. LOGOUT BUTTON RED STYLES (UPDATED TEXT COLOR ONLY) */
+/* ======================================= */
+
+.user-dropdown .logout-btn {
+    /* Set the text color to red/danger in light mode */
+    color: var(--color-red, #dc3545); 
+    background: transparent; /* Ensure no change to the button's background */
+}
+
+.user-dropdown .logout-btn:hover {
+    /* Keep the hover background color but ensure text color remains red */
+    color: #c82333; /* Slightly darker red on hover for contrast */
+}
+
+/* Dark Mode Override for Logout Button */
+.dashboard.dark .user-dropdown .logout-btn {
+    /* Set the text color to red/danger in dark mode */
+    color: #e65261; /* Slightly lighter red for better dark mode contrast */
+    background: transparent; /* Ensure no change to the button's background */
+}
+
+.dashboard.dark .user-dropdown .logout-btn:hover {
+    /* Ensure text color remains red/danger on hover in dark mode */
+    color: var(--color-red, #dc3545); 
+}

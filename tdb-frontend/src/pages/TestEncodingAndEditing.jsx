@@ -9,6 +9,7 @@ import {
 import NavItem from '../components/NavItem';
 import DropdownNavItem from '../components/DropdownNavItem';
 import LogoutModal from '../components/LogoutModal';
+import { useTheme } from '../contexts/ThemeContext';
 import '../styles/TestEncodingAndEditing.css';
 
 // Mock Assets (Replace with your actual paths)
@@ -210,8 +211,8 @@ const HeaderTitleBlock = ({ activeTab, isDarkMode }) => (
 // --- Main Component ---
 const TestEncodingAndEditing = () => {
     const navigate = useNavigate();
+    const { isDarkMode, toggleDarkMode } = useTheme();
     const [activeTab, setActiveTab] = useState('Test Question Encoding');
-    const [isDarkMode, setIsDarkMode] = useState(false);
     const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
     const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
     const userMenuRef = useRef(null);
@@ -300,10 +301,6 @@ const TestEncodingAndEditing = () => {
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [isMathPickerOpen]);
-
-    useEffect(() => {
-        document.body.className = isDarkMode ? 'dark' : '';
-    }, [isDarkMode]);
 
     const updateActiveCommands = useCallback(() => {
         if (!activeEditableRef.current) {
@@ -699,7 +696,7 @@ const TestEncodingAndEditing = () => {
                         <NavItem icon={BookOpen} label="Reports" isActive={activeTab==='Reports'} onClick={()=>handleSetActiveTab('Reports')} />
                     </div>
                     <div className="nav-right" ref={userMenuRef}>
-                        <button onClick={()=>setIsDarkMode(!isDarkMode)} className={`mode-switch ${isDarkMode?'dark':''}`}>
+                        <button onClick={toggleDarkMode} className={`mode-switch ${isDarkMode?'dark':''}`}>
                             <div className="circle">{isDarkMode?<Moon size={16}/>:<Sun size={16}/>}</div>
                         </button>
                         <button onClick={()=>setIsUserMenuOpen(!isUserMenuOpen)} className={`user-btn ${isUserMenuOpen?'active':''}`}>

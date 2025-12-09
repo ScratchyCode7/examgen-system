@@ -5,6 +5,7 @@ import NavItem from '../components/NavItem';
 import DropdownNavItem from '../components/DropdownNavItem';
 import LogoutModal from '../components/LogoutModal';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { apiService } from '../services/api';
 import '../styles/CourseTopic.css';
 
@@ -22,9 +23,9 @@ const courses = [
 
 const CourseTopic = () => {
   const { user, logout } = useAuth();
+  const { isDarkMode, toggleDarkMode } = useTheme();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('Course - Topic');
-  const [isDarkMode, setIsDarkMode] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const userMenuRef = useRef(null);
@@ -50,10 +51,6 @@ const CourseTopic = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  useEffect(() => {
-    document.body.className = isDarkMode ? 'dark' : '';
-  }, [isDarkMode]);
 
   // Load existing subjects that were created via this page (identified by JSON description)
   useEffect(() => {
@@ -200,7 +197,7 @@ const CourseTopic = () => {
           </div>
 
           <div className="nav-right" ref={userMenuRef}>
-            <button onClick={() => setIsDarkMode(!isDarkMode)} className={`mode-switch ${isDarkMode ? 'dark' : ''}`}>
+            <button onClick={toggleDarkMode} className={`mode-switch ${isDarkMode ? 'dark' : ''}`}>
               <div className="circle">{isDarkMode ? <Moon /> : <Sun />}</div>
             </button>
 

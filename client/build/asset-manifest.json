@@ -1,0 +1,27 @@
+{
+  "files": {
+    "main.css": "/static/css/main.11074b6f.css",
+    "main.js": "/static/js/main.4b2bc912.js",
+    "static/media/uphsl.png": "/static/media/uphsl.332947973172ab1c10d6.png",
+    "static/media/CCS.png": "/static/media/CCS.720a1905d1c5d26592e5.png",
+    "static/media/BED.png": "/static/media/BED.3b72e963c8ac53292dfa.png",
+    "static/media/COEA.png": "/static/media/COEA.241b38bb2665767105ab.png",
+    "static/media/GRAD.png": "/static/media/GRAD.9d615e22395d2d4432f5.png",
+    "static/media/CRIM.png": "/static/media/CRIM.b70393d33a7d1e7de8e0.png",
+    "static/media/CIHM.png": "/static/media/CIHM.2caa52e9a94c7a8c7021.png",
+    "static/media/CBA.png": "/static/media/CBA.fd58594436f0eaf8e515.png",
+    "static/media/CAS.png": "/static/media/CAS.ce8928a4b50ba13a754c.png",
+    "static/media/EDUC.png": "/static/media/EDUC.b5381bb143507080eb81.png",
+    "static/media/LJD.png": "/static/media/LJD.fcf590bf4e42866ea790.png",
+    "static/media/CME.png": "/static/media/CME.39d92b763ec0b82e375e.png",
+    "static/media/SOA.png": "/static/media/SOA.303cf85eadec278f72f9.png",
+    "static/media/TDB logo.png": "/static/media/TDB logo.91318e0d4eb2efd52814.png",
+    "index.html": "/index.html",
+    "main.11074b6f.css.map": "/static/css/main.11074b6f.css.map",
+    "main.4b2bc912.js.map": "/static/js/main.4b2bc912.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.11074b6f.css",
+    "static/js/main.4b2bc912.js"
+  ]
+}
