@@ -319,7 +319,7 @@ namespace src.Migrations
 
                     b.HasKey("UserId");
 
-                    b.ToTable("Users");
+                    b.ToTable("Users", (string)null);
                 });
 
             modelBuilder.Entity("Databank.Entities.ActivityLog", b =>
