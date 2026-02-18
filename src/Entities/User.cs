@@ -1,9 +1,9 @@
 namespace Databank.Entities;
 
-//  C# Access Modifiers
-// Model 
-
-//Based Model for the database
+/// <summary>
+/// Represents system users (faculty, department administrators, and system administrators)
+/// Uses role-based access control with department-based data isolation
+/// </summary>
 public sealed class User
 {
     public Guid UserId { get; set; }
@@ -12,12 +12,13 @@ public sealed class User
     public string Username { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
-    public string Department { get; set; } = string.Empty;
+    public int DepartmentId { get; set; }
     public bool IsAdmin { get; set; }
+    public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 
     // Navigation
-    public ICollection<TestResult> TestResults { get; set; } = new List<TestResult>();
+    public Department Department { get; set; } = null!;
     public ICollection<ActivityLog> ActivityLogs { get; set; } = new List<ActivityLog>();
 }

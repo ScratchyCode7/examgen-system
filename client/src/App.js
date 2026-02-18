@@ -35,7 +35,7 @@ function App() {
             }
           />
           <Route
-            path="/course-topic"
+            path="/course-topic/:departmentCode"
             element={
               <ProtectedRoute>
                 <CourseTopic />

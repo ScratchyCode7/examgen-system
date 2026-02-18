@@ -11,11 +11,10 @@ public sealed class GetQuestionsEndpoint : IEndpoint
     public void Endpoint(IEndpointRouteBuilder app)
     {
         app.MapGet("/api/questions", async Task<IResult> (
-                int? testId,
+                int? topicId,
                 int? subjectId,
                 string? search,
-                QuestionDifficulty? difficulty,
-                string? category,
+                BloomLevel? bloomLevel,
                 int pageNumber = 1,
                 int pageSize = 10,
                 AppDbContext dbContext = null!,
@@ -24,14 +23,14 @@ public sealed class GetQuestionsEndpoint : IEndpoint
             var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
             var query = dbContext.Questions.AsNoTracking();
 
-            if (testId.HasValue)
+            if (topicId.HasValue)
             {
-                query = query.Where(q => q.TestId == testId.Value);
+                query = query.Where(q => q.TopicId == topicId.Value);
             }
 
             if (subjectId.HasValue)
             {
-                query = query.Where(q => q.Test.SubjectId == subjectId.Value);
+                query = query.Where(q => q.Topic.SubjectId == subjectId.Value);
             }
 
             if (!string.IsNullOrWhiteSpace(search))
@@ -39,20 +38,17 @@ public sealed class GetQuestionsEndpoint : IEndpoint
                 query = query.Where(q => q.Content.Contains(search));
             }
 
-            if (difficulty.HasValue)
+            if (bloomLevel.HasValue)
             {
-                query = query.Where(q => q.Difficulty == difficulty.Value);
+                query = query.Where(q => q.BloomLevel == bloomLevel.Value);
             }
 
-            if (!string.IsNullOrWhiteSpace(category))
-            {
-                query = query.Where(q => q.Category != null && q.Category.Contains(category));
-            }
+            query = query.Where(q => q.IsActive);
 
             var totalCount = await query.CountAsync(ct);
 
             var questions = await query
-                .OrderBy(q => q.TestId)
+                .OrderBy(q => q.TopicId)
                 .ThenBy(q => q.DisplayOrder)
                 .Skip(pagination.Skip)
                 .Take(pagination.Take)

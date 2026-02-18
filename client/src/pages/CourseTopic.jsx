@@ -3,7 +3,7 @@
 // - Integrated ThemeContext usage and ensured logout modal respects theme.
 // See README for full details.
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search } from 'lucide-react';
 import NavItem from '../components/NavItem';
 import DropdownNavItem from '../components/DropdownNavItem';
@@ -15,20 +15,14 @@ import '../styles/CourseTopic.css';
 
 import TDBLogo from '../assets/TDB logo.png';
 import UPHSL from '../assets/uphsl.png';
-import CCS from '../assets/CCS.png';
+import DEPARTMENT_LOGOS from '../constants/departmentLogos';
 const dataEntryItems = ["Course - Topic", "Test Encoding", "Test Question Editing"];
-
-const courses = [
-  { code: "BSCS", name: "Bachelor of Science in Computer Science, Specialization in Data Science" },
-  { code: "BSIT", name: "Bachelor of Science in Information Technology, Specialization in Game Development" },
-  { code: "BSEMC", name: "Bachelor of Science in Entertainment and Multimedia Computing" },
-  { code: "BSCF", name: "Bachelor of Information Technology, Major in Cybersecurity and Forensics" }
-];
 
 const CourseTopic = () => {
   const { user, logout } = useAuth();
   const { isDarkMode, toggleDarkMode } = useTheme();
   const navigate = useNavigate();
+  const { departmentCode } = useParams();
   const [activeTab, setActiveTab] = useState('Course - Topic');
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
@@ -42,6 +36,11 @@ const CourseTopic = () => {
   const [value, setValue] = useState("");
   const [topicDesc, setTopicDesc] = useState("");
   const [hours, setHours] = useState("");
+  // dynamic lists
+  const [courses, setCourses] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [isLoadingCourses, setIsLoadingCourses] = useState(false);
+  const [isLoadingDepartments, setIsLoadingDepartments] = useState(false);
   const [history, setHistory] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -57,6 +56,8 @@ const CourseTopic = () => {
   }, []);
 
   // Load existing subjects that were created via this page (identified by JSON description)
+  const [allSubjects, setAllSubjects] = useState([]);
+
   useEffect(() => {
     const loadExistingSubjects = async () => {
       try {
@@ -85,8 +86,7 @@ const CourseTopic = () => {
             }
           })
           .filter(Boolean);
-
-        setHistory(mapped);
+        setAllSubjects(mapped);
       } catch (err) {
         console.error('Failed to load subjects for CourseTopic history:', err);
         setError('Failed to load existing course topics. You can still add new ones.');
@@ -97,6 +97,60 @@ const CourseTopic = () => {
 
     loadExistingSubjects();
   }, []);
+
+  // Filter history to show only subjects from courses in the current department
+  useEffect(() => {
+    if (!courses || courses.length === 0) {
+      setHistory([]);
+      return;
+    }
+    
+    const courseIds = courses.map(c => String(c.id));
+    const filtered = allSubjects.filter(s => courseIds.includes(String(s.course)));
+    setHistory(filtered);
+  }, [courses, allSubjects]);
+
+  useEffect(() => {
+    const loadDepartments = async () => {
+      try {
+        setIsLoadingDepartments(true);
+        const data = await apiService.getDepartments();
+        const list = Array.isArray(data) ? data : [];
+        console.log('CourseTopic: loaded departments', list);
+        setDepartments(list);
+      } catch (err) {
+        console.error('Failed to load departments for CourseTopic:', err);
+      } finally {
+        setIsLoadingDepartments(false);
+      }
+    };
+
+    void loadDepartments();
+  }, []);
+
+  useEffect(() => {
+    const loadCourses = async () => {
+      if (!departmentCode) return setCourses([]);
+      const dept = departments.find(d => d.code === departmentCode);
+      console.log('CourseTopic: departmentCode', departmentCode, 'matched dept', dept);
+      if (!dept) return setCourses([]);
+      try {
+        setIsLoadingCourses(true);
+        const data = await apiService.getCourses(dept.id);
+        const list = Array.isArray(data) ? data : [];
+        console.log('CourseTopic: loaded courses for', dept.id, list);
+        // API returns array
+        setCourses(list);
+      } catch (err) {
+        console.error('Failed to load courses for department', departmentCode, err);
+        setCourses([]);
+      } finally {
+        setIsLoadingCourses(false);
+      }
+    };
+
+    void loadCourses();
+  }, [departmentCode, departments]);
 
   const handleUserAction = (action) => {
     setIsUserMenuOpen(false);
@@ -129,6 +183,8 @@ const CourseTopic = () => {
         });
 
         const payload = {
+          courseId: Number(course),
+          code: topicCode,
           name: topicDesc,
           description,
         };
@@ -140,7 +196,7 @@ const CourseTopic = () => {
           ...prev,
           {
             subjectId: created.id,
-            course,
+            courseId: created.courseId || Number(course),
             topicCode,
             value,
             topicDesc,
@@ -193,7 +249,7 @@ const CourseTopic = () => {
               onSelect={(item) => {
                 setActiveTab(item);
                 if (item === 'Course - Topic') {
-                  navigate('/course-topic');
+                    navigate('/course-topic/1');
                 } else if (item === 'Test Encoding' || item === 'Test Question Editing') {
                   navigate('/test-encoding');
                 }
@@ -236,8 +292,25 @@ const CourseTopic = () => {
 
           {/* Program Header */}
           <div className="program-header-line">
-            <img src={CCS} alt="CCS" className="program-logo large-logo" />
-            <span className="program-name large-name">College of Computer Studies</span>
+            {isLoadingDepartments ? (
+              <p>Loading department...</p>
+            ) : (() => {
+              const dept = departments.find(d => d.code === departmentCode);
+              if (!dept) {
+                return <p>Department not found ({departmentCode})</p>;
+              }
+              const logo = dept.code ? (DEPARTMENT_LOGOS?.[dept.code] ?? null) : null;
+              return (
+                <>
+                  {logo ? (
+                    <img src={logo} alt={dept.name} className="program-logo large-logo" onError={(e)=>{e.target.onerror=null; e.target.src='https://placehold.co/96x96/FFFFFF/1C4DA1?text=LOGO'}} />
+                  ) : (
+                    <div className="dept-icon large-logo">{dept.code?.charAt(0) ?? dept.name.charAt(0)}</div>
+                  )}
+                  <span className="program-name large-name">{dept.name}</span>
+                </>
+              );
+            })()}
           </div>
 
           {/* Fields */}
@@ -245,9 +318,15 @@ const CourseTopic = () => {
             <label>Course</label>
             <select value={course} onChange={(e) => setCourse(e.target.value)}>
               <option value="">Select Course</option>
-              {courses.map(c => (
-                <option key={c.code} value={c.code}>{c.code} - {c.name}</option>
-              ))}
+              {isLoadingCourses ? (
+                <option disabled>Loading courses...</option>
+              ) : courses.length === 0 ? (
+                <option disabled>No courses found for this department</option>
+              ) : (
+                courses.map(c => (
+                  <option key={c.id} value={c.id}>{(c.code ? `${c.code} - ` : '') + c.name}</option>
+                ))
+              )}
             </select>
           </div>
 

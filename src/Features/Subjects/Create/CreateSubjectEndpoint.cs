@@ -14,18 +14,30 @@ public sealed class CreateSubjectEndpoint : IEndpoint
                 AppDbContext dbContext,
                 CancellationToken ct) =>
         {
+            // Verify course exists
+            var courseExists = await dbContext.Courses
+                .AnyAsync(c => c.Id == request.CourseId, ct);
+
+            if (!courseExists)
+            {
+                return TypedResults.BadRequest("Course not found.");
+            }
+
             var exists = await dbContext.Subjects
-                .AnyAsync(s => s.Name == request.Name, ct);
+                .AnyAsync(s => s.Code == request.Code && s.CourseId == request.CourseId, ct);
 
             if (exists)
             {
-                return TypedResults.Conflict("Subject name already exists.");
+                return TypedResults.Conflict($"Subject with code '{request.Code}' already exists in this course.");
             }
 
             var subject = new Subject
             {
+                CourseId = request.CourseId,
+                Code = request.Code,
                 Name = request.Name,
                 Description = request.Description,
+                IsActive = true,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };

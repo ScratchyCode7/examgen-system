@@ -14,12 +14,23 @@ public sealed class SubjectConfiguration : IEntityTypeConfiguration<Subject>
         builder.Property(x => x.Id)
             .ValueGeneratedOnAdd();
 
+        builder.Property(x => x.CourseId)
+            .IsRequired();
+
+        builder.Property(x => x.Code)
+            .IsRequired()
+            .HasMaxLength(50)
+            .IsUnicode(false);
+
         builder.Property(x => x.Name)
             .IsRequired()
-            .HasMaxLength(120);
+            .HasMaxLength(200);
 
         builder.Property(x => x.Description)
-            .HasMaxLength(512);
+            .HasMaxLength(1000);
+
+        builder.Property(x => x.IsActive)
+            .HasDefaultValue(true);
 
         builder.Property(x => x.CreatedAt)
             .HasDefaultValueSql("CURRENT_TIMESTAMP");
@@ -27,6 +38,22 @@ public sealed class SubjectConfiguration : IEntityTypeConfiguration<Subject>
         builder.Property(x => x.UpdatedAt)
             .ValueGeneratedOnAddOrUpdate()
             .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+        // Relationships
+        builder.HasOne(x => x.Course)
+            .WithMany(x => x.Subjects)
+            .HasForeignKey(x => x.CourseId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasMany(x => x.Topics)
+            .WithOne(x => x.Subject)
+            .HasForeignKey(x => x.SubjectId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasMany(x => x.Tests)
+            .WithOne(x => x.Subject)
+            .HasForeignKey(x => x.SubjectId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }
 

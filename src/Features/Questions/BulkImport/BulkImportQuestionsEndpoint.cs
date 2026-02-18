@@ -19,10 +19,10 @@ public sealed class BulkImportQuestionsEndpoint : IEndpoint
                 return TypedResults.BadRequest("No questions provided.");
             }
 
-            var testExists = await dbContext.Tests.AnyAsync(t => t.Id == request.TestId, ct);
-            if (!testExists)
+            var topicExists = await dbContext.Topics.AnyAsync(t => t.Id == request.TopicId, ct);
+            if (!topicExists)
             {
-                return TypedResults.BadRequest("Test not found.");
+                return TypedResults.BadRequest("Topic not found.");
             }
 
             var errors = new List<string>();
@@ -47,13 +47,15 @@ public sealed class BulkImportQuestionsEndpoint : IEndpoint
 
                 var question = new Question
                 {
-                    TestId = request.TestId,
+                    TopicId = request.TopicId,
                     Content = questionDto.Content,
-                    Type = questionDto.Type ?? "MultipleChoice",
+                    QuestionType = questionDto.QuestionType ?? "MultipleChoice",
+                    BloomLevel = questionDto.BloomLevel,
                     Points = questionDto.Points,
                     DisplayOrder = questionDto.DisplayOrder,
-                    Difficulty = questionDto.Difficulty,
-                    Category = questionDto.Category
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
                 };
 
                 questionsToAdd.Add(question);
@@ -111,17 +113,16 @@ public sealed class BulkImportQuestionsEndpoint : IEndpoint
 }
 
 public sealed record BulkImportRequest(
-    int TestId,
+    int TopicId,
     List<BulkQuestionDto> Questions
 );
 
 public sealed record BulkQuestionDto(
     string Content,
-    string? Type,
+    string? QuestionType,
+    BloomLevel BloomLevel,
     int Points,
     int DisplayOrder,
-    QuestionDifficulty? Difficulty,
-    string? Category,
     List<BulkOptionDto>? Options
 );
 

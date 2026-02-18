@@ -34,6 +34,10 @@ export const AuthProvider = ({ children }) => {
       
       // Decode JWT to get user info (basic decode, no verification)
       const tokenParts = accessToken.split('.');
+      if (tokenParts.length !== 3) {
+        throw new Error('Invalid token format');
+      }
+      
       const payload = JSON.parse(atob(tokenParts[1]));
       
       // Backend JWT includes: sub (userId), unique_name (username), email, isAdmin (as string)
@@ -44,6 +48,7 @@ export const AuthProvider = ({ children }) => {
         firstName: '', // Will need to fetch from API if needed
         lastName: '',  // Will need to fetch from API if needed
         isAdmin: payload.isAdmin === 'true' || payload.isAdmin === true,
+        departmentId: payload.departmentId || null,
       };
       
       // Try to fetch full user details if userId is available
@@ -52,6 +57,7 @@ export const AuthProvider = ({ children }) => {
           const fullUser = await apiService.getUser(userData.userId);
           userData.firstName = fullUser.firstName || '';
           userData.lastName = fullUser.lastName || '';
+          userData.departmentId = fullUser.departmentId || userData.departmentId;
         } catch (err) {
           console.warn('Could not fetch user details:', err);
           // Continue with basic user data from token
@@ -67,6 +73,8 @@ export const AuthProvider = ({ children }) => {
       return userData;
     } catch (error) {
       console.error('Login error:', error);
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
       throw error;
     }
   };

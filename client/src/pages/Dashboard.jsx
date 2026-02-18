@@ -9,14 +9,8 @@ import '../styles/Dashboard.css';
 
 import TDBLogo from '../assets/TDB logo.png';
 import UPHSL from '../assets/uphsl.png';
-import CCS from '../assets/CCS.png';
-import CRIM from '../assets/CRIM.png';
-import CAS from '../assets/CAS.png';
-const MOCK_PROGRAMS = [
-  { id: 1, name: "College of Computer Studies", logo: CCS },
-  { id: 2, name: "College of Criminology", logo: CRIM },
-  { id: 3, name: "College of Arts and Sciences", logo: CAS },
-];
+import { apiService } from '../services/api';
+import DEPARTMENT_LOGOS from '../constants/departmentLogos';
 
 const Dashboard = () => {
   const { user, logout, isAdmin } = useAuth();
@@ -26,6 +20,9 @@ const Dashboard = () => {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [programView, setProgramView] = useState('grid');
+  const [departments, setDepartments] = useState([]);
+  const [isLoadingDepartments, setIsLoadingDepartments] = useState(false);
+  const [departmentsError, setDepartmentsError] = useState('');
   const userMenuRef = useRef(null);
 
   // Redirect admin users to admin dashboard
@@ -33,6 +30,23 @@ const Dashboard = () => {
     if (isAdmin) {
       navigate('/admin');
     }
+
+    const loadDepartments = async () => {
+      try {
+        setIsLoadingDepartments(true);
+        const data = await apiService.getDepartments();
+        const deptList = Array.isArray(data) ? data : [];
+        console.log('Loaded departments:', deptList);
+        setDepartments(deptList);
+      } catch (err) {
+        console.error('Failed to load departments:', err);
+        setDepartmentsError('Failed to load departments.');
+      } finally {
+        setIsLoadingDepartments(false);
+      }
+    };
+
+    void loadDepartments();
   }, [isAdmin, navigate]);
 
   const displayName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username : 'User';
@@ -83,8 +97,10 @@ const Dashboard = () => {
               onSelect={(item) => {
                 setActiveTab(item);
                 if (item === 'Course - Topic') {
-                  navigate('/course-topic');
-                } else if (item === 'Test Encoding' || item === 'Test Question Encoding') {
+                  const firstDept = departments?.find(d => d.code !== 'IT') || departments?.[0];
+                  const code = firstDept?.code || 'IT';
+                  navigate(`/course-topic/${code}`);
+                } else if (item === 'Test Encoding' || item === 'Test Question Editing' || item === 'Test Question Encoding') {
                   navigate('/test-encoding');
                 }
               }}
@@ -138,20 +154,52 @@ const Dashboard = () => {
 
           {programView === 'grid' ? (
             <div className="program-grid">
-              {MOCK_PROGRAMS.map(program => (
-                <div key={program.id} className="program-card">
-                  <img src={program.logo} alt={program.name} onError={(e)=>{e.target.onerror=null; e.target.src='https://placehold.co/96x96/FFFFFF/1C4DA1?text=LOGO'}} />
-                  <p>{program.name}</p>
-                </div>
-              ))}
+              {isLoadingDepartments ? (
+                <p>Loading departments...</p>
+              ) : departments.length === 0 ? (
+                <p>{departmentsError || 'No departments available.'}</p>
+              ) : (
+                departments
+                  .filter(d => {
+                    const code = (d.code || '').toString().trim().toUpperCase();
+                    const name = (d.name || '').toString().trim().toLowerCase();
+                    return code !== 'IT' && !name.includes('information technology');
+                  })
+                  .map((d) => {
+                    const logo = DEPARTMENT_LOGOS[d.code] || null;
+                    return (
+                      <div
+                        key={d.id}
+                        className="program-card"
+                        onClick={() => navigate(`/course-topic/${d.code}`)}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        {logo ? (
+                          <img src={logo} alt={d.name} onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/96x96/FFFFFF/1C4DA1?text=LOGO'; }} />
+                        ) : (
+                          <div className="dept-icon">{d.code?.charAt(0) ?? 'D'}</div>
+                        )}
+                        <p>{d.name}</p>
+                      </div>
+                    );
+                  })
+              )}
             </div>
           ) : (
             <div className="program-list">
-              {MOCK_PROGRAMS.map(program => (
-                <div key={program.id} className="program-list-item">
-                  <p>{program.name}</p>
-                </div>
-              ))}
+              {isLoadingDepartments ? (
+                <p>Loading departments...</p>
+              ) : departments.length === 0 ? (
+                <p>{departmentsError || 'No departments available.'}</p>
+              ) : (
+                departments
+                  .filter(d => d.code !== 'IT')
+                  .map((d) => (
+                    <div key={d.id} className="program-list-item" onClick={() => navigate(`/course-topic/${d.code}`)} style={{cursor: 'pointer'}}>
+                      <p>{d.name}</p>
+                    </div>
+                  ))
+              )}
             </div>
           )}
         </div>

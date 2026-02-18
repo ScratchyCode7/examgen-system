@@ -22,16 +22,13 @@ public sealed class GenerateTestEndpoint : IEndpoint
 
             // Build query to find questions matching criteria
             var questionQuery = dbContext.Questions.AsNoTracking()
-                .Where(q => q.Test.SubjectId == request.SubjectId);
+                .Include(q => q.Topic)
+                .Where(q => q.Topic.SubjectId == request.SubjectId)
+                .Where(q => q.IsActive);
 
-            if (request.Difficulty.HasValue)
+            if (request.BloomLevel.HasValue)
             {
-                questionQuery = questionQuery.Where(q => q.Difficulty == request.Difficulty.Value);
-            }
-
-            if (!string.IsNullOrWhiteSpace(request.Category))
-            {
-                questionQuery = questionQuery.Where(q => q.Category != null && q.Category.Contains(request.Category));
+                questionQuery = questionQuery.Where(q => q.BloomLevel == request.BloomLevel.Value);
             }
 
             // Get available questions
@@ -59,7 +56,10 @@ public sealed class GenerateTestEndpoint : IEndpoint
                 Title = request.Title,
                 Description = request.Description ?? $"Generated test with {request.QuestionCount} questions",
                 DurationMinutes = request.DurationMinutes,
+                TotalQuestions = request.QuestionCount,
+                TotalPoints = selectedQuestions.Count * 1,  // Default 1 point per question
                 IsPublished = request.IsPublished,
+                PublishedAt = request.IsPublished ? DateTime.UtcNow : null,
                 AvailableFrom = request.AvailableFrom ?? DateTime.UtcNow,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
@@ -68,48 +68,19 @@ public sealed class GenerateTestEndpoint : IEndpoint
             await dbContext.Tests.AddAsync(test, ct);
             await dbContext.SaveChangesAsync(ct);
 
-            // Create new question instances linked to the new test
-            var newQuestions = new List<Question>();
-            foreach (var (originalQuestion, index) in selectedQuestions.Select((q, i) => (q, i)))
+            // Link selected questions to the test via TestQuestion junction table
+            var testQuestions = new List<TestQuestion>();
+            foreach (var (question, index) in selectedQuestions.Select((q, i) => (q, i)))
             {
-                var newQuestion = new Question
+                testQuestions.Add(new TestQuestion
                 {
                     TestId = test.Id,
-                    Content = originalQuestion.Content,
-                    Type = originalQuestion.Type,
-                    Points = originalQuestion.Points,
-                    DisplayOrder = index,
-                    Difficulty = originalQuestion.Difficulty,
-                    Category = originalQuestion.Category
-                };
-                newQuestions.Add(newQuestion);
+                    QuestionId = question.Id,
+                    DisplayOrder = index
+                });
             }
 
-            await dbContext.Questions.AddRangeAsync(newQuestions, ct);
-            await dbContext.SaveChangesAsync(ct);
-
-            // Copy options for each question
-            var optionsToAdd = new List<Option>();
-            foreach (var (originalQuestion, index) in selectedQuestions.Select((q, i) => (q, i)))
-            {
-                var originalOptions = await dbContext.Options
-                    .Where(o => o.QuestionId == originalQuestion.Id)
-                    .ToListAsync(ct);
-
-                var newQuestion = newQuestions[index];
-                foreach (var (originalOption, optIndex) in originalOptions.Select((o, i) => (o, i)))
-                {
-                    optionsToAdd.Add(new Option
-                    {
-                        QuestionId = newQuestion.Id,
-                        Content = originalOption.Content,
-                        IsCorrect = originalOption.IsCorrect,
-                        DisplayOrder = originalOption.DisplayOrder
-                    });
-                }
-            }
-
-            await dbContext.Options.AddRangeAsync(optionsToAdd, ct);
+            await dbContext.TestQuestions.AddRangeAsync(testQuestions, ct);
             await dbContext.SaveChangesAsync(ct);
 
             var response = test.ToResponse();
@@ -126,7 +97,7 @@ public sealed record GenerateTestRequest(
     int DurationMinutes,
     bool IsPublished,
     DateTime? AvailableFrom,
-    QuestionDifficulty? Difficulty,
-    string? Category
+    BloomLevel? BloomLevel
 );
+
 

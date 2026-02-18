@@ -3,21 +3,22 @@ using Databank.Entities;
 namespace Databank.Features.Questions;
 
 public sealed record QuestionRequest(
-    int TestId,
+    int TopicId,
     string Content,
-    string Type,
+    string QuestionType,
+    BloomLevel BloomLevel,
     int Points,
     int DisplayOrder
 );
 
 public sealed record QuestionResponse(
     int Id,
-    int TestId,
+    int TopicId,
     string Content,
-    string Type,
+    string QuestionType,
+    BloomLevel BloomLevel,
     int Points,
     int DisplayOrder,
-    QuestionDifficulty? Difficulty,
-    string? Category
+    bool IsActive
 );
 

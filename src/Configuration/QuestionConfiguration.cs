@@ -14,16 +14,21 @@ public sealed class QuestionConfiguration : IEntityTypeConfiguration<Question>
         builder.Property(x => x.Id)
             .ValueGeneratedOnAdd();
 
-        builder.Property(x => x.TestId)
+        builder.Property(x => x.TopicId)
             .IsRequired();
 
         builder.Property(x => x.Content)
             .IsRequired()
-            .HasMaxLength(2000);
+            .HasMaxLength(3000);
 
-        builder.Property(x => x.Type)
+        builder.Property(x => x.QuestionType)
             .IsRequired()
-            .HasMaxLength(50);
+            .HasMaxLength(50)
+            .IsUnicode(false);
+
+        builder.Property(x => x.BloomLevel)
+            .IsRequired()
+            .HasConversion<int>();
 
         builder.Property(x => x.Points)
             .HasDefaultValue(1);
@@ -31,15 +36,30 @@ public sealed class QuestionConfiguration : IEntityTypeConfiguration<Question>
         builder.Property(x => x.DisplayOrder)
             .HasDefaultValue(0);
 
-        builder.Property(x => x.Difficulty)
-            .HasConversion<int>();
+        builder.Property(x => x.IsActive)
+            .HasDefaultValue(true);
 
-        builder.Property(x => x.Category)
-            .HasMaxLength(100);
+        builder.Property(x => x.CreatedAt)
+            .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
-        builder.HasOne(x => x.Test)
+        builder.Property(x => x.UpdatedAt)
+            .ValueGeneratedOnAddOrUpdate()
+            .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+        // Relationships
+        builder.HasOne(x => x.Topic)
             .WithMany(x => x.Questions)
-            .HasForeignKey(x => x.TestId)
+            .HasForeignKey(x => x.TopicId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasMany(x => x.Options)
+            .WithOne(x => x.Question)
+            .HasForeignKey(x => x.QuestionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasMany(x => x.TestQuestions)
+            .WithOne(x => x.Question)
+            .HasForeignKey(x => x.QuestionId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

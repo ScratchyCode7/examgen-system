@@ -43,7 +43,13 @@ const Login = () => {
         navigate('/');
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Invalid username or password');
+      const errorMessage = 
+        err.response?.data?.message || 
+        err.response?.data?.error ||
+        err.message || 
+        'Invalid username or password';
+      setError(errorMessage);
+      console.error('Login failed:', err);
     } finally {
       setLoading(false);
     }

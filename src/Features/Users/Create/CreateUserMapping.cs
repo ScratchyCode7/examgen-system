@@ -11,7 +11,7 @@ public static class CreateUserMapping
             FirstName = req.FirstName,
             LastName = req.LastName,
             Username = req.Username,
-            Department = req.Department,
+            DepartmentId = req.DepartmentId,
             Email = req.Email,
             IsAdmin = req.IsAdmin
         };
@@ -22,7 +22,7 @@ public static class CreateUserMapping
         return new CreateUserResponse(
             user.FirstName,
             user.LastName,
-            user.Department,
+            user.DepartmentId,
             user.Username,
             user.Email,
             user.IsAdmin

@@ -8,13 +8,13 @@ public static class QuestionMappings
     {
         return new QuestionResponse(
             question.Id,
-            question.TestId,
+            question.TopicId,
             question.Content,
-            question.Type,
+            question.QuestionType,
+            question.BloomLevel,
             question.Points,
             question.DisplayOrder,
-            question.Difficulty,
-            question.Category
+            question.IsActive
         );
     }
 }

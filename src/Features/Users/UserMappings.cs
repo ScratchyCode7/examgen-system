@@ -10,10 +10,11 @@ public static class UserMappings
             user.UserId,
             user.FirstName,
             user.LastName,
-            user.Department,
+            user.DepartmentId,
             user.Username,
             user.Email,
             user.IsAdmin,
+            user.IsActive,
             user.CreatedAt,
             user.UpdatedAt
         );

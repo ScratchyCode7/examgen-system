@@ -2,9 +2,55 @@
 
 Full-stack application for managing exam/test databank with C# ASP.NET Core backend and React frontend.
 
+## ✨ Latest Updates (v2.1 - Course Hierarchy)
+
+**Added Course-level organizational hierarchy to better represent degree programs.**
+
+### New Changes (v2.1):
+- ✅ Added Course entity (degree programs: BSc CS, BSc Data Science, etc.)
+- ✅ Restructured Subject-Course relationship (Subjects now belong to Courses, not Departments)
+- ✅ New database hierarchy: Department → Course → Subject → Topic → Question
+- ✅ Created 5 Course CRUD endpoints (Create, List, GetById, Update, Delete)
+- ✅ Applied migration: `20260207122116_AddCourseEntity`
+- ✅ Updated Topic endpoints for better syllabus organization
+
+### Hotfixes (Feb 10, 2026)
+
+- ✅ Corrected course-to-department assignments in the database (some courses were incorrectly assigned to the IT admin department and are now moved to their proper departments, e.g., `BSCS`, `BSIT`, `BSEMC`, `BIT-CSF` → `CCS`).
+- ✅ `CourseTopic` page improvements:
+  - Course dropdown now loads courses by department code (URL: `/course-topic/:departmentCode`).
+  - History table scoped to the current **department** (shows subjects for all courses within the selected department) to prevent cross-department visibility.
+  - Saving a subject no longer clears the selected course — only the topic inputs are reset so bulk entry is faster.
+- ✅ Adding a course to a department (via `POST /api/courses`) immediately appears in the `Course` dropdown for that department.
+
+Test these hotfixes:
+1. Start backend and frontend.
+2. Navigate to `http://localhost:3000/course-topic/CCS`.
+3. Select a course (e.g., BSCS), add a subject and click Save — the course selection should persist and the subject should appear in the history.
+4. Add a course to `CBA` (departmentId = 3) via `POST /api/courses` and hard-refresh; it should show in the CBA course dropdown.
+
+
+### Previous Changes (v2.0 - REFACTORED):
+**The project has been comprehensively refactored to align with the Test Databank and Automated Exam Generation System specification.**
+
+- ✅ Added Department-based organizational structure
+- ✅ Implemented Topic-based syllabus structure (replacing direct Test-Question relationship)
+- ✅ Replaced QuestionDifficulty with Bloom's Taxonomy (6 cognitive levels)
+- ✅ Created TestQuestion junction table for flexible exam composition
+- ✅ Enhanced User model with DepartmentId foreign key
+- ✅ Improved ActivityLog with entity tracking
+- ✅ Removed TestResult features (out of scope)
+- ✅ Created new PostgreSQL database: `databank_refactored`
+- ✅ Original `databank_db` database remains untouched
+
+**📖 For detailed refactoring documentation, see [REFACTORING_GUIDE.md](./REFACTORING_GUIDE.md)**
+
 ## 📦 Project Structure
 
 - `src/` - Backend (C# ASP.NET Core Web API)
+  - `Entities/` - Refactored domain models with new Department, Topic, BloomLevel
+  - `Features/` - API endpoints (now includes Departments, Topics)
+  - `Migrations/` - New migration: RefactorDatabaseSchema
 - `client/` - Frontend (React + TypeScript)
 - `postman/` - API testing collection
 
@@ -16,31 +62,60 @@ Full-stack application for managing exam/test databank with C# ASP.NET Core back
   - `docs(readme): add setup instructions`
 
 ## 🗄️ Database Setup
-1. Start PostgreSQL locally (default connection expects `localhost:5432`).
-2. Configure credentials in `src/appsettings.Development.json`:
+
+**Important:** The refactored system uses a NEW PostgreSQL database called `databank_refactored`. This preserves your original `databank_db` database.
+
+1. Ensure PostgreSQL is running locally (default: `localhost:5432`)
+
+2. Update connection string in `src/appsettings.Development.json`:
    ```json
    "ConnectionStrings": {
-     "PostgresConnection": "Host=localhost;Port=5432;Database=databank_db;Username=postgres;Password=password;"
+     "PostgresConnection": "Host=localhost;Port=5432;Database=databank_refactored;Username=postgres;Password=password;"
    }
    ```
-3. Apply migrations:
+
+3. Apply the refactoring migration:
    ```bash
-   dotnet ef database update --project src/src.csproj
+   cd src
+   dotnet ef database update
    ```
-4. To rebuild from scratch (optional):
+
+4. The migration `20260207043105_RefactorDatabaseSchema` will create:
+   - Departments table
+   - Redesigned Subjects (with DepartmentId)
+   - Topics table (new)
+   - Refactored Questions (belongs to Topic, not Test)
+   - TestQuestions junction table
+   - Updated Activities and Users
+
+### Database Verification:
+```bash
+# List all tables
+\dt
+
+# Verify Department structure
+SELECT * FROM "Departments" LIMIT 1;
+
+# Verify Subject-Topic relationship
+SELECT s.*, t.* FROM "Subjects" s LEFT JOIN "Topics" t ON s."Id" = t."SubjectId" LIMIT 5;
+```
+
    ```sql
    DROP SCHEMA public CASCADE;
    CREATE SCHEMA public;
    ```
 
 ## 🧩 Models / Entities
-- **User** – base profile (name, username, email, department, `IsAdmin`) with navigation to results/logs.
-- **Subject** – course/topic metadata that groups exams.
-- **Test (Exam)** – belongs to a subject, tracks duration, publish flags, availability window.
-- **Question** – linked to a test with type, points, ordering, `Difficulty` (Easy/Medium/Hard), `Category` (topic classification), and option collection.
-- **Option** – answer choices per question, includes correctness flag and display order.
-- **TestResult** – captures user scores, counts, duration, completion timestamp.
-- **ActivityLog** – audit trail entries with severity/category referencing optional user.
+- **Department** – academic unit (e.g., College of Computer Studies) with navigation to courses, users, and activity logs.
+- **Course** – degree program (e.g., BSc Computer Science, BSc Data Science) belonging to a department with navigation to subjects.
+- **Subject** – academic subject within a course (e.g., Discrete Structures 1) with navigation to topics and tests.
+- **Topic** – syllabus unit within a subject (e.g., Arrays & Lists, Daily-Lessons) with allocated teaching hours.
+- **Question** – exam item linked to a topic with type, points, Bloom's level (cognitive classification), and option collection.
+- **Option** – answer choices per question with correctness flag and display order.
+- **Test (Exam)** – belongs to a subject, tracks who created it, duration, publish flags, availability window, and compositions via TestQuestion.
+- **TestQuestion** – junction table relating Tests to Questions with display order.
+- **User** – base profile (name, username, email, department) with navigation to activity logs.
+- **ActivityLog** – audit trail entries with severity/category referencing optional user and entity tracking.
 
 ## ✅ Verification
 - `dotnet build src/src.csproj`
@@ -85,13 +160,37 @@ Full-stack application for managing exam/test databank with C# ASP.NET Core back
 - `PUT /api/users/{id}` - Update user (Admin only)
 - `DELETE /api/users/{id}` - Delete user (Admin only)
 
+### Departments (`/api/departments`)
+- `POST /api/departments` - Create department (Admin only)
+- `GET /api/departments` - List departments with pagination (Requires auth)
+  - Query params: `pageNumber`, `pageSize`, `search?`, `isActive?`
+- `GET /api/departments/{id}` - Get department by ID (Requires auth)
+- `PUT /api/departments/{id}` - Update department (Admin only)
+- `DELETE /api/departments/{id}` - Delete department (Admin only, protected if has courses/users)
+
+### Courses (`/api/courses`)
+- `POST /api/courses` - Create course (Admin only)
+- `GET /api/courses` - List courses with pagination (Requires auth)
+  - Query params: `pageNumber`, `pageSize`, `departmentId?`, `search?`, `isActive?`
+- `GET /api/courses/{id}` - Get course by ID (Requires auth)
+- `PUT /api/courses/{id}` - Update course (Admin only)
+- `DELETE /api/courses/{id}` - Delete course (Admin only, protected if has subjects)
+
 ### Subjects (`/api/subjects`)
-- `POST /api/subjects` - Create subject (Admin only)
+- `POST /api/subjects` - Create subject (Requires auth)
 - `GET /api/subjects` - List all subjects with pagination (Requires auth)
-  - Query params: `pageNumber`, `pageSize`
+  - Query params: `pageNumber`, `pageSize`, `courseId?`, `search?`, `isActive?`
 - `GET /api/subjects/{id}` - Get subject by ID (Requires auth)
 - `PUT /api/subjects/{id}` - Update subject (Admin only)
 - `DELETE /api/subjects/{id}` - Delete subject (Admin only)
+
+### Topics (`/api/topics`)
+- `POST /api/topics` - Create topic (Requires auth)
+- `GET /api/topics` - List all topics with pagination (Requires auth)
+  - Query params: `pageNumber`, `pageSize`, `subjectId?`, `search?`, `isActive?`
+- `GET /api/topics/{id}` - Get topic by ID (Requires auth)
+- `PUT /api/topics/{id}` - Update topic (Admin only)
+- `DELETE /api/topics/{id}` - Delete topic (Admin only, protected if has questions)
 
 ### Tests/Exams (`/api/tests`)
 - `POST /api/tests` - Create test (Admin only)

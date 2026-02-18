@@ -1,53 +1,73 @@
-// Why configuration is needed? 
-// It's simply because before creating a migration for our database we need to tell the database 
-// the data that must be created on the database
-
 using Databank.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Databank.Configuration;
 
-
 public sealed class UserConfiguration : IEntityTypeConfiguration<User>
 {
     public void Configure(EntityTypeBuilder<User> builder)
     {
-        //
+        builder.ToTable("Users");
+
         builder.HasKey(x => x.UserId);
 
-
         builder.Property(x => x.UserId)
-        .HasDefaultValueSql("gen_random_uuid()")
-        .ValueGeneratedOnAdd();
+            .HasDefaultValueSql("gen_random_uuid()")
+            .ValueGeneratedOnAdd();
 
-        builder.Property(n => n.Username)
-        .IsRequired()
-        .HasMaxLength(20);
+        builder.Property(x => x.Username)
+            .IsRequired()
+            .HasMaxLength(50)
+            .IsUnicode(false);
 
-        builder.Property(n => n.Password)
-        .IsRequired()
-        .HasMaxLength(250);
+        builder.HasIndex(x => x.Username)
+            .IsUnique();
 
-        builder.Property(n => n.FirstName)
-        .IsRequired()
-        .HasMaxLength(100);
+        builder.Property(x => x.Password)
+            .IsRequired()
+            .HasMaxLength(250);
 
-        builder.Property(n => n.LastName)
-        .IsRequired()
-        .HasMaxLength(100);
+        builder.Property(x => x.FirstName)
+            .IsRequired()
+            .HasMaxLength(100);
 
-        builder.Property(n => n.Department)
-        .IsRequired();
+        builder.Property(x => x.LastName)
+            .IsRequired()
+            .HasMaxLength(100);
 
-        builder.Property(n => n.IsAdmin)
-        .HasDefaultValue(false);
+        builder.Property(x => x.Email)
+            .IsRequired()
+            .HasMaxLength(150);
 
-        builder.Property(d => d.CreatedAt)
-        .HasDefaultValueSql("current_date");
+        builder.HasIndex(x => x.Email)
+            .IsUnique();
 
-        builder.Property(d => d.UpdatedAt)
-        .ValueGeneratedOnAddOrUpdate()
-        .HasDefaultValueSql("current_date");
+        builder.Property(x => x.DepartmentId)
+            .IsRequired();
+
+        builder.Property(x => x.IsAdmin)
+            .HasDefaultValue(false);
+
+        builder.Property(x => x.IsActive)
+            .HasDefaultValue(true);
+
+        builder.Property(x => x.CreatedAt)
+            .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+        builder.Property(x => x.UpdatedAt)
+            .ValueGeneratedOnAddOrUpdate()
+            .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+        // Relationships
+        builder.HasOne(x => x.Department)
+            .WithMany(x => x.Users)
+            .HasForeignKey(x => x.DepartmentId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasMany(x => x.ActivityLogs)
+            .WithOne(x => x.User)
+            .HasForeignKey(x => x.UserId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }

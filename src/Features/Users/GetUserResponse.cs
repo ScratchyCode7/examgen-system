@@ -4,10 +4,11 @@ public sealed record UserResponse(
     Guid UserId,
     string FirstName,
     string LastName,
-    string Department,
+    int DepartmentId,
     string Username,
     string Email,
     bool IsAdmin,
+    bool IsActive,
     DateTime CreatedAt,
     DateTime UpdatedAt
 );

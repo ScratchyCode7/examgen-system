@@ -7,7 +7,7 @@ using Databank.Entities;
 namespace Databank.Features.Users.Create;
 
 /// <summary>
-/// Temporary endpoint to seed the first admin user.
+/// Temporary endpoint to seed the first admin user and department.
 /// Remove or secure this endpoint after creating the first admin.
 /// </summary>
 public sealed class SeedAdminEndpoint : IEndpoint
@@ -26,14 +26,34 @@ public sealed class SeedAdminEndpoint : IEndpoint
                 return TypedResults.BadRequest("Admin user already exists. Use regular registration endpoint.");
             }
 
+            // Create default IT department if it doesn't exist
+            var itDept = await dbContext.Departments
+                .FirstOrDefaultAsync(d => d.Code == "IT", ct);
+            
+            if (itDept == null)
+            {
+                itDept = new Department
+                {
+                    Code = "IT",
+                    Name = "Information Technology",
+                    Description = "IT Department",
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                await dbContext.Departments.AddAsync(itDept, ct);  
+                await dbContext.SaveChangesAsync(ct);
+            }
+
             var admin = new User
             {
                 FirstName = "Admin",
                 LastName = "User",
                 Username = "admin",
                 Email = "admin@databank.dev",
-                Department = "IT",
+                DepartmentId = itDept.Id,
                 IsAdmin = true,
+                IsActive = true,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };

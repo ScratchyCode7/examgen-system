@@ -20,17 +20,19 @@ public sealed class UpdateQuestionEndpoint : IEndpoint
                 return TypedResults.NotFound();
             }
 
-            var testExists = await dbContext.Tests.AnyAsync(t => t.Id == request.TestId, ct);
-            if (!testExists)
+            var topicExists = await dbContext.Topics.AnyAsync(t => t.Id == request.TopicId, ct);
+            if (!topicExists)
             {
-                return TypedResults.BadRequest("Test not found.");
+                return TypedResults.BadRequest("Topic not found.");
             }
 
-            question.TestId = request.TestId;
+            question.TopicId = request.TopicId;
             question.Content = request.Content;
-            question.Type = request.Type;
+            question.QuestionType = request.QuestionType;
+            question.BloomLevel = request.BloomLevel;
             question.Points = request.Points;
             question.DisplayOrder = request.DisplayOrder;
+            question.UpdatedAt = DateTime.UtcNow;
 
             await dbContext.SaveChangesAsync(ct);
 

@@ -705,7 +705,7 @@ const TestEncodingAndEditing = () => {
                             onSelect={(item) => {
                                 handleSetActiveTab(item);
                                 if (item === 'Course - Topic') {
-                                    navigate('/course-topic');
+                                    navigate('/course-topic/1');
                                 } else if (item === 'Test Question Encoding' || item === 'Test Question Editing') {
                                     navigate('/test-encoding');
                                 }

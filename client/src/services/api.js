@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5012';
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -113,6 +113,41 @@ export const apiService = {
   getQuestion: async (id) => {
     const response = await apiClient.get(`/api/questions/${id}`);
     return response.data;
+  },
+
+  // Test connectivity
+  testConnection: async () => {
+    try {
+      const response = await apiClient.get('/api/departments');
+      return { success: true, data: response.data };
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error.message,
+        baseURL: API_BASE_URL,
+        status: error.response?.status
+      };
+    }
+  },
+  // Departments
+  getDepartments: async () => {
+    const response = await apiClient.get('/api/departments');
+    const data = response.data;
+    // normalize: some endpoints return { items: [...] } while others return an array
+    if (Array.isArray(data)) return data;
+    if (data?.items && Array.isArray(data.items)) return data.items;
+    return [];
+  },
+
+  // Courses by department
+  getCourses: async (departmentId) => {
+    const response = await apiClient.get(`/api/courses?departmentId=${departmentId}`);
+    const data = response.data;
+    console.log('getCourses: raw response for deptId', departmentId, data);
+    if (Array.isArray(data)) return data;
+    if (data?.items && Array.isArray(data.items)) return data.items;
+    if (data?.data && Array.isArray(data.data)) return data.data;
+    return [];
   },
 };
 

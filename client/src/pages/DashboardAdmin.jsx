@@ -9,33 +9,8 @@ import '../styles/Dashboard.css';
 
 import TDBLogo from '../assets/TDB logo.png';
 import UPHSL from '../assets/uphsl.png';
-import BED from '../assets/BED.png';
-import CBA from '../assets/CBA.png';
-import CIHM from '../assets/CIHM.png';
-import CME from '../assets/CME.png';
-import COEA from '../assets/COEA.png';
-import CRIM from '../assets/CRIM.png';
-import EDUC from '../assets/EDUC.png';
-import GRAD from '../assets/GRAD.png';
-import LJD from '../assets/LJD.png';
-import SOA from '../assets/SOA.png';
-import CCS from '../assets/CCS.png';
-import CAS from '../assets/CAS.png';
-
-const MOCK_PROGRAMS = [
-  { id: 1, name: "Basic Education", logo: BED },
-  { id: 2, name: "College of Arts and Sciences", logo: CAS },
-  { id: 3, name: "College of Business & Accountancy", logo: CBA },
-  { id: 4, name: "College of Computer Studies", logo: CCS },
-  { id: 5, name: "College of Criminology", logo: CRIM },
-  { id: 6, name: "College of International Hospitality Management", logo: CIHM },
-  { id: 7, name: "College of Maritime Education", logo: CME },
-  { id: 8, name: "College of Teacher Education", logo: EDUC },
-  { id: 9, name: "Graduate School", logo: GRAD },
-  { id: 10, name: "Law / Juris Doctor", logo: LJD },
-  { id: 11, name: "School of Aviation", logo: SOA },
-  { id: 12, name: "College of Engineering & Architecture", logo: COEA },
-];
+import { apiService } from '../services/api';
+import DEPARTMENT_LOGOS from '../constants/departmentLogos';
 
 const DashboardAdmin = () => {
   const { user, logout } = useAuth();
@@ -49,8 +24,25 @@ const DashboardAdmin = () => {
 
   const displayName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username : 'Admin User';
 
-  // Sort programs alphabetically by name
-  const sortedPrograms = [...MOCK_PROGRAMS].sort((a, b) => a.name.localeCompare(b.name));
+  // departments are loaded from API and used directly
+  const [departments, setDepartments] = useState([]);
+  const [isLoadingDepartments, setIsLoadingDepartments] = useState(false);
+
+  useEffect(() => {
+    const loadDepartments = async () => {
+      try {
+        setIsLoadingDepartments(true);
+        const data = await apiService.getDepartments();
+        setDepartments(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error('Failed to load departments:', err);
+      } finally {
+        setIsLoadingDepartments(false);
+      }
+    };
+
+    void loadDepartments();
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -96,11 +88,15 @@ const DashboardAdmin = () => {
               dropdownItems={dataEntryItems}
               onSelect={(item) => {
                 setActiveTab(item);
-                if (item === 'Course - Topic') {
-                  navigate('/course-topic');
-                } else if (item === 'Test Encoding' || item === 'Test Question Editing') {
-                  navigate('/test-encoding');
-                }
+                  if (item === 'Course - Topic') {
+                    // Navigate to last selected department (fallback to first non-admin)
+                    const firstDept = departments?.find(d => d.code !== 'IT') || departments?.[0];
+                    const code = localStorage.getItem('lastDepartmentCode') || firstDept?.code || 'IT';
+                    localStorage.setItem('lastDepartmentCode', code);
+                    navigate(`/course-topic/${code}`);
+                  } else if (item === 'Test Encoding' || item === 'Test Question Editing') {
+                    navigate('/test-encoding');
+                  }
               }}
             />
             <NavItem icon={BookOpen} label="Reports" isActive={activeTab === 'Reports'} onClick={() => setActiveTab('Reports')} />
@@ -152,31 +148,50 @@ const DashboardAdmin = () => {
 
           {programView === 'grid' ? (
             <div className="program-grid" style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
-              {sortedPrograms.map((program) => (
-                <div
-                  key={program.id}
-                  className="program-card"
-                  style={{ flex: '0 0 calc(25% - 1rem)' }} // 4 per row
-                >
-                  <img
-                    src={program.logo}
-                    alt={program.name}
-                    onError={(e) => {
-                      e.target.onerror = null;
-                      e.target.src = 'https://placehold.co/96x96/FFFFFF/1C4DA1?text=LOGO';
-                    }}
-                  />
-                  <p>{program.name}</p>
-                </div>
-              ))}
+              {isLoadingDepartments ? (
+                <p>Loading departments...</p>
+              ) : departments.length ? (
+                departments
+                  .filter(d => {
+                    const code = (d.code || '').toString().trim().toUpperCase();
+                    const name = (d.name || '').toString().trim().toLowerCase();
+                    return code !== 'IT' && !name.includes('information technology');
+                  })
+                  .map((d) => {
+                    const logo = DEPARTMENT_LOGOS[d.code] || null;
+                    return (
+                      <div
+                          key={d.id}
+                          className="program-card"
+                          style={{ flex: '0 0 calc(25% - 1rem)', cursor: 'pointer' }} // 4 per row
+                          onClick={() => { localStorage.setItem('lastDepartmentCode', d.code); navigate(`/course-topic/${d.code}`); }}
+                        >
+                        {logo ? (
+                          <img src={logo} alt={d.name} onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/96x96/FFFFFF/1C4DA1?text=LOGO'; }} />
+                        ) : (
+                          <div className="dept-icon">{d.code?.charAt(0) ?? 'D'}</div>
+                        )}
+                        <p>{d.name}</p>
+                      </div>
+                    );
+                  })
+              ) : (
+                <p>No departments available.</p>
+              )}
             </div>
           ) : (
             <div className="program-list">
-              {sortedPrograms.map(program => (
-                <div key={program.id} className="program-list-item">
-                  <p>{program.name}</p>
-                </div>
-              ))}
+              {isLoadingDepartments ? (
+                <p>Loading departments...</p>
+              ) : departments.length ? (
+                departments.map(d => (
+                  <div key={d.id} className="program-list-item" style={{cursor: 'pointer'}} onClick={() => { localStorage.setItem('lastDepartmentCode', d.code); navigate(`/course-topic/${d.code}`); }}>
+                    <p>{d.name}</p>
+                  </div>
+                ))
+              ) : (
+                <p>No departments available.</p>
+              )}
             </div>
           )}
         </div>
