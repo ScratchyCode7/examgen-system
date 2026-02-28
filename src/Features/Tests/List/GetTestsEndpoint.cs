@@ -12,11 +12,35 @@ public sealed class GetTestsEndpoint : IEndpoint
         app.MapGet("/api/tests", async Task<IResult> (
                 int pageNumber = 1,
                 int pageSize = 10,
+                int? subjectId = null,
+                string? examType = null,
+                string? semester = null,
+                string? schoolYear = null,
                 AppDbContext dbContext = null!,
                 CancellationToken ct = default) =>
         {
             var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
             var query = dbContext.Tests.AsNoTracking();
+
+            if (subjectId.HasValue)
+            {
+                query = query.Where(t => t.SubjectId == subjectId.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(examType))
+            {
+                query = query.Where(t => t.ExamType == examType);
+            }
+
+            if (!string.IsNullOrWhiteSpace(semester))
+            {
+                query = query.Where(t => t.Semester == semester);
+            }
+
+            if (!string.IsNullOrWhiteSpace(schoolYear))
+            {
+                query = query.Where(t => t.SchoolYear == schoolYear);
+            }
 
             var totalCount = await query.CountAsync(ct);
 
@@ -24,12 +48,13 @@ public sealed class GetTestsEndpoint : IEndpoint
                 .OrderByDescending(t => t.CreatedAt)
                 .Skip(pagination.Skip)
                 .Take(pagination.Take)
-                .Select(t => t.ToResponse())
                 .ToListAsync(ct);
+
+            var testResponses = tests.Select(t => t.ToResponse()).ToList();
 
             var response = new PagedResponse<TestResponse>
             {
-                Items = tests,
+                Items = testResponses,
                 PageNumber = pagination.PageNumber,
                 PageSize = pagination.PageSize,
                 TotalCount = totalCount

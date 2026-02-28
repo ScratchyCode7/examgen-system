@@ -14,7 +14,9 @@ public sealed class UpdateQuestionEndpoint : IEndpoint
                 AppDbContext dbContext,
                 CancellationToken ct) =>
         {
-            var question = await dbContext.Questions.FirstOrDefaultAsync(q => q.Id == id, ct);
+            var question = await dbContext.Questions
+                .Include(q => q.Options)
+                .FirstOrDefaultAsync(q => q.Id == id, ct);
             if (question is null)
             {
                 return TypedResults.NotFound();

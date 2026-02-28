@@ -1,0 +1,2133 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import * as Icons from 'lucide-react';
+import NavItem from '../components/NavItem';
+import DropdownNavItem from '../components/DropdownNavItem';
+import LogoutModal from '../components/LogoutModal';
+import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
+import { apiService } from '../services/api';
+import '../styles/Dashboard.css';
+import '../styles/TestGeneration.css';
+
+import TDBLogo from '../assets/TDB logo.png';
+import UPHSL from '../assets/uphsl.png';
+import UPHSLLogo from '../assets/UPHSL Logo.png';
+
+const { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search, Printer, Save, Eye, Trash2 } = Icons;
+
+const TestGeneration = () => {
+  const { user, logout } = useAuth();
+  const { isDarkMode, toggleDarkMode } = useTheme();
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState('Reports');
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+  const userMenuRef = useRef(null);
+
+  const displayName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username : 'User';
+
+  // Helper function to determine semester based on current date
+  const getAutoSemester = () => {
+    const month = new Date().getMonth() + 1;
+    if (month >= 8 || month <= 12) return '1st'; // Aug-Dec
+    if (month >= 1 && month <= 5) return '2nd'; // Jan-May
+    return 'Summer'; // Jun-Jul
+  };
+
+  // Helper function to get school year
+  const getAutoSchoolYear = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    if (month >= 8) {
+      return `${year}${year + 1}`; // Starting from Aug (next year)
+    } else {
+      return `${year - 1}${year}`; // Before Aug (previous year)
+    }
+  };
+
+  // Helper function to determine exam type based on date in semester
+  const getAutoExamType = () => {
+    const month = new Date().getMonth() + 1;
+    const date = new Date().getDate();
+    
+    // Basic logic for exam periods - adjust based on your institution's schedule
+    // Prelim: Usually early in semester (weeks 1-4)
+    // Midterm: Mid semester (weeks 5-8)
+    // Finals: End of semester (weeks 9-18)
+    
+    if ((month >= 8 && date <= 20) || (month >= 1 && month <= 3 && date <= 20)) return 'Prelim';
+    if ((month >= 9 && month <= 10) || (month >= 3 && month <= 4)) return 'Midterm';
+    return 'Finals';
+  };
+
+  // Form states
+  const [selectedDepartment, setSelectedDepartment] = useState(''); // Department ID
+  const [selectedCourse, setSelectedCourse] = useState(''); // Course ID
+  const [selectedSubject, setSelectedSubject] = useState(''); // Subject ID
+  const [examType, setExamType] = useState('Midterm'); // Midterm, Prelim, Finals
+  const [semester, setSemester] = useState(getAutoSemester()); // 1st, 2nd, Summer
+  const [schoolYear, setSchoolYear] = useState(getAutoSchoolYear()); // YYYYYYYY format
+  const [totalExamItems, setTotalExamItems] = useState(''); // Total exam items
+  const [manualTotalItems, setManualTotalItems] = useState(false);
+  const [specOverrides, setSpecOverrides] = useState({});
+
+  const handleSpecOverrideChange = (overrideKey, field, value) => {
+    setSpecOverrides(prev => ({
+      ...prev,
+      [overrideKey]: {
+        ...(prev[overrideKey] || {}),
+        [field]: value
+      }
+    }));
+  };
+  const [error, setError] = useState('');
+  const [validationErrors, setValidationErrors] = useState({});
+  const [insufficientItemsWarning, setInsufficientItemsWarning] = useState('');
+  const [excessItemsWarning, setExcessItemsWarning] = useState('');
+  const [topicRows, setTopicRows] = useState([
+    { id: 1, topicId: '', topicName: '', topic: '', hours: '', lowCount: '', middleCount: '', highCount: '', lowPlacements: '', middlePlacements: '', highPlacements: '' },
+    { id: 2, topicId: '', topicName: '', topic: '', hours: '', lowCount: '', middleCount: '', highCount: '', lowPlacements: '', middlePlacements: '', highPlacements: '' }
+  ]);
+  const [nextRowId, setNextRowId] = useState(3);
+  const [generatedSpec, setGeneratedSpec] = useState(null);
+  const [sampleExam, setSampleExam] = useState(null);
+  const [showAnswerSheet, setShowAnswerSheet] = useState(false);
+  const [savedExams, setSavedExams] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [courses, setCourses] = useState([]);
+  const [subjects, setSubjects] = useState([]);
+  const [topics, setTopics] = useState([]);
+  const [questionsByTopic, setQuestionsByTopic] = useState({}); // Store questions by topicId
+  const [isLoadingDepartments, setIsLoadingDepartments] = useState(false);
+  const [isLoadingCourses, setIsLoadingCourses] = useState(false);
+  const [isLoadingSubjects, setIsLoadingSubjects] = useState(false);
+  const [isLoadingTopics, setIsLoadingTopics] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [examName, setExamName] = useState('');
+  const [deleteConfirmation, setDeleteConfirmation] = useState({ show: false, rowId: null });
+  const [showPrintModal, setShowPrintModal] = useState(false);
+  const [printOption, setPrintOption] = useState('specification');
+  const [topicSearchText, setTopicSearchText] = useState({});
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) setIsUserMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+
+
+  // Load departments
+  useEffect(() => {
+    const loadDepartments = async () => {
+      try {
+        setIsLoadingDepartments(true);
+        const data = await apiService.getDepartments();
+        console.log('Departments loaded:', data);
+        const list = Array.isArray(data) ? data : [];
+        setDepartments(list);
+      } catch (err) {
+        console.error('Failed to load departments:', err);
+        setError('Failed to load departments. Please try again.');
+        setDepartments([]);
+      } finally {
+        setIsLoadingDepartments(false);
+      }
+    };
+
+    void loadDepartments();
+  }, []);
+
+  // Load courses for selected department
+  useEffect(() => {
+    const loadCourses = async () => {
+      if (!selectedDepartment) {
+        setCourses([]);
+        setSubjects([]);
+        setTopics([]);
+        return;
+      }
+
+      try {
+        setIsLoadingCourses(true);
+        console.log('Loading courses for departmentId:', selectedDepartment);
+        const dept = departments.find(d => d.id === parseInt(selectedDepartment));
+        if (!dept) {
+          console.warn('Department not found:', selectedDepartment);
+          setCourses([]);
+          return;
+        }
+
+        const data = await apiService.getCourses(dept.id);
+        console.log('Courses loaded for dept', dept.id, ':', data);
+        const list = Array.isArray(data) ? data : [];
+        setCourses(list);
+        setSelectedCourse(''); // Reset course selection
+        setSelectedSubject(''); // Reset subject selection
+      } catch (err) {
+        console.error('Failed to load courses:', err);
+        setError(`Failed to load courses: ${err.message || 'Unknown error'}`);
+        setCourses([]);
+      } finally {
+        setIsLoadingCourses(false);
+      }
+    };
+
+    void loadCourses();
+  }, [selectedDepartment, departments]);
+
+  // Load subjects for selected course
+  useEffect(() => {
+    const loadSubjects = async () => {
+      if (!selectedCourse) {
+        setSubjects([]);
+        setTopics([]);
+        setQuestionsByTopic({});
+        return;
+      }
+
+      try {
+        setIsLoadingSubjects(true);
+        console.log('Loading subjects for courseId:', selectedCourse);
+        const subjectsList = await apiService.getSubjects({ courseId: parseInt(selectedCourse), pageSize: 500 });
+        console.log('Subjects loaded:', subjectsList);
+        
+        const list = Array.isArray(subjectsList) ? subjectsList : [];
+        setSubjects(list);
+        setSelectedSubject(''); // Reset subject selection
+        
+        if (list.length === 0) {
+          console.warn('No subjects found for courseId:', selectedCourse);
+          setError('No subjects found for this course.');
+        }
+      } catch (err) {
+        console.error('Failed to load subjects:', err);
+        setError(`Failed to load subjects: ${err.message || 'Unknown error'}`);
+        setSubjects([]);
+      } finally {
+        setIsLoadingSubjects(false);
+      }
+    };
+
+    void loadSubjects();
+  }, [selectedCourse]);
+
+  // Development mock data removed for release build. In production questions
+  // are fetched from the API via `questionsByTopic`. Keep this array empty
+  // to avoid shipping large test data in production bundles.
+  const mockQuestionsData = [];
+    { id: 33, topic: 1, topicName: 'Introduction to Anaconda and Jupyter', question: 'Judge the value of conda for collaborative projects', bloomLevel: 'Evaluating', choices: ['Ensures consistent environments across team', 'Not useful for teams', 'Cannot share environments', 'Only for solo work'], correctAnswer: 'A' },
+    { id: 34, topic: 1, topicName: 'Introduction to Anaconda and Jupyter', question: 'Evaluate when to export Jupyter to Python script', bloomLevel: 'Evaluating', choices: ['When code is production-ready or needs scheduling', 'Always export', 'Never export', 'Only for backups'], correctAnswer: 'A' },
+    { id: 35, topic: 1, topicName: 'Introduction to Anaconda and Jupyter', question: 'Assess the security implications of shared notebooks', bloomLevel: 'Evaluating', choices: ['Can expose sensitive code and data if not cautious', 'Completely secure', 'No security concerns', 'Only code is visible'], correctAnswer: 'A' },
+    { id: 36, topic: 1, topicName: 'Introduction to Anaconda and Jupyter', question: 'Evaluate the importance of kernel management', bloomLevel: 'Evaluating', choices: ['Critical for different Python versions and libraries', 'Not important', 'All kernels are same', 'Cannot manage kernels'], correctAnswer: 'A' },
+    { id: 37, topic: 1, topicName: 'Introduction to Anaconda and Jupyter', question: 'Judge the effectiveness of Jupyter for teaching Python', bloomLevel: 'Evaluating', choices: ['Excellent for visualizing results and interactive learning', 'Not suitable for teaching', 'Only for experts', 'Confuses beginners'], correctAnswer: 'A' },
+    { id: 38, topic: 1, topicName: 'Introduction to Anaconda and Jupyter', question: 'Assess the best documentation practice in notebooks', bloomLevel: 'Evaluating', choices: ['Mix code, markdown, and outputs for clarity', 'No documentation needed', 'All comments in code', 'Separate documentation file only'], correctAnswer: 'A' },
+    { id: 39, topic: 1, topicName: 'Introduction to Anaconda and Jupyter', question: 'Evaluate performance considerations for large notebooks', bloomLevel: 'Evaluating', choices: ['Consider memory usage and kernel restart strategies', 'No performance concerns', 'Larger is always faster', 'Performance is irrelevant'], correctAnswer: 'A' },
+    { id: 40, topic: 1, topicName: 'Introduction to Anaconda and Jupyter', question: 'Judge the role of Jupyter in modern data workflow', bloomLevel: 'Evaluating', choices: ['Essential for EDA and prototyping in data science', 'Not relevant anymore', 'Only for learning', 'Replaced by other tools'], correctAnswer: 'A' },
+    { id: 41, topic: 1, topicName: 'Introduction to Anaconda and Jupyter', question: 'Evaluate the use of Jupyter for collaboration', bloomLevel: 'Evaluating', choices: ['Jupyter supports sharing and teamwork', 'Jupyter is only for solo work', 'Collaboration is not possible', 'Jupyter is not used in teams'], correctAnswer: 'A' },
+    { id: 42, topic: 1, topicName: 'Introduction to Anaconda and Jupyter', question: 'Judge the importance of reproducibility in Jupyter', bloomLevel: 'Evaluating', choices: ['Reproducibility is crucial for science', 'Reproducibility is not important', 'Only code matters', 'Documentation is enough'], correctAnswer: 'A' },
+    { id: 43, topic: 1, topicName: 'Introduction to Anaconda and Jupyter', question: 'Assess the impact of visualization in Jupyter', bloomLevel: 'Evaluating', choices: ['Visualization aids understanding', 'Visualization is not needed', 'Only code is important', 'Visualization slows down work'], correctAnswer: 'A' },
+    { id: 44, topic: 1, topicName: 'Introduction to Anaconda and Jupyter', question: 'Evaluate the use of Jupyter for presentations', bloomLevel: 'Evaluating', choices: ['Jupyter is great for presenting results', 'Jupyter is not for presentations', 'Presentations are not needed', 'Jupyter is only for code'], correctAnswer: 'A' },
+    { id: 45, topic: 1, topicName: 'Introduction to Anaconda and Jupyter', question: 'Judge the effectiveness of Jupyter widgets', bloomLevel: 'Evaluating', choices: ['Widgets enhance interactivity', 'Widgets are not useful', 'Widgets are confusing', 'Widgets are only for experts'], correctAnswer: 'A' },
+    { id: 46, topic: 1, topicName: 'Introduction to Anaconda and Jupyter', question: 'Assess the use of Jupyter for documentation', bloomLevel: 'Evaluating', choices: ['Jupyter makes documentation easy', 'Documentation is not needed', 'Only code matters', 'Documentation is hard in Jupyter'], correctAnswer: 'A' },
+    { id: 47, topic: 1, topicName: 'Introduction to Anaconda and Jupyter', question: 'Evaluate the use of Jupyter for prototyping', bloomLevel: 'Evaluating', choices: ['Jupyter is ideal for prototyping', 'Prototyping is not needed', 'Jupyter is not for prototyping', 'Prototyping is hard in Jupyter'], correctAnswer: 'A' },
+    { id: 48, topic: 1, topicName: 'Introduction to Anaconda and Jupyter', question: 'Judge the importance of code comments in Jupyter', bloomLevel: 'Evaluating', choices: ['Comments help explain code', 'Comments are not needed', 'Only markdown matters', 'Comments slow down work'], correctAnswer: 'A' },
+    { id: 49, topic: 1, topicName: 'Introduction to Anaconda and Jupyter', question: 'Assess the use of Jupyter for education', bloomLevel: 'Evaluating', choices: ['Jupyter is widely used in teaching', 'Jupyter is not used in education', 'Education does not need Jupyter', 'Jupyter is only for research'], correctAnswer: 'A' },
+    { id: 50, topic: 1, topicName: 'Introduction to Anaconda and Jupyter', question: 'Evaluate the use of Jupyter for research', bloomLevel: 'Evaluating', choices: ['Jupyter is valuable for research', 'Research does not use Jupyter', 'Jupyter is only for business', 'Research is not important'], correctAnswer: 'A' },
+
+    // Topic 2: Data Frame (60 questions)
+    // Remembering (20 questions)
+    { id: 41, topic: 2, topicName: 'Data Frame', question: 'What is a DataFrame?', bloomLevel: 'Remembering', choices: ['A 2D labeled data structure', 'A 1D array', 'A matrix', 'A database table'], correctAnswer: 'A' },
+    { id: 42, topic: 2, topicName: 'Data Frame', question: 'Which library provides Pandas DataFrames?', bloomLevel: 'Remembering', choices: ['Pandas', 'NumPy', 'Matplotlib', 'Scikit-learn'], correctAnswer: 'A' },
+    { id: 43, topic: 2, topicName: 'Data Frame', question: 'What are the main components of a DataFrame?', bloomLevel: 'Remembering', choices: ['Rows and columns with labels', 'Only rows', 'Only columns', 'Nested lists'], correctAnswer: 'A' },
+    { id: 44, topic: 2, topicName: 'Data Frame', question: 'How do you create a DataFrame from a dictionary?', bloomLevel: 'Remembering', choices: ['pd.DataFrame(dict)', 'DataFrame.from_dict()', 'pd.create(dict)', 'DataFrame(dict)'], correctAnswer: 'A' },
+    { id: 45, topic: 2, topicName: 'Data Frame', question: 'What is an index in a DataFrame?', bloomLevel: 'Remembering', choices: ['Labels for rows', 'Column names', 'Data types', 'Sorting order'], correctAnswer: 'A' },
+    { id: 46, topic: 2, topicName: 'Data Frame', question: 'How do you access a single column from a DataFrame?', bloomLevel: 'Remembering', choices: ['df["column_name"]', 'df.column_name', 'df[0]', 'df.get_column()'], correctAnswer: 'A' },
+    { id: 47, topic: 2, topicName: 'Data Frame', question: 'What does df.head() do?', bloomLevel: 'Remembering', choices: ['Shows first few rows', 'Shows column headers', 'Returns max value', 'Removes rows'], correctAnswer: 'A' },
+    { id: 48, topic: 2, topicName: 'Data Frame', question: 'How do you check DataFrame shape?', bloomLevel: 'Remembering', choices: ['df.shape', 'df.size', 'df.dimensions', 'df.length()'], correctAnswer: 'A' },
+    { id: 49, topic: 2, topicName: 'Data Frame', question: 'What is df.info() used for?', bloomLevel: 'Remembering', choices: ['Shows data types and memory usage', 'Shows data values', 'Computes statistics', 'Saves the file'], correctAnswer: 'A' },
+    { id: 50, topic: 2, topicName: 'Data Frame', question: 'How do you add a new column to a DataFrame?', bloomLevel: 'Remembering', choices: ['df["new_col"] = values', 'df.add_column("new_col")', 'df.insert("new_col")', 'df.new_col = values'], correctAnswer: 'A' },
+    { id: 51, topic: 2, topicName: 'Data Frame', question: 'What does df.dtypes show?', bloomLevel: 'Remembering', choices: ['Data types of each column', 'Column names', 'Row count', 'Missing values'], correctAnswer: 'A' },
+    { id: 52, topic: 2, topicName: 'Data Frame', question: 'How do you drop a column from a DataFrame?', bloomLevel: 'Remembering', choices: ['df.drop("column", axis=1)', 'df.remove("column")', 'del df["column"]', 'df.delete("column")'], correctAnswer: 'A' },
+    { id: 53, topic: 2, topicName: 'Data Frame', question: 'What is df.loc used for?', bloomLevel: 'Remembering', choices: ['Label-based indexing', 'Position-based indexing', 'Sorting data', 'Filtering nulls'], correctAnswer: 'A' },
+    { id: 54, topic: 2, topicName: 'Data Frame', question: 'What is df.iloc used for?', bloomLevel: 'Remembering', choices: ['Position-based indexing', 'Label-based indexing', 'Sorting data', 'Finding unique values'], correctAnswer: 'A' },
+    { id: 55, topic: 2, topicName: 'Data Frame', question: 'How do you read a CSV file into a DataFrame?', bloomLevel: 'Remembering', choices: ['pd.read_csv("file.csv")', 'pd.read("file.csv")', 'DataFrame.from_csv()', 'pd.load_csv()'], correctAnswer: 'A' },
+    { id: 56, topic: 2, topicName: 'Data Frame', question: 'What does df.describe() produce?', bloomLevel: 'Remembering', choices: ['Statistical summary', 'Data types', 'Column names', 'Row count'], correctAnswer: 'A' },
+
+    // Analyzing (20 questions)
+    { id: 57, topic: 2, topicName: 'Data Frame', question: 'Compare Series and DataFrame structures', bloomLevel: 'Analyzing', choices: ['Series is 1D, DataFrame is 2D', 'Series is 2D, DataFrame is 1D', 'They are identical', 'Series is faster'], correctAnswer: 'A' },
+    { id: 58, topic: 2, topicName: 'Data Frame', question: 'Analyze the difference between copy() and reference', bloomLevel: 'Analyzing', choices: ['copy() creates independent copy, reference shares data', 'They are the same', 'Reference is a copy', 'copy() modifies original'], correctAnswer: 'A' },
+    { id: 59, topic: 2, topicName: 'Data Frame', question: 'Examine CSV vs Excel file reading performance', bloomLevel: 'Analyzing', choices: ['CSV faster, Excel slower', 'Excel always faster', 'Same speed', 'Depends on library'], correctAnswer: 'A' },
+    { id: 60, topic: 2, topicName: 'Data Frame', question: 'Compare loc and iloc indexing methods', bloomLevel: 'Analyzing', choices: ['loc uses labels, iloc uses positions', 'loc uses positions, iloc uses labels', 'Both use labels', 'Both use positions'], correctAnswer: 'A' },
+    { id: 61, topic: 2, topicName: 'Data Frame', question: 'Analyze groupby() operation effectiveness', bloomLevel: 'Analyzing', choices: ['Groups data for aggregate operations', 'Sorts data only', 'Deletes duplicates', 'Reorders columns'], correctAnswer: 'A' },
+    { id: 62, topic: 2, topicName: 'Data Frame', question: 'Examine memory usage with different dtypes', bloomLevel: 'Analyzing', choices: ['Different types use different memory', 'All types use same memory', 'dtype doesnt affect memory', 'String uses least memory'], correctAnswer: 'A' },
+    { id: 63, topic: 2, topicName: 'Data Frame', question: 'Analyze merge vs join operations', bloomLevel: 'Analyzing', choices: ['merge is more flexible, join simplified', 'join is more flexible', 'They are identical', 'merge is slower'], correctAnswer: 'A' },
+    { id: 64, topic: 2, topicName: 'Data Frame', question: 'Compare apply() vs map() functions', bloomLevel: 'Analyzing', choices: ['apply for functions to rows/cols, map for values', 'map is always faster', 'They do same thing', 'apply is deprecated'], correctAnswer: 'A' },
+    { id: 65, topic: 2, topicName: 'Data Frame', question: 'Examine the impact of inplace parameter', bloomLevel: 'Analyzing', choices: ['Modifies original when True', 'Returns new object always', 'Only syntactic difference', 'No difference'], correctAnswer: 'A' },
+    { id: 66, topic: 2, topicName: 'Data Frame', question: 'Analyze the benefits of MultiIndex DataFrames', bloomLevel: 'Analyzing', choices: ['Enables hierarchical indexing of data', 'Improves performance always', 'Reduces memory usage', 'Simplifies code'], correctAnswer: 'A' },
+    { id: 67, topic: 2, topicName: 'Data Frame', question: 'Compare fillna vs dropna methods', bloomLevel: 'Analyzing', choices: ['fillna replaces nulls, dropna removes them', 'dropna replaces nulls', 'Both do same thing', 'Neither handles nulls properly'], correctAnswer: 'A' },
+    { id: 68, topic: 2, topicName: 'Data Frame', question: 'Examine categorical data type advantages', bloomLevel: 'Analyzing', choices: ['Saves memory for repeated values', 'Takes more memory', 'No difference in memory', 'Slows down operations'], correctAnswer: 'A' },
+
+    // Evaluating (20 questions)
+    { id: 69, topic: 2, topicName: 'Data Frame', question: 'Evaluate when to use DataFrame vs NumPy array', bloomLevel: 'Evaluating', choices: ['DataFrame for labeled data, NumPy for numerical', 'DataFrame always better', 'NumPy always better', 'They are equivalent'], correctAnswer: 'A' },
+    { id: 70, topic: 2, topicName: 'Data Frame', question: 'Judge the best way to handle missing data', bloomLevel: 'Evaluating', choices: ['Depends on data context and analysis goal', 'Always drop nulls', 'Always fill with zero', 'Ignore missing data'], correctAnswer: 'A' },
+    { id: 71, topic: 2, topicName: 'Data Frame', question: 'Assess the efficiency of chaining operations', bloomLevel: 'Evaluating', choices: ['Can improve readability and sometimes performance', 'Always slower', 'Makes code less readable', 'Never use chaining'], correctAnswer: 'A' },
+    { id: 72, topic: 2, topicName: 'Data Frame', question: 'Evaluate best practices for large DataFrames', bloomLevel: 'Evaluating', choices: ['Use chunking, optimize dtypes, consider Dask', 'No special handling needed', 'Always use copy()', 'Avoid groupby()'], correctAnswer: 'A' },
+    { id: 73, topic: 2, topicName: 'Data Frame', question: 'Assess the value of data validation in DataFrames', bloomLevel: 'Evaluating', choices: ['Essential for data quality and reliability', 'Not necessary', 'Only for databases', 'Slows down processing'], correctAnswer: 'A' },
+    { id: 74, topic: 2, topicName: 'Data Frame', question: 'Judge appropriate use of pivot tables', bloomLevel: 'Evaluating', choices: ['For reshaping and aggregating data', 'For sorting rows', 'For deleting columns', 'For joining tables'], correctAnswer: 'A' },
+    { id: 75, topic: 2, topicName: 'Data Frame', question: 'Evaluate methods for handling duplicates', bloomLevel: 'Evaluating', choices: ['drop_duplicates() with appropriate subset', 'Always keep all rows', 'Manual iteration', 'No method available'], correctAnswer: 'A' },
+    { id: 76, topic: 2, topicName: 'Data Frame', question: 'Assess the importance of proper data types', bloomLevel: 'Evaluating', choices: ['Critical for memory and performance', 'Doesnt matter', 'Only for display', 'Only for exporting'], correctAnswer: 'A' },
+    { id: 77, topic: 2, topicName: 'Data Frame', question: 'Judge when to use astype() for conversion', bloomLevel: 'Evaluating', choices: ['When computational logic requires different type', 'Never necessary', 'Always convert everything', 'Only for display'], correctAnswer: 'A' },
+    { id: 78, topic: 2, topicName: 'Data Frame', question: 'Evaluate performance of iterrows() alternatives', bloomLevel: 'Evaluating', choices: ['Apply and vectorized operations faster than iterrows', 'iterrows is most efficient', 'All methods equal', 'iterrows is necessary'], correctAnswer: 'A' },
+    { id: 79, topic: 2, topicName: 'Data Frame', question: 'Assess best practice for DataFrame documentation', bloomLevel: 'Evaluating', choices: ['Include column descriptions and data assumptions', 'No documentation needed', 'Only code comments', 'External documentation only'], correctAnswer: 'A' },
+    { id: 80, topic: 2, topicName: 'Data Frame', question: 'Judge value of using .query() method', bloomLevel: 'Evaluating', choices: ['Improves readability for complex filtering', 'Never use query', 'Slower than boolean indexing', 'Only for simple cases'], correctAnswer: 'A' },
+
+    // Topic 3: Plotting (60 questions)
+    // Remembering (20 questions)
+    { id: 81, topic: 3, topicName: 'Plotting', question: 'What is Matplotlib?', bloomLevel: 'Remembering', choices: ['Python plotting library', 'A data analysis tool', 'A web framework', 'A database system'], correctAnswer: 'A' },
+    { id: 82, topic: 3, topicName: 'Plotting', question: 'How do you import Matplotlib?', bloomLevel: 'Remembering', choices: ['import matplotlib.pyplot as plt', 'from matplotlib import pyplot', 'import pyplot', 'import matplotlib'], correctAnswer: 'A' },
+    { id: 83, topic: 3, topicName: 'Plotting', question: 'What function creates a basic line plot?', bloomLevel: 'Remembering', choices: ['plt.plot()', 'plt.line()', 'plt.draw()', 'plt.graph()'], correctAnswer: 'A' },
+    { id: 84, topic: 3, topicName: 'Plotting', question: 'How do you display a plot?', bloomLevel: 'Remembering', choices: ['plt.show()', 'plt.display()', 'plt.render()', 'plt.view()'], correctAnswer: 'A' },
+    { id: 85, topic: 3, topicName: 'Plotting', question: 'What does plt.figure() do?', bloomLevel: 'Remembering', choices: ['Creates a new figure window', 'Plots data', 'Closes figure', 'Saves file'], correctAnswer: 'A' },
+    { id: 86, topic: 3, topicName: 'Plotting', question: 'How do you create a scatter plot?', bloomLevel: 'Remembering', choices: ['plt.scatter()', 'plt.plot()', 'plt.bar()', 'plt.line()'], correctAnswer: 'A' },
+    { id: 87, topic: 3, topicName: 'Plotting', question: 'What function creates a bar chart?', bloomLevel: 'Remembering', choices: ['plt.bar()', 'plt.barplot()', 'plt.column()', 'plt.histogram()'], correctAnswer: 'A' },
+    { id: 88, topic: 3, topicName: 'Plotting', question: 'How do you add labels to axes?', bloomLevel: 'Remembering', choices: ['plt.xlabel(), plt.ylabel()', 'plt.label()', 'plt.axis_label()', 'plt.set_label()'], correctAnswer: 'A' },
+    { id: 89, topic: 3, topicName: 'Plotting', question: 'What does plt.title() do?', bloomLevel: 'Remembering', choices: ['Sets the plot title', 'Adds legend', 'Rotates axes', 'Changes colors'], correctAnswer: 'A' },
+    { id: 90, topic: 3, topicName: 'Plotting', question: 'How do you create a histogram?', bloomLevel: 'Remembering', choices: ['plt.hist()', 'plt.histogram()', 'plt.distribution()', 'plt.frequency()'], correctAnswer: 'A' },
+    { id: 91, topic: 3, topicName: 'Plotting', question: 'What is a subplot?', bloomLevel: 'Remembering', choices: ['Multiple plots in one figure', 'A small plot', 'An embedded plot', 'A nested plot'], correctAnswer: 'A' },
+    { id: 92, topic: 3, topicName: 'Plotting', question: 'How do you create subplots?', bloomLevel: 'Remembering', choices: ['plt.subplots()', 'plt.subplot()', 'plt.add_subplot()', 'plt.multi_plot()'], correctAnswer: 'A' },
+    { id: 93, topic: 3, topicName: 'Plotting', question: 'What does plt.legend() do?', bloomLevel: 'Remembering', choices: ['Adds a legend to the plot', 'Rotates labels', 'Changes line style', 'Adds grid'], correctAnswer: 'A' },
+    { id: 94, topic: 3, topicName: 'Plotting', question: 'How do you save a plot to a file?', bloomLevel: 'Remembering', choices: ['plt.savefig("name.png")', 'plt.save("name.png")', 'plt.export("name.png")', 'plt.write("name.png")'], correctAnswer: 'A' },
+    { id: 95, topic: 3, topicName: 'Plotting', question: 'What is Seaborn?', bloomLevel: 'Remembering', choices: ['Statistical visualization library built on Matplotlib', 'A data cleaning tool', 'A database', 'A web server'], correctAnswer: 'A' },
+    { id: 96, topic: 3, topicName: 'Plotting', question: 'How do you set Matplotlib style?', bloomLevel: 'Remembering', choices: ['plt.style.use("style_name")', 'plt.set_style()', 'plt.apply_theme()', 'plt.configure()'], correctAnswer: 'A' },
+
+    // Analyzing (20 questions)
+    { id: 97, topic: 3, topicName: 'Plotting', question: 'Compare line plot vs scatter plot use cases', bloomLevel: 'Analyzing', choices: ['Line shows trends over time, scatter shows relationships', 'Same purpose', 'Scatter superior always', 'Line superior always'], correctAnswer: 'A' },
+    { id: 98, topic: 3, topicName: 'Plotting', question: 'Examine the difference between plt and ax methods', bloomLevel: 'Analyzing', choices: ['plt is procedural, ax is object-oriented', 'plt is object-oriented', 'ax is procedural', 'They are identical'], correctAnswer: 'A' },
+    { id: 99, topic: 3, topicName: 'Plotting', question: 'Analyze effectiveness of 3D plots', bloomLevel: 'Analyzing', choices: ['Useful but often less clear than 2D', 'Always clearer', 'Never useful', 'Only for special cases'], correctAnswer: 'A' },
+    { id: 100, topic: 3, topicName: 'Plotting', question: 'Compare bar chart and histogram differences', bloomLevel: 'Analyzing', choices: ['Bar for categories, histogram for distributions', 'Same thing', 'Histogram for categories', 'Bar for distributions'], correctAnswer: 'A' },
+    { id: 101, topic: 3, topicName: 'Plotting', question: 'Examine heatmap visualization benefits', bloomLevel: 'Analyzing', choices: ['Shows relationships in matrix data effectively', 'Only for temperature data', 'Hard to interpret', 'Not useful'], correctAnswer: 'A' },
+    { id: 102, topic: 3, topicName: 'Plotting', question: 'Analyze when to use box plots', bloomLevel: 'Analyzing', choices: ['For showing distribution and outliers', 'For showing trends', 'For comparing categories', 'Only for large datasets'], correctAnswer: 'A' },
+    { id: 103, topic: 3, topicName: 'Plotting', question: 'Compare Matplotlib and Plotly strengths', bloomLevel: 'Analyzing', choices: ['Matplotlib static simple, Plotly interactive complex', 'Matplotlib better always', 'Plotly better always', 'Same capabilities'], correctAnswer: 'A' },
+    { id: 104, topic: 3, topicName: 'Plotting', question: 'Examine color mapping in visualizations', bloomLevel: 'Analyzing', choices: ['Communicates data values intuitively', 'Just for aesthetics', 'Doesnt affect understanding', 'Rarely used'], correctAnswer: 'A' },
+    { id: 105, topic: 3, topicName: 'Plotting', question: 'Analyze groupby plot creation from DataFrames', bloomLevel: 'Analyzing', choices: ['Enables comparison of grouped data visually', 'Requires flattening data', 'Cannot plot grouped data', 'Makes plots slower'], correctAnswer: 'A' },
+    { id: 106, topic: 3, topicName: 'Plotting', question: 'Compare fig vs ax in subplot creation', bloomLevel: 'Analyzing', choices: ['fig is container, ax is individual plot', 'ax is container', 'They are same', 'fig is optional'], correctAnswer: 'A' },
+    { id: 107, topic: 3, topicName: 'Plotting', question: 'Examine the role of DPI in plot quality', bloomLevel: 'Analyzing', choices: ['Higher DPI increases resolution and file size', 'DPI irrelevant', 'Lower DPI better', 'DPI only affects display'], correctAnswer: 'A' },
+    { id: 108, topic: 3, topicName: 'Plotting', question: 'Analyze the importance of proper scaling', bloomLevel: 'Analyzing', choices: ['Prevents distortion and improves readability', 'Not important', 'Automatic always', 'Slows rendering'], correctAnswer: 'A' },
+
+    // Evaluating (20 questions)
+    { id: 109, topic: 3, topicName: 'Plotting', question: 'Evaluate the best plot type for comparison', bloomLevel: 'Evaluating', choices: ['Bar charts for categorical comparison', 'Only scatter plots', 'Line plots only', 'All types equivalent'], correctAnswer: 'A' },
+    { id: 110, topic: 3, topicName: 'Plotting', question: 'Judge the purpose of data normalization before plotting', bloomLevel: 'Evaluating', choices: ['Ensures fair visual comparison of different scales', 'Not necessary', 'Only for colors', 'Adds complexity'], correctAnswer: 'A' },
+    { id: 111, topic: 3, topicName: 'Plotting', question: 'Assess the importance of interactive visualizations', bloomLevel: 'Evaluating', choices: ['Valuable for exploration and presentation', 'Never necessary', 'Static always better', 'Too complex'], correctAnswer: 'A' },
+    { id: 112, topic: 3, topicName: 'Plotting', question: 'Evaluate when annotations are essential', bloomLevel: 'Evaluating', choices: ['When highlighting important data points or insights', 'Always use annotations', 'Never annotate', 'Only for experts'], correctAnswer: 'A' },
+    { id: 113, topic: 3, topicName: 'Plotting', question: 'Judge the effectiveness of log scales', bloomLevel: 'Evaluating', choices: ['Essential for data spanning multiple orders of magnitude', 'Never use log scale', 'Only for scientific data', 'Makes plots confusing'], correctAnswer: 'A' },
+    { id: 114, topic: 3, topicName: 'Plotting', question: 'Assess best practice for color accessibility', bloomLevel: 'Evaluating', choices: ['Use colorblind-friendly palettes', 'Any colors work', 'Colors not important', 'Always use rainbow'], correctAnswer: 'A' },
+    { id: 115, topic: 3, topicName: 'Plotting', question: 'Evaluate the role of figure size in readability', bloomLevel: 'Evaluating', choices: ['Critical for clarity especially in publications', 'Size irrelevant', 'Larger always better', 'Never adjust size'], correctAnswer: 'A' },
+    { id: 116, topic: 3, topicName: 'Plotting', question: 'Judge the value of exploratory plots', bloomLevel: 'Evaluating', choices: ['Essential for understanding data before analysis', 'Waste of time', 'Only needed for final presentation', 'Not necessary'], correctAnswer: 'A' },
+    { id: 117, topic: 3, topicName: 'Plotting', question: 'Assess when to use faceting or subplots', bloomLevel: 'Evaluating', choices: ['To compare patterns across subgroups', 'For decoration only', 'Never use', 'Only in presentations'], correctAnswer: 'A' },
+    { id: 118, topic: 3, topicName: 'Plotting', question: 'Evaluate importance of clear axis labels', bloomLevel: 'Evaluating', choices: ['Essential for interpretability and communication', 'Labels are optional', 'Makes plot cluttered', 'Obvious from context'], correctAnswer: 'A' },
+    { id: 119, topic: 3, topicName: 'Plotting', question: 'Judge when violin plots are superior', bloomLevel: 'Evaluating', choices: ['For detailed distribution comparison', 'Never superior', 'Only for music data', 'Complex to read'], correctAnswer: 'A' },
+    { id: 120, topic: 3, topicName: 'Plotting', question: 'Assess the balance between simplicity and detail', bloomLevel: 'Evaluating', choices: ['Essential for effective communication', 'Always maximize detail', 'Simplicity always wins', 'No balance needed'], correctAnswer: 'A' },
+
+    // Topic 4: Data Analysis and Statistics (40 questions)
+    // Remembering (16 questions)
+    { id: 121, topic: 4, topicName: 'Data Analysis and Statistics', question: 'What is descriptive statistics?', bloomLevel: 'Remembering', choices: ['Summarizing data characteristics', 'Making predictions', 'Testing hypotheses', 'Collecting data'], correctAnswer: 'A' },
+    { id: 122, topic: 4, topicName: 'Data Analysis and Statistics', question: 'What is the mean?', bloomLevel: 'Remembering', choices: ['Average of all values', 'Middle value', 'Most common value', 'Range of values'], correctAnswer: 'A' },
+    { id: 123, topic: 4, topicName: 'Data Analysis and Statistics', question: 'What is the median?', bloomLevel: 'Remembering', choices: ['Middle value in sorted data', 'Average', 'Most frequent', 'Highest value'], correctAnswer: 'A' },
+    { id: 124, topic: 4, topicName: 'Data Analysis and Statistics', question: 'What is the mode?', bloomLevel: 'Remembering', choices: ['Most frequently occurring value', 'Average', 'Middle value', 'Spread of data'], correctAnswer: 'A' },
+    { id: 125, topic: 4, topicName: 'Data Analysis and Statistics', question: 'What is standard deviation?', bloomLevel: 'Remembering', choices: ['Measure of spread around mean', 'Same as variance', 'Average of values', 'Median of values'], correctAnswer: 'A' },
+    { id: 126, topic: 4, topicName: 'Data Analysis and Statistics', question: 'What is variance?', bloomLevel: 'Remembering', choices: ['Square of standard deviation', 'Average distance from mean', 'Range of data', 'Difference between max and min'], correctAnswer: 'A' },
+    { id: 127, topic: 4, topicName: 'Data Analysis and Statistics', question: 'What is a probability distribution?', bloomLevel: 'Remembering', choices: ['Mathematical function describing outcomes', 'Collection of data', 'Statistical test', 'Type of graph'], correctAnswer: 'A' },
+    { id: 128, topic: 4, topicName: 'Data Analysis and Statistics', question: 'What is a normal distribution?', bloomLevel: 'Remembering', choices: ['Bell-shaped symmetrical distribution', 'Uniform distribution', 'Skewed distribution', 'Random distribution'], correctAnswer: 'A' },
+    { id: 129, topic: 4, topicName: 'Data Analysis and Statistics', question: 'What is correlation?', bloomLevel: 'Remembering', choices: ['Relationship between two variables', 'Spread of data', 'Average value', 'Sample size'], correctAnswer: 'A' },
+    { id: 130, topic: 4, topicName: 'Data Analysis and Statistics', question: 'What does a correlation of 1 mean?', bloomLevel: 'Remembering', choices: ['Perfect positive correlation', 'No correlation', 'Perfect negative', 'Strong relationship'], correctAnswer: 'A' },
+    { id: 131, topic: 4, topicName: 'Data Analysis and Statistics', question: 'What is a p-value?', bloomLevel: 'Remembering', choices: ['Probability of observing data if null true', 'Probability of hypothesis', 'Average value', 'Standard deviation'], correctAnswer: 'A' },
+    { id: 132, topic: 4, topicName: 'Data Analysis and Statistics', question: 'What is a confidence interval?', bloomLevel: 'Remembering', choices: ['Range likely containing true parameter', 'Probability estimate', 'Single value', 'Data range'], correctAnswer: 'A' },
+    { id: 133, topic: 4, topicName: 'Data Analysis and Statistics', question: 'What is regression analysis?', bloomLevel: 'Remembering', choices: ['Modeling relationship between variables', 'Categorizing data', 'Counting frequencies', 'Sorting data'], correctAnswer: 'A' },
+    { id: 134, topic: 4, topicName: 'Data Analysis and Statistics', question: 'What does linear regression do?', bloomLevel: 'Remembering', choices: ['Fits straight line through data', 'Creates categories', 'Groups similar data', 'Removes outliers'], correctAnswer: 'A' },
+    { id: 135, topic: 4, topicName: 'Data Analysis and Statistics', question: 'What is a quantile?', bloomLevel: 'Remembering', choices: ['Value dividing data into equal parts', 'Average', 'Median', 'Standard deviation'], correctAnswer: 'A' },
+    { id: 136, topic: 4, topicName: 'Data Analysis and Statistics', question: 'What are quartiles?', bloomLevel: 'Remembering', choices: ['Four equal parts of data', 'Three equal parts', 'Five divisions', 'Ten divisions'], correctAnswer: 'A' },
+
+    // Analyzing (12 questions)
+    { id: 137, topic: 4, topicName: 'Data Analysis and Statistics', question: 'Compare mean and median for skewed data', bloomLevel: 'Analyzing', choices: ['Median more resistant to outliers', 'Mean always better', 'Identical for skewed', 'Mean more robust'], correctAnswer: 'A' },
+    { id: 138, topic: 4, topicName: 'Data Analysis and Statistics', question: 'Analyze when parametric tests apply', bloomLevel: 'Analyzing', choices: ['When data approximately normally distributed', 'Always applicable', 'Only for large samples', 'Never applicable'], correctAnswer: 'A' },
+    { id: 139, topic: 4, topicName: 'Data Analysis and Statistics', question: 'Examine the relationship between correlation and causation', bloomLevel: 'Analyzing', choices: ['Correlation does not imply causation', 'Perfect correlation proves causation', 'Same thing', 'Always related'], correctAnswer: 'A' },
+    { id: 140, topic: 4, topicName: 'Data Analysis and Statistics', question: 'Compare Type I and Type II errors', bloomLevel: 'Analyzing', choices: ['Type I false positive, Type II false negative', 'Type II is worse always', 'Same error', 'Type I irrelevant'], correctAnswer: 'A' },
+    { id: 141, topic: 4, topicName: 'Data Analysis and Statistics', question: 'Analyze impact of sample size on confidence intervals', bloomLevel: 'Analyzing', choices: ['Larger samples produce narrower intervals', 'Sample size irrelevant', 'Smaller always better', 'No consistent pattern'], correctAnswer: 'A' },
+    { id: 142, topic: 4, topicName: 'Data Analysis and Statistics', question: 'Examine assumptions of linear regression', bloomLevel: 'Analyzing', choices: ['Linearity, independence, homoscedasticity, normality', 'No assumptions needed', 'Only need data', 'Normality only'], correctAnswer: 'A' },
+    { id: 143, topic: 4, topicName: 'Data Analysis and Statistics', question: 'Analyze coefficient of determination R-squared', bloomLevel: 'Analyzing', choices: ['Proportion of variance explained by model', 'Error size', 'Significance level', 'Correlation coefficient'], correctAnswer: 'A' },
+    { id: 144, topic: 4, topicName: 'Data Analysis and Statistics', question: 'Compare descriptive and inferential statistics', bloomLevel: 'Analyzing', choices: ['Descriptive summarizes, inferential generalizes', 'Same purpose', 'Identical methods', 'Descriptive more important'], correctAnswer: 'A' },
+    { id: 145, topic: 4, topicName: 'Data Analysis and Statistics', question: 'Examine the Central Limit Theorem implications', bloomLevel: 'Analyzing', choices: ['Sample distribution approximately normal regardless of population', 'Always strictly normal', 'Irrelevant to sampling', 'Only for large N'], correctAnswer: 'A' },
+    { id: 146, topic: 4, topicName: 'Data Analysis and Statistics', question: 'Analyze multicollinearity effects in regression', bloomLevel: 'Analyzing', choices: ['Inflates coefficient uncertainties', 'Improves predictions', 'Reduces errors', 'Irrelevant factor'], correctAnswer: 'A' },
+    { id: 147, topic: 4, topicName: 'Data Analysis and Statistics', question: 'Compare one-tailed and two-tailed tests', bloomLevel: 'Analyzing', choices: ['One-tailed directional, two-tailed not directional', 'Same test', 'Always use two-tailed', 'One-tailed always better'], correctAnswer: 'A' },
+    { id: 148, topic: 4, topicName: 'Data Analysis and Statistics', question: 'Examine effect of outliers on statistics', bloomLevel: 'Analyzing', choices: ['Greatly affect mean and SD, less on median', 'No effect', 'Improve analysis', 'Always beneficial'], correctAnswer: 'A' },
+
+    // Evaluating (12 questions)
+    { id: 149, topic: 4, topicName: 'Data Analysis and Statistics', question: 'Evaluate when to use t-test vs ANOVA', bloomLevel: 'Evaluating', choices: ['t-test two groups, ANOVA three or more', 't-test always', 'Always use ANOVA', 'Same result'], correctAnswer: 'A' },
+    { id: 150, topic: 4, topicName: 'Data Analysis and Statistics', question: 'Judge the appropriateness of statistical test', bloomLevel: 'Evaluating', choices: ['Depends on data type and research question', 'Any test works', 'Always use t-test', 'Test selection irrelevant'], correctAnswer: 'A' },
+    { id: 151, topic: 4, topicName: 'Data Analysis and Statistics', question: 'Assess the significance of statistical significance', bloomLevel: 'Evaluating', choices: ['Important but not sole criterion for practical significance', 'Always meaningful', 'Never meaningful', 'Determines importance'], correctAnswer: 'A' },
+    { id: 152, topic: 4, topicName: 'Data Analysis and Statistics', question: 'Evaluate the importance of effect size', bloomLevel: 'Evaluating', choices: ['Critical alongside p-value for practical importance', 'Less important than p-value', 'Only for large studies', 'Never needed'], correctAnswer: 'A' },
+    { id: 153, topic: 4, topicName: 'Data Analysis and Statistics', question: 'Judge when to transform variables', bloomLevel: 'Evaluating', choices: ['When violating normality or homogeneity assumptions', 'Always transform', 'Never transform', 'Only for visualization'], correctAnswer: 'A' },
+    { id: 154, topic: 4, topicName: 'Data Analysis and Statistics', question: 'Assess the value of exploratory data analysis', bloomLevel: 'Evaluating', choices: ['Essential for understanding patterns before formal tests', 'Waste of time', 'Only needed for big data', 'Skip with proper theory'], correctAnswer: 'A' },
+    { id: 155, topic: 4, topicName: 'Data Analysis and Statistics', question: 'Evaluate handling of missing data strategies', bloomLevel: 'Evaluating', choices: ['Depends on missing mechanism and analysis context', 'Always delete rows', 'Always use imputation', 'Never address missing'], correctAnswer: 'A' },
+    { id: 156, topic: 4, topicName: 'Data Analysis and Statistics', question: 'Judge the appropriateness of cross-validation', bloomLevel: 'Evaluating', choices: ['Essential for model selection and reliability', 'Optional technique', 'Only for large datasets', 'Wastes resources'], correctAnswer: 'A' },
+    { id: 157, topic: 4, topicName: 'Data Analysis and Statistics', question: 'Assess the importance of reproducible analysis', bloomLevel: 'Evaluating', choices: ['Critical for science and decision-making', 'Not necessary', 'Only for publication', 'Reduces efficiency'], correctAnswer: 'A' },
+    { id: 158, topic: 4, topicName: 'Data Analysis and Statistics', question: 'Evaluate when domain expertise overrides statistics', bloomLevel: 'Evaluating', choices: ['When context suggests practical significance despite p-value', 'Never override statistics', 'Always override', 'Statistics always supreme'], correctAnswer: 'A' },
+    { id: 159, topic: 4, topicName: 'Data Analysis and Statistics', question: 'Judge the role of Bayesian vs Frequentist methods', bloomLevel: 'Evaluating', choices: ['Choose based on research question and prior information', 'Bayesian always better', 'Frequentist always better', 'No meaningful difference'], correctAnswer: 'A' },
+    { id: 160, topic: 4, topicName: 'Data Analysis and Statistics', question: 'Assess importance of statistical reporting standards', bloomLevel: 'Evaluating', choices: ['Essential for transparency and reproducibility', 'Unnecessary detail', 'Optional for journals', 'Only for statistics'], correctAnswer: 'A' },
+  ];
+
+// Load topics for selected subject
+  useEffect(() => {
+    const loadTopics = async () => {
+      if (!selectedSubject) {
+        setTopics([]);
+        setQuestionsByTopic({});
+        return;
+      }
+
+      try {
+        setIsLoadingTopics(true);
+        const subjectId = parseInt(selectedSubject);
+        console.log('Loading topics for subjectId:', subjectId);
+        
+        const topicsList = await apiService.getTopics(subjectId);
+        console.log('Raw topics response from API:', topicsList);
+        console.log('Topics type:', typeof topicsList, 'Is array:', Array.isArray(topicsList));
+        
+        const list = Array.isArray(topicsList) ? topicsList : [];
+        console.log('Processed topics list:', list);
+        setTopics(list);
+
+        if (list.length === 0) {
+          console.warn('No topics found for subjectId:', subjectId);
+          setError('No topics found for this subject. Please check that topics have been created and linked to this subject.');
+        } else {
+          console.log('Found', list.length, 'topics');
+        }
+
+        // Fetch questions for each topic
+        const questionsMap = {};
+        for (const topic of list) {
+          try {
+            const questions = await apiService.getQuestionsByTopic(topic.id);
+            console.log(`Questions for topic ${topic.id}:`, questions ? questions.length : 0, 'questions');
+            questionsMap[topic.id] = questions || [];
+          } catch (err) {
+            console.error(`Failed to load questions for topic ${topic.id}:`, err);
+            questionsMap[topic.id] = [];
+          }
+        }
+        setQuestionsByTopic(questionsMap);
+      } catch (error) {
+        console.error('Error loading topics:', error);
+        setError('Failed to load topics. Please try again.');
+      } finally {
+        setIsLoadingTopics(false);
+      }
+    };
+
+    void loadTopics();
+  }, [selectedSubject]);
+
+  const validateForm = () => {
+    const newErrors = {};
+    
+    if (!totalExamItems || isNaN(totalExamItems) || parseInt(totalExamItems) <= 0) {
+      newErrors.totalExamItems = 'Total exam items must be a positive number';
+    }
+
+    // Validate topic rows
+    topicRows && topicRows.forEach((row) => {
+      if (!row.topic) {
+        newErrors[`topic_${row.id}`] = 'Topic is required';
+      }
+      if (!row.hours || isNaN(row.hours) || parseInt(row.hours) <= 0) {
+        newErrors[`hours_${row.id}`] = 'Hours must be a positive number';
+      }
+    });
+
+    setValidationErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleUserAction = (action) => {
+    setIsUserMenuOpen(false);
+    if (action === 'Logout') setIsLogoutModalOpen(true);
+    else console.log('Navigate to', action);
+  };
+
+  const handleConfirmLogout = () => {
+    setIsLogoutModalOpen(false);
+    logout();
+    navigate('/login');
+  };
+
+  // Handle topic row change
+  const handleTopicRowChange = (id, field, value) => {
+    console.log(`handleTopicRowChange: id=${id}, field=${field}, value=${value}`);
+    setTopicRows(prev => {
+      // Update the specific row
+      const updated = prev.map(row => 
+        row.id === id ? { ...row, [field]: value } : row
+      );
+      console.log('Updated topicRows after change:', updated);
+      
+      // Check if last row is now filled, if so add a new empty row
+      const lastRow = updated[updated.length - 1];
+      if (lastRow.topic && lastRow.hours) {
+        // Check if there's already an empty row after (there shouldn't be if this was the last row)
+        if (lastRow.id === id) {
+          // The updated row is the last one - add a new empty row
+          const newRowId = Math.max(...prev.map(r => r.id)) + 1;
+          return [...updated, { id: newRowId, topicId: '', topicName: '', topic: '', hours: '', lowCount: '', middleCount: '', highCount: '', lowPlacements: '', middlePlacements: '', highPlacements: '' }];
+        }
+      }
+      
+      return updated;
+    });
+  };
+
+// Handle delete row - show confirmation first
+  const handleDeleteRowClick = (rowId) => {
+    setDeleteConfirmation({ show: true, rowId });
+  };
+
+  const confirmDeleteRow = () => {
+    const rowId = deleteConfirmation.rowId;
+    setDeleteConfirmation({ show: false, rowId: null });
+
+    setTopicRows(prev => {
+      // Don't allow deletion if only 1 row remains
+      if (prev.length <= 1) {
+        setError('Cannot delete the only row. Please keep at least one row.');
+        return prev;
+      }
+      
+      // Filter out the row to delete
+      const updated = prev.filter(row => row.id !== rowId);
+      
+      // If the last row is filled, add an empty row
+      const lastRow = updated[updated.length - 1];
+      if (lastRow && lastRow.topic && lastRow.hours && !lastRow.lowPlacements) {
+        const newRowId = Math.max(...updated.map(r => r.id)) + 1;
+        return [...updated, { id: newRowId, topicId: '', topicName: '', topic: '', hours: '', lowCount: '', middleCount: '', highCount: '', lowPlacements: '', middlePlacements: '', highPlacements: '' }];
+      }
+      
+      // If the last row is empty, we're good
+      if (!lastRow || (!lastRow.topic && !lastRow.hours)) {
+        return updated;
+      }
+
+      return updated;
+    });
+    setError('');
+  };
+
+  const cancelDeleteRow = () => {
+    setDeleteConfirmation({ show: false, rowId: null });
+  };
+
+  // Calculate total hours
+  const calculateTotalHours = () => {
+    return topicRows
+      .filter(row => row.topic && row.hours)
+      .reduce((sum, row) => sum + (parseInt(row.hours) || 0), 0);
+  };
+
+  // Calculate cognitive level distribution
+  const calculateDistribution = () => {
+    const totalItems = parseInt(totalExamItems) || 0;
+    if (totalItems <= 0) return { low: 0, middle: 0, high: 0 };
+
+    const low = Math.floor(totalItems * 0.30);
+    const middle = Math.floor(totalItems * 0.30);
+    const high = totalItems - low - middle; // Ensure sum equals totalItems
+
+    return { low, middle, high };
+  };
+
+  // Calculate percentage for a topic
+  const calculatePercentage = (hours) => {
+    const totalHours = calculateTotalHours();
+    if (!hours || totalHours === 0) return 0;
+    return ((parseFloat(hours) / totalHours) * 100).toFixed(1);
+  };
+
+  // Generate random placements
+  const generateRandomPlacements = (count, total) => {
+    const placements = [];
+    const used = new Set();
+    
+    while (placements.length < Math.min(count, total)) {
+      const random = Math.floor(Math.random() * total) + 1;
+      if (!used.has(random)) {
+        placements.push(random);
+        used.add(random);
+      }
+    }
+    
+    return placements.sort((a, b) => a - b);
+  };
+
+  // Calculate specification in real-time as user enters data
+  const calculateSpecification = () => {
+    const completedRows = topicRows.filter(row => row.topic && row.hours);
+    console.log('calculateSpecification called - completedRows:', completedRows.length, completedRows);
+    console.log('totalExamItems:', totalExamItems, 'questionsByTopic keys:', Object.keys(questionsByTopic));
+    
+    if (completedRows.length === 0 || !totalExamItems) {
+      console.log('Returning null - no completed rows or no total exam items');
+      return null;
+    }
+
+    const totalItems = parseInt(totalExamItems);
+    const totalHours = calculateTotalHours();
+    if (totalHours === 0) return null;
+
+    // Track all placements to ensure uniqueness
+    const usedPlacements = new Set();
+    
+    // Generate all unique placements upfront
+    const generateUniquePlacements = (count, total, used) => {
+      const placements = [];
+      while (placements.length < Math.min(count, total)) {
+        const random = Math.floor(Math.random() * total) + 1;
+        if (!used.has(random)) {
+          placements.push(random);
+          used.add(random);
+        }
+      }
+      return placements.sort((a, b) => a - b);
+    };
+
+    // Helper function to get questions for a topic and cognitive level
+    const getQuestionsForTopicAndLevel = (topicId, level) => {
+      const topicQuestions = questionsByTopic[topicId] || [];
+      
+      // Map cognitive level groups to BloomLevel enum values
+      let bloomLevelsToMatch = [];
+      if (level === 'low') {
+        // Remembering & Understanding (30%)
+        bloomLevelsToMatch = ['Remember', 'Understand', 'Remembering', 'Understanding', '1', '2', 1, 2];
+      } else if (level === 'middle') {
+        // Applying & Analyzing (30%)
+        bloomLevelsToMatch = ['Apply', 'Analyze', 'Applying', 'Analyzing', '3', '4', 3, 4];
+      } else if (level === 'high') {
+        // Evaluating & Creating (40%)
+        bloomLevelsToMatch = ['Evaluate', 'Create', 'Evaluating', 'Creating', '5', '6', 5, 6];
+      }
+      
+      const result = topicQuestions.filter(q => {
+        if (!q.bloomLevel && q.bloomLevel !== 0) {
+          if (topicId === 8) console.warn('[Q' + q.id + '] Question missing bloomLevel:', q);
+          return false;
+        }
+        const match = bloomLevelsToMatch.includes(q.bloomLevel);
+        if (topicId === 8 && !match) {
+          console.log(`[Q${q.id}] bloomLevel=${q.bloomLevel} (${typeof q.bloomLevel}), NOT in:`, bloomLevelsToMatch);
+        }
+        return match;
+      });
+      
+      console.log(`[Topic ${topicId}/${level}] Found ${result.length}/${topicQuestions.length} matching questions`);
+      if (result.length === 0 && topicQuestions.length > 0) {
+        console.log(`Sample questions for topic ${topicId}:`, topicQuestions.slice(0, 2).map(q => `id=${q.id}, bloomLevel=${q.bloomLevel} (${typeof q.bloomLevel})`));
+      }
+      
+      return result;
+    };
+
+    // Calculate items per topic and select questions
+    const specData = completedRows.map(row => {
+      const topicId = parseInt(row.topicId) || parseInt(row.topic);
+      const topicHours = parseFloat(row.hours);
+      const percentage = (topicHours / totalHours) * 100;
+      const itemsForTopic = Math.round(totalItems * (percentage / 100));
+
+      // Build override key from topic and hours
+      const overrideKey = `${topicId}-${row.hours}`;
+      const override = specOverrides[overrideKey] || {};
+
+      // Check if user has manually edited the counts (from overrides or topicRows)
+      const userEditedLowCount = override.lowCount !== undefined && override.lowCount !== '' ? parseInt(override.lowCount) : (row.lowCount !== undefined && row.lowCount !== '' ? parseInt(row.lowCount) : null);
+      const userEditedMiddleCount = override.middleCount !== undefined && override.middleCount !== '' ? parseInt(override.middleCount) : (row.middleCount !== undefined && row.middleCount !== '' ? parseInt(row.middleCount) : null);
+      const userEditedHighCount = override.highCount !== undefined && override.highCount !== '' ? parseInt(override.highCount) : (row.highCount !== undefined && row.highCount !== '' ? parseInt(row.highCount) : null);
+
+      // Calculate distribution for this topic (30-30-40) or use user-edited values
+      const autoLowCount = Math.floor(itemsForTopic * 0.30);
+      const autoMiddleCount = Math.floor(itemsForTopic * 0.30);
+      const autoHighCount = itemsForTopic - autoLowCount - autoMiddleCount;
+
+      const lowCount = userEditedLowCount !== null ? userEditedLowCount : autoLowCount;
+      const middleCount = userEditedMiddleCount !== null ? userEditedMiddleCount : autoMiddleCount;
+      const highCount = userEditedHighCount !== null ? userEditedHighCount : autoHighCount;
+
+      // Get questions for each cognitive level - Remembering, Analyzing, Evaluating
+      const rememberingQuestions = getQuestionsForTopicAndLevel(topicId, 'low');
+      const analyzingQuestions = getQuestionsForTopicAndLevel(topicId, 'middle');
+      const evaluatingQuestions = getQuestionsForTopicAndLevel(topicId, 'high');
+      
+      console.log(`Topic ${topicId} - Low questions: ${rememberingQuestions.length}, Middle: ${analyzingQuestions.length}, High: ${evaluatingQuestions.length}`);
+      if (rememberingQuestions.length > 0) {
+        console.log('Sample low question bloom levels:', rememberingQuestions.slice(0, 3).map(q => q.bloomLevel));
+      }
+
+      // Combine questions for each level group
+      const lowerOrderQuestions = rememberingQuestions; // 30%
+      const middleOrderQuestions = analyzingQuestions; // 30%
+      const higherOrderQuestions = evaluatingQuestions; // 40%
+
+      // Select random questions for each level
+      const selectRandomFromArray = (arr, count) => {
+        const shuffled = [...arr].sort(() => 0.5 - Math.random());
+        return shuffled.slice(0, Math.min(count, arr.length));
+      };
+
+      const selectedLow = selectRandomFromArray(lowerOrderQuestions, lowCount);
+      const selectedMiddle = selectRandomFromArray(middleOrderQuestions, middleCount);
+      const selectedHigh = selectRandomFromArray(higherOrderQuestions, highCount);
+
+      // Generate random placements for this topic
+      const placementsLow = generateUniquePlacements(selectedLow.length, totalItems, usedPlacements);
+      const placementsMiddle = generateUniquePlacements(selectedMiddle.length, totalItems, usedPlacements);
+      const placementsHigh = generateUniquePlacements(selectedHigh.length, totalItems, usedPlacements);
+
+      // Save override key into returned spec for easy matching in UI
+
+      return {
+        topicId,
+        topicName: row.topicName || `Topic ${topicId}`,
+        topic: row.topic,
+        hours: row.hours,
+        percentage: percentage.toFixed(1),
+        overrideKey,
+        cognitive: {
+          low: { 
+            count: lowCount, 
+            placements: placementsLow,
+            questions: selectedLow.map((q, idx) => ({
+              ...q,
+              placement: placementsLow[idx]
+            }))
+          },
+          middle: { 
+            count: middleCount, 
+            placements: placementsMiddle,
+            questions: selectedMiddle.map((q, idx) => ({
+              ...q,
+              placement: placementsMiddle[idx]
+            }))
+          },
+          high: { 
+            count: highCount, 
+            placements: placementsHigh,
+            questions: selectedHigh.map((q, idx) => ({
+              ...q,
+              placement: placementsHigh[idx]
+            }))
+          }
+        },
+        total: lowCount + middleCount + highCount
+      };
+    });
+
+    const totals = {
+      low: specData.reduce((sum, spec) => sum + spec.cognitive.low.count, 0),
+      middle: specData.reduce((sum, spec) => sum + spec.cognitive.middle.count, 0),
+      high: specData.reduce((sum, spec) => sum + spec.cognitive.high.count, 0)
+    };
+    totals.grand = totals.low + totals.middle + totals.high;
+
+    // Check if total items generated is less than requested (insufficient)
+    let insufficientWarning = '';
+    let excessWarning = '';
+    
+    // Ensure totalHours is defined before use
+    const safeTotalHours = totalHours || 0;
+    if (totals.grand < totalItems) {
+      const shortfall = totalItems - totals.grand;
+      let suggestedHoursText = '';
+      if (safeTotalHours > 0) {
+        const availablePerHour = totals.grand / safeTotalHours; // questions per hour
+        const suggestedHours = Math.ceil(shortfall / (availablePerHour || 1));
+        suggestedHoursText = ` Suggested: add ~${suggestedHours} hour(s) across topics or add more topics with questions.`;
+      } else {
+        suggestedHoursText = ' Add at least one topic and specify hours to generate items.';
+      }
+      insufficientWarning = `Warning: Only ${totals.grand} items can be generated from selected topics. You need ${shortfall} more items.` + suggestedHoursText;
+    } else if (totals.grand > totalItems) {
+      const excess = totals.grand - totalItems;
+      let suggestedReduceText = '';
+      if (safeTotalHours > 0) {
+        const availablePerHour = totals.grand / safeTotalHours;
+        const hoursToRemove = Math.ceil(excess / (availablePerHour || 1));
+        suggestedReduceText = ` Suggestion: reduce topic hours by ~${hoursToRemove} hour(s), or increase Total Exam Items by ${excess} to use available questions.`;
+      } else {
+        suggestedReduceText = ` Consider removing some topics or lowering hours, or increase Total Exam Items by ${excess}.`;
+      }
+      excessWarning = `You have ${excess} extra questions available.` + suggestedReduceText;
+    }
+
+    return { specs: specData, totals, totalItems, insufficientWarning, excessWarning };
+  };
+
+  // Compute and cache the generated specification so placements remain stable
+  React.useEffect(() => {
+    console.log('=== SPEC GENERATION EFFECT ===');
+    console.log('topicRows:', topicRows);
+    console.log('totalExamItems:', totalExamItems);
+    console.log('topics count:', topics.length);
+    console.log('questionsByTopic keys:', Object.keys(questionsByTopic));
+    
+    const spec = calculateSpecification();
+    console.log('Generated spec:', spec);
+    setGeneratedSpec(spec);
+  }, [topicRows, specOverrides, totalExamItems, topics, questionsByTopic]);
+
+  // Update insufficient and excess items warnings based on the cached spec
+  React.useEffect(() => {
+    const spec = generatedSpec;
+    if (spec && spec.insufficientWarning) {
+      setInsufficientItemsWarning(spec.insufficientWarning);
+    } else {
+      setInsufficientItemsWarning('');
+    }
+
+    if (spec && spec.excessWarning) {
+      setExcessItemsWarning(spec.excessWarning);
+    } else {
+      setExcessItemsWarning('');
+    }
+    // Auto-update total exam items when not manually overridden
+    if (!manualTotalItems && spec && spec.totals) {
+      const autoTotal = spec.totals.grand || 0;
+      if (parseInt(totalExamItems) !== parseInt(autoTotal)) {
+        setTotalExamItems(String(autoTotal));
+      }
+    }
+  }, [generatedSpec, manualTotalItems, totalExamItems]);
+
+  // Handle generate sample exam
+  const handleGenerateSample = () => {
+    console.log('[handleGenerateSample] generatedSpec:', generatedSpec);
+    if (!generatedSpec) {
+      setError('Please fill at least one topic with hours');
+      return;
+    }
+
+    // Create a flat list of all selected questions with their placements
+    const allQuestions = [];
+    
+    generatedSpec.specs.forEach(spec => {
+      const topicName = topics.find(t => t.id === spec.topicId)?.title || `Topic ${spec.topicId}`;
+      
+      // Helper function to extract correct answer letter
+      const getCorrectAnswerLetter = (question) => {
+        if (!question.options || question.options.length === 0) return '-';
+        const correctOption = question.options.find(opt => opt.isCorrect);
+        if (!correctOption) return '-';
+        const correctIndex = question.options.findIndex(opt => opt.isCorrect);
+        return String.fromCharCode(65 + correctIndex);
+      };
+      
+      // Add all questions from each cognitive level
+      spec.cognitive.low.questions.forEach(q => {
+        allQuestions.push({
+          ...q,
+          topicName,
+          level: 'Remembering',
+          correctAnswer: getCorrectAnswerLetter(q)
+        });
+      });
+      
+      spec.cognitive.middle.questions.forEach(q => {
+        allQuestions.push({
+          ...q,
+          topicName,
+          level: 'Analyzing',
+          correctAnswer: getCorrectAnswerLetter(q)
+        });
+      });
+      
+      spec.cognitive.high.questions.forEach(q => {
+        allQuestions.push({
+          ...q,
+          topicName,
+          level: 'Evaluating',
+          correctAnswer: getCorrectAnswerLetter(q)
+        });
+      });
+    });
+
+    console.log('[handleGenerateSample] allQuestions collected:', allQuestions.length);
+    
+    // Sort by placement
+    allQuestions.sort((a, b) => a.placement - b.placement);
+
+    console.log('[handleGenerateSample] Setting sample exam with', allQuestions.length, 'questions');
+    setSampleExam({ 
+      questions: allQuestions, 
+      date: new Date().toLocaleDateString(),
+      totalQuestions: generatedSpec.totalItems
+    });
+  };
+
+  // Handle print
+  const handlePrint = () => {
+    if (!generatedSpec) {
+      setError('Please fill at least one topic with hours');
+      return;
+    }
+    setShowPrintModal(true);
+  };
+
+  // Handle save exam
+  const handleSaveExam = () => {
+    if (!generatedSpec) {
+      setError('Please fill at least one topic with hours');
+      return;
+    }
+    setShowSaveModal(true);
+  };
+
+  // Confirm save
+  const confirmSaveExam = async () => {
+    if (!generatedSpec || !generatedSpec.specs) {
+      setError('No specification to save. Please generate a specification first.');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      
+      // Extract all selected questions from the specification
+      const allQuestions = [];
+      let displayOrder = 0;
+      
+      generatedSpec.specs.forEach(topicSpec => {
+        // Add low order questions (Remembering)
+        topicSpec.cognitive.low.questions.forEach(q => {
+          allQuestions.push({
+            questionId: q.id,
+            displayOrder: q.placement - 1 || displayOrder++
+          });
+        });
+        
+        // Add middle order questions (Analyzing)
+        topicSpec.cognitive.middle.questions.forEach(q => {
+          allQuestions.push({
+            questionId: q.id,
+            displayOrder: q.placement - 1 || displayOrder++
+          });
+        });
+        
+        // Add high order questions (Evaluating)
+        topicSpec.cognitive.high.questions.forEach(q => {
+          allQuestions.push({
+            questionId: q.id,
+            displayOrder: q.placement - 1 || displayOrder++
+          });
+        });
+      });
+
+      // Sort by display order
+      allQuestions.sort((a, b) => a.displayOrder - b.displayOrder);
+      const questionIds = allQuestions.map(q => q.questionId);
+
+      const finalName = examName || `Test_${new Date().getTime()}`;
+      
+      // Create the test via API
+      const testData = {
+        title: finalName,
+        description: `${examType} Exam - Semester ${semester}, ${schoolYear}`,
+        questionIds: questionIds,
+        durationMinutes: 60, // Default duration, could be made configurable
+        isPublished: false,
+        totalQuestions: questionIds.length,
+        totalPoints: questionIds.length // 1 point per question default
+      };
+
+      const result = await apiService.createTestWithQuestions(testData);
+      
+      setShowSaveModal(false);
+      setExamName('');
+      setError('');
+      
+      // Show success message
+      alert(`Test "${finalName}" created successfully with ${questionIds.length} questions!`);
+      
+      // Optional: Navigate to view the created test or clear form
+      // navigate(`/test-encoding?testId=${result.id}`);
+    } catch (err) {
+      console.error('Failed to save exam:', err);
+      setError(`Failed to save exam: ${err.message || 'Please try again.'}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const dataEntryItems = ["Course - Topic", "Test Encoding", "Test Question Editing"];
+  const reportItems = ["Test Generation"];
+  const isDataEntryActive = dataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
+  const isReportsActive = reportItems.includes(activeTab) || activeTab === 'Reports';
+
+  return (
+    <div className={`dashboard ${isDarkMode ? 'dark' : ''}`}>
+      <div className="background" style={{ backgroundImage: `url(${UPHSL})` }} />
+
+      <div className="main-container">
+        {/* Navbar */}
+        <nav className={`navbar ${isDarkMode ? 'dark' : ''}`}>
+          <div className="nav-left">
+            <button onClick={() => { setActiveTab('Home'); navigate('/'); }} className="logo-btn">
+              <img src={TDBLogo} alt="TDB Logo" className="logo" />
+              <span className="logo-text">TEST DATABANK</span>
+            </button>
+          </div>
+
+          <div className="nav-center">
+            <NavItem icon={Home} label="Home" isActive={activeTab === 'Home'} onClick={() => { setActiveTab('Home'); navigate('/'); }} />
+            <DropdownNavItem
+              icon={ClipboardList}
+              label="Data Entry"
+              isActive={isDataEntryActive}
+              dropdownItems={dataEntryItems}
+              onSelect={(item) => {
+                setActiveTab(item);
+                if (item === 'Course - Topic') {
+                  navigate('/course-topic/1');
+                } else if (item === 'Test Encoding' || item === 'Test Question Editing') {
+                  navigate('/test-encoding');
+                }
+              }}
+            />
+            <DropdownNavItem
+              icon={BookOpen}
+              label="Reports"
+              isActive={isReportsActive}
+              dropdownItems={reportItems}
+              onSelect={(item) => {
+                setActiveTab(item);
+                if (item === 'Test Generation') {
+                  navigate('/test-generation');
+                }
+              }}
+            />
+          </div>
+
+          <div className="nav-right" ref={userMenuRef}>
+            <button onClick={toggleDarkMode} className={`mode-switch ${isDarkMode ? 'dark' : ''}`}>
+              <div className="circle">{isDarkMode ? <Moon /> : <Sun />}</div>
+            </button>
+
+            <button onClick={() => setIsUserMenuOpen(!isUserMenuOpen)} className={`user-btn ${isUserMenuOpen ? 'active' : ''}`}>
+              <div className="user-pic">{displayName.charAt(0).toUpperCase()}</div>
+              <span className="user-name">{displayName}</span>
+            </button>
+
+            {isUserMenuOpen && (
+              <div className="user-dropdown show">
+                <button onClick={() => handleUserAction('User Management')}><Settings /> User Management</button>
+                <button onClick={() => handleUserAction('Edit Account')}><User /> Edit Account</button>
+                <button className="logout-btn" onClick={() => handleUserAction('Logout')}><LogOut /> Logout</button>
+              </div>
+            )}
+          </div>
+        </nav>
+
+        {/* Search bar */}
+        <div className="search-and-view" style={{ maxWidth: '1140px', margin: '0 auto 20px auto' }}>
+          <div className="search-bar">
+            <Search className="search-icon" />
+            <input type="text" placeholder="Search..." disabled />
+          </div>
+        </div>
+
+        {/* Test Generation Container */}
+        <div className="main-card">
+          <h2>Test Generation</h2>
+          <p className="subtitle">Create a table of specifications and generate exams based on topics and cognitive levels</p>
+
+          {/* Error Message */}
+          {error && (
+            <div className="error-message">
+              {error}
+            </div>
+          )}
+
+          {/* Initial Inputs */}
+          <div className="input-section">
+            <div className="field-container">
+              <label>Department</label>
+              <select 
+                value={selectedDepartment} 
+                onChange={(e) => setSelectedDepartment(e.target.value)}
+              >
+                <option value="">Select Department</option>
+                {isLoadingDepartments ? (
+                  <option disabled>Loading departments...</option>
+                ) : (
+                  departments.map(dept => (
+                    <option key={dept.id} value={dept.id}>{dept.name}</option>
+                  ))
+                )}
+              </select>
+            </div>
+
+            <div className="field-container">
+              <label>Course</label>
+              <select 
+                value={selectedCourse} 
+                onChange={(e) => setSelectedCourse(e.target.value)}
+                disabled={!selectedDepartment || isLoadingCourses}
+              >
+                <option value="">Select Course</option>
+                {isLoadingCourses ? (
+                  <option disabled>Loading courses...</option>
+                ) : courses.length === 0 ? (
+                  <option disabled>No courses found</option>
+                ) : (
+                  courses.map(course => (
+                    <option key={course.id} value={course.id}>{(course.code ? `${course.code} - ` : '') + course.name}</option>
+                  ))
+                )}
+              </select>
+            </div>
+
+            <div className="field-container">
+              <label>Subject</label>
+              <select 
+                value={selectedSubject} 
+                onChange={(e) => setSelectedSubject(e.target.value)}
+                disabled={!selectedCourse || isLoadingSubjects}
+              >
+                <option value="">Select Subject</option>
+                {isLoadingSubjects ? (
+                  <option disabled>Loading subjects...</option>
+                ) : subjects.length === 0 ? (
+                  <option disabled>No subjects found</option>
+                ) : (
+                  subjects.map(subject => (
+                    <option key={subject.id} value={subject.id}>{(subject.code ? `${subject.code} - ` : '') + subject.name}</option>
+                  ))
+                )}
+              </select>
+            </div>
+
+            <div className="field-container">
+              <label>Exam Period</label>
+              <select 
+                value={examType}
+                onChange={(e) => setExamType(e.target.value)}
+              >
+                <option value="Prelim">Prelim</option>
+                <option value="Midterm">Midterm</option>
+                <option value="Finals">Finals</option>
+              </select>
+            </div>
+
+            <div className="field-container">
+              <label>Semester</label>
+              <select 
+                value={semester}
+                onChange={(e) => setSemester(e.target.value)}
+              >
+                <option value="1st">1st Sem</option>
+                <option value="2nd">2nd Sem</option>
+                <option value="Summer">Summer</option>
+              </select>
+            </div>
+
+            <div className="field-container">
+              <label>Total Exam Items {validationErrors.totalExamItems && <span className="error-inline">{validationErrors.totalExamItems}</span>}</label>
+              <input
+                type="number"
+                value={totalExamItems}
+                onChange={(e) => { setTotalExamItems(e.target.value); setManualTotalItems(true); }}
+                placeholder="e.g., 50"
+                min="1"
+                disabled={!selectedSubject}
+              />
+            </div>
+          </div>
+
+          {/* Topics Table */}
+          {selectedSubject && (
+            <div className="table-section">
+              <h3>Table of Specifications</h3>
+              
+              <div className="table-wrapper">
+                <table className="specs-table">
+                  <thead>
+                    <tr>
+                      <th>Topics</th>
+                      <th>Hours</th>
+                      <th colSpan="2">Remembering &amp;<br/>Understanding (30%)</th>
+                      <th colSpan="2">Applying &amp;<br/>Analyzing (30%)</th>
+                      <th colSpan="2">Evaluating &amp;<br/>Creating (40%)</th>
+                      <th>Total<br/>Items</th>
+                      <th>Percentage</th>
+                      <th>Action</th>
+                    </tr>
+                    <tr className="sub-header">
+                      <th></th>
+                      <th></th>
+                      <th>No. Questions</th>
+                      <th>Placement</th>
+                      <th>No. Questions</th>
+                      <th>Placement</th>
+                      <th>No. Questions</th>
+                      <th>Placement</th>
+                      <th></th>
+                      <th></th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {generatedSpec ? (
+                      // Show both completed specs and input for new rows
+                      <>
+                        {generatedSpec.specs.map((spec, idx) => {
+                          const correspondingRow = topicRows.find(r => parseInt(r.topicId) === spec.topicId && parseFloat(r.hours) === parseFloat(spec.hours));
+                          const rowId = correspondingRow?.id;
+                          const overrideKey = spec.overrideKey || `${spec.topicId}-${spec.hours}`;
+                          const override = specOverrides[overrideKey] || {};
+                          return (
+                            <tr key={`spec-${idx}`}>
+                              <td>
+                                <select
+                                  value={spec.topicId || ''}
+                                  onChange={(e) => {
+                                    const selectedOption = e.target.options[e.target.selectedIndex];
+                                    const topicName = selectedOption ? selectedOption.text : '';
+                                    const topicId = e.target.value;
+                                    if (rowId && topicId) {
+                                      const selectedTopicObj = topics.find(t => t.id === parseInt(topicId));
+                                      console.log('[SPEC VIEW] Selected topic object:', selectedTopicObj);
+                                      const hours = selectedTopicObj?.allocatedHours || 0;
+                                      console.log('[SPEC VIEW] Extracted hours:', hours);
+                                      handleTopicRowChange(rowId, 'topicId', topicId);
+                                      handleTopicRowChange(rowId, 'topicName', topicName);
+                                      handleTopicRowChange(rowId, 'topic', topicName);
+                                      handleTopicRowChange(rowId, 'hours', String(hours));
+                                    }
+                                  }}
+                                  disabled={isLoadingTopics || topics.length === 0}
+                                  className={validationErrors[`topic_${rowId}`] ? 'error' : ''}
+                                >
+                                  <option value="">Select topic</option>
+                                  {topics.map(topic => (
+                                    <option key={topic.id} value={topic.id}>{topic.title}</option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td>
+                                <input
+                                  type="number"
+                                  value={spec.hours}
+                                  onChange={(e) => rowId && handleTopicRowChange(rowId, 'hours', e.target.value)}
+                                  placeholder="Hours"
+                                  min="0"
+                                  className={validationErrors[`hours_${rowId}`] ? 'error' : ''}
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  type="number"
+                                  value={override.lowCount !== undefined && override.lowCount !== '' ? override.lowCount : (correspondingRow?.lowCount !== undefined && correspondingRow.lowCount !== '' ? correspondingRow.lowCount : spec.cognitive.low.count)}
+                                  onChange={(e) => handleSpecOverrideChange(overrideKey, 'lowCount', e.target.value)}
+                                  min="0"
+                                  className={validationErrors[`lowCount_${rowId || overrideKey}`] ? 'error' : ''}
+                                  style={{ width: '90px' }}
+                                />
+                              </td>
+                              <td>{spec.cognitive.low.placements.join(', ')}</td>
+                              <td>
+                                <input
+                                  type="number"
+                                  value={override.middleCount !== undefined && override.middleCount !== '' ? override.middleCount : (correspondingRow?.middleCount !== undefined && correspondingRow.middleCount !== '' ? correspondingRow.middleCount : spec.cognitive.middle.count)}
+                                  onChange={(e) => handleSpecOverrideChange(overrideKey, 'middleCount', e.target.value)}
+                                  min="0"
+                                  className={validationErrors[`middleCount_${rowId || overrideKey}`] ? 'error' : ''}
+                                  style={{ width: '90px' }}
+                                />
+                              </td>
+                              <td>{spec.cognitive.middle.placements.join(', ')}</td>
+                              <td>
+                                <input
+                                  type="number"
+                                  value={override.highCount !== undefined && override.highCount !== '' ? override.highCount : (correspondingRow?.highCount !== undefined && correspondingRow.highCount !== '' ? correspondingRow.highCount : spec.cognitive.high.count)}
+                                  onChange={(e) => handleSpecOverrideChange(overrideKey, 'highCount', e.target.value)}
+                                  min="0"
+                                  className={validationErrors[`highCount_${rowId || overrideKey}`] ? 'error' : ''}
+                                  style={{ width: '90px' }}
+                                />
+                              </td>
+                              <td>{spec.cognitive.high.placements.join(', ')}</td>
+                              <td>{spec.total}</td>
+                              <td>{spec.percentage}%</td>
+                              <td>
+                                <button 
+                                  className="delete-btn"
+                                  onClick={() => rowId && handleDeleteRowClick(rowId)}
+                                  title="Delete this row"
+                                >
+                                  <Trash2 size={20} />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {/* Show remaining empty input rows */}
+                        {topicRows.filter(row => !row.topic || !row.hours).map((row) => (
+                          <tr key={`input-${row.id}`}>
+                            <td>
+                              <select
+                                value={row.topicId || ''}
+                                onChange={(e) => {
+                                  const selectedOption = e.target.options[e.target.selectedIndex];
+                                  const topicName = selectedOption ? selectedOption.text : '';
+                                  const topicId = e.target.value;
+                                  if (topicId) {
+                                    const selectedTopicObj = topics.find(t => t.id === parseInt(topicId));
+                                    console.log('[INPUT VIEW] Selected topic object:', selectedTopicObj);
+                                    const hours = selectedTopicObj?.allocatedHours || 0;
+                                    console.log('[INPUT VIEW] Extracted hours:', hours);
+                                    handleTopicRowChange(row.id, 'topicId', topicId);
+                                    handleTopicRowChange(row.id, 'topicName', topicName);
+                                    handleTopicRowChange(row.id, 'topic', topicName);
+                                    handleTopicRowChange(row.id, 'hours', String(hours));
+                                  }
+                                }}
+                                disabled={isLoadingTopics || topics.length === 0}
+                                className={validationErrors[`topic_${row.id}`] ? 'error' : ''}
+                              >
+                                <option value="">Select topic</option>
+                                {topics.map(topic => (
+                                  <option key={topic.id} value={topic.id}>{topic.title}</option>
+                                ))}
+                              </select>
+                            </td>
+                            <td>
+                              <input
+                                type="number"
+                                value={row.hours}
+                                onChange={(e) => handleTopicRowChange(row.id, 'hours', e.target.value)}
+                                placeholder="Hours"
+                                min="0"
+                                className={validationErrors[`hours_${row.id}`] ? 'error' : ''}
+                              />
+                            </td>
+                            <td colSpan="8" className="empty-cell">Fill topic and hours to calculate</td>
+                            <td>
+                              <button 
+                                className="delete-btn"
+                                onClick={() => handleDeleteRowClick(row.id)}
+                                title="Delete this row"
+                              >
+                                <Trash2 size={20} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </>
+                    ) : (
+                      // Show all input rows
+                      topicRows.map((row) => (
+                        <tr key={row.id}>
+                          <td>
+                            <select
+                              value={row.topicId || ''}
+                              onChange={(e) => {
+                                const selectedOption = e.target.options[e.target.selectedIndex];
+                                const topicName = selectedOption ? selectedOption.text : '';
+                                const topicId = e.target.value;
+                                handleTopicRowChange(row.id, 'topicId', topicId);
+                                handleTopicRowChange(row.id, 'topicName', topicName);
+                                handleTopicRowChange(row.id, 'topic', topicName);
+                              }}
+                              disabled={isLoadingTopics || topics.length === 0}
+                              className={validationErrors[`topic_${row.id}`] ? 'error' : ''}
+                            >
+                              <option value="">Select topic</option>
+                              {topics.map(topic => (
+                                <option key={topic.id} value={topic.id}>{topic.title}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td>
+                            <input
+                              type="number"
+                              value={row.hours}
+                              onChange={(e) => handleTopicRowChange(row.id, 'hours', e.target.value)}
+                              placeholder="Hours"
+                              min="0"
+                              className={validationErrors[`hours_${row.id}`] ? 'error' : ''}
+                            />
+                          </td>
+                          <td colSpan="8" className="empty-cell">Fill topic and hours to calculate</td>
+                          <td>
+                            <button 
+                              className="delete-btn"
+                              onClick={() => handleDeleteRowClick(row.id)}
+                              title="Delete this row"
+                            >
+                              <Trash2 size={20} />
+                            </button>
+                          </td>
+                        </tr>
+                      )))
+                    }
+                    {totalExamItems && topicRows.some(row => row.topic && row.hours) && (
+                      <tr className="totals-row">
+                        <td><strong>TOTALS</strong></td>
+                        <td><strong>{calculateTotalHours()}</strong></td>
+                        <td><strong>{generatedSpec ? generatedSpec.totals.low : calculateDistribution().low}</strong></td>
+                        <td>All</td>
+                        <td><strong>{generatedSpec ? generatedSpec.totals.middle : calculateDistribution().middle}</strong></td>
+                        <td>All</td>
+                        <td><strong>{generatedSpec ? generatedSpec.totals.high : calculateDistribution().high}</strong></td>
+                        <td>All</td>
+                        <td><strong>{generatedSpec ? generatedSpec.totals.grand : totalExamItems}</strong></td>
+                        <td><strong>100%</strong></td>
+                        <td></td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              
+              {/* Warning for insufficient items */}
+              {insufficientItemsWarning && (
+                <div className="warning-message">
+                  <span className="warning-icon">⚠️</span>
+                  <span className="warning-text">{insufficientItemsWarning}</span>
+                </div>
+              )}
+              
+              {/* Warning for excess items */}
+              {excessItemsWarning && (
+                <div className="info-message">
+                  <span className="info-icon">ℹ️</span>
+                  <span className="info-text">{excessItemsWarning}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Show Sample Exam */}
+          {sampleExam && (
+            <div className="sample-exam">
+              <h3>Sample Exam Preview</h3>
+              <div className="sample-content exam-paper">
+                {/* Exam Paper Header */}
+                <div className="exam-header">
+                  <img src={UPHSLLogo} alt="UPHSL Logo" className="exam-logo" />
+                  <div className="university-header">
+                    <h2>University of Perpetual Help System</h2>
+                    <p>Test Data Back System</p>
+                    <p>Biñan Campus</p>
+                    <p className="exam-filename">{(() => {
+                      const now = new Date();
+                      const courseCode = selectedCourse && courses.find(c => c.id === parseInt(selectedCourse))?.code || 'XXXX';
+                      const date = `${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}${String(now.getFullYear()).slice(-2)}`;
+                      const time = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+                      return `${examType}_${semester}_${schoolYear}_${courseCode}_${date}_${time}`;
+                    })()}</p>
+                    <p className="course-info">{selectedCourse && (() => { const course = courses.find(c => c.id === parseInt(selectedCourse)); return course ? `${course.name} (${course.code})` : 'Course Name'; })() || 'Course Name'}</p>
+                  </div>
+                </div>
+
+                {/* Form Fields */}
+                <div className="exam-form-fields">
+                  <div className="form-row">
+                    <div className="form-field">
+                      <label style={{ color: 'black' }}>Name: ________________________</label>
+                    </div>
+                    <div className="form-field">
+                      <label style={{ color: 'black' }}>Date: ________________________</label>
+                    </div>
+                  </div>
+                  <div className="form-row">
+                    <div className="form-field">
+                      <label style={{ color: 'black' }}>Professor: ________________________</label>
+                    </div>
+                    <div className="form-field">
+                      <label style={{ color: 'black' }}>Permit #: ________________________</label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Instructions/Reminders */}
+                <div style={{ marginTop: '20px', marginBottom: '20px' }}>
+                  <p><strong>REMINDER: CHEATING during examinations, BORROWING and LENDING of examination permit fall under Major offenses and are punishable under the existing University Policy</strong></p>
+                  <p><strong>Direction:</strong> Multiple Choice: Choose the letter of the correct answer.</p>
+                </div>
+
+                {/* Exam Questions */}
+                <div className="exam-questions-section">
+                  {!showAnswerSheet ? (
+                    // Student Exam View
+                    sampleExam.questions.map((q, idx) => {
+                      const questionText = q.content || q.Content || q.question || 'Question text not available';
+                      const options = q.options || q.Options || q.choices || [];
+                      // preview debug logs removed for production
+                      return (
+                        <div key={idx} className="exam-question-item">
+                          <div style={{ marginBottom: '8px', fontSize: '15px' }}>
+                            <strong>{idx + 1}.) {questionText}</strong>
+                          </div>
+                          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', marginLeft: '10px', fontSize: '14px' }}>
+                            {options.map((option, optIdx) => {
+                              const letter = String.fromCharCode(65 + optIdx);
+                              const optionText = option.content || option.Content || option.optionText || option.text || option || '';
+                              return (
+                                <span key={optIdx}>
+                                  <strong>{letter}.</strong> {optionText}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    // Answer Sheet View
+                    <div>
+                      <h3 style={{ textAlign: 'center', marginBottom: '20px' }}>ANSWER SHEET</h3>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '2px solid #000' }}>
+                            <th style={{ padding: '8px', textAlign: 'left' }}>Question #</th>
+                            <th style={{ padding: '8px', textAlign: 'left' }}>Question</th>
+                            <th style={{ padding: '8px', textAlign: 'center' }}>Correct Answer</th>
+                            <th style={{ padding: '8px', textAlign: 'left' }}>Bloom Level</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sampleExam.questions.map((q, idx) => {
+                            const questionText = q.content || q.Content || q.question || 'N/A';
+                            const correctAnswer = q.correctAnswer || '-';
+                            const bloomLevel = q.bloomLevel || q.BloomLevel || '-';
+                            return (
+                              <tr key={idx} style={{ borderBottom: '1px solid #ddd' }}>
+                                <td style={{ padding: '8px' }}>{idx + 1}</td>
+                                <td style={{ padding: '8px' }}>{String(questionText).substring(0, 50)}...</td>
+                                <td style={{ padding: '8px', textAlign: 'center', fontWeight: 'bold' }}>{correctAnswer}</td>
+                                <td style={{ padding: '8px' }}>{bloomLevel}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ marginTop: '20px', marginBottom: '20px', textAlign: 'center' }}>
+                  <button
+                    onClick={() => setShowAnswerSheet(!showAnswerSheet)}
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: showAnswerSheet ? '#dc3545' : '#28a745',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      marginRight: '10px'
+                    }}
+                  >
+                    {showAnswerSheet ? 'View Student Exam' : 'View Answer Sheet'}
+                  </button>
+                </div>
+
+                <p className="total-questions">Total Questions: {sampleExam.totalQuestions}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div className="action-buttons">
+            <button 
+              className="btn btn-secondary"
+              onClick={handleGenerateSample}
+              disabled={!generatedSpec}
+            >
+              <Eye size={16} /> Show Sample Exam
+            </button>
+            <button 
+              className="btn btn-secondary"
+              onClick={handlePrint}
+              disabled={!generatedSpec}
+            >
+              <Printer size={16} /> Print Options
+            </button>
+            <button 
+              className="btn btn-success"
+              onClick={handleSaveExam}
+              disabled={!generatedSpec}
+            >
+              <Save size={16} /> Save Exam
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Save Modal */}
+      {showSaveModal && (
+        <div className="modal-overlay">
+          <div className={`modal ${isDarkMode ? 'dark' : ''}`}>
+            <h3>Save Exam</h3>
+            <div className="modal-content">
+              <label>Exam Name (optional)</label>
+              <input
+                type="text"
+                value={examName}
+                onChange={(e) => setExamName(e.target.value)}
+                placeholder="Enter exam name or leave blank for auto-generated"
+              />
+            </div>
+            <div className="modal-buttons">
+              <button className="btn btn-secondary" onClick={() => setShowSaveModal(false)}>Cancel</button>
+              <button className="btn btn-success" onClick={confirmSaveExam}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Print Modal */}
+      {showPrintModal && (
+        <div className="modal-overlay">
+          <div className={`modal print-modal ${isDarkMode ? 'dark' : ''}`}> 
+            <h3 className="print-modal-title">Print Options</h3>
+            <div className="print-modal-content">
+              <div className="print-radio-group">
+                <label className={`print-radio-label${printOption === 'specification' ? ' selected' : ''}`}>
+                  <input
+                    type="radio"
+                    value="specification"
+                    checked={printOption === 'specification'}
+                    onChange={(e) => setPrintOption(e.target.value)}
+                  />
+                  <span className="custom-radio"></span>
+                  <span>Print Table of Specification</span>
+                </label>
+                <label className={`print-radio-label${printOption === 'exam' ? ' selected' : ''}`}>
+                  <input
+                    type="radio"
+                    value="exam"
+                    checked={printOption === 'exam'}
+                    onChange={(e) => setPrintOption(e.target.value)}
+                  />
+                  <span className="custom-radio"></span>
+                  <span>Print Exam Paper</span>
+                </label>
+                <label className={`print-radio-label${printOption === 'answer' ? ' selected' : ''}`}>
+                  <input
+                    type="radio"
+                    value="answer"
+                    checked={printOption === 'answer'}
+                    onChange={(e) => setPrintOption(e.target.value)}
+                  />
+                  <span className="custom-radio"></span>
+                  <span>Print Answer Key</span>
+                </label>
+              </div>
+            </div>
+            <div className="modal-buttons print-modal-buttons">
+              <button className="btn btn-secondary" onClick={() => setShowPrintModal(false)}>Cancel</button>
+              <button className="btn btn-primary" onClick={() => {
+                if (printOption === 'specification') {
+                  if (!generatedSpec || !generatedSpec.specs) {
+                    setError('Please generate the table of specification first');
+                    return;
+                  }
+                  
+                  const printWindow = window.open('', '', 'width=1200,height=800');
+                  const now = new Date();
+                  const courseCode = selectedCourse && courses.find(c => c.id === parseInt(selectedCourse))?.code || 'XXXX';
+                  const date = `${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}${String(now.getFullYear()).slice(-2)}`;
+                  const time = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+                  const courseName = selectedCourse && courses.find(c => c.id === parseInt(selectedCourse))?.name || 'Course Name';
+                  const filename = `${examType}_${semester}_${schoolYear}_${courseCode}_${date}_${time}`;
+                  
+                  let tableHTML = `
+                    <html>
+                      <head>
+                        <title>Table of Specification</title>
+                        <style>
+                          * { color: #000; }
+                          body { font-family: Arial, sans-serif; margin: 20px; color: #000; }
+                          .header { text-align: center; margin-bottom: 30px; }
+                          .header h1 { font-size: 18px; margin: 5px 0; font-weight: bold; color: #000; }
+                          .header p { margin: 3px 0; color: #000; }
+                          .filename { font-weight: bold; margin: 10px 0; font-size: 13px; color: #000; }
+                          h2 { text-align: center; margin: 20px 0; color: #000; font-size: 16px; }
+                          table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+                          table, th, td { border: 1px solid #000; }
+                          th { 
+                            background-color: #fff; 
+                            color: #000;
+                            padding: 12px 6px; 
+                            text-align: center; 
+                            font-weight: bold; 
+                            border: 1px solid #000;
+                            font-size: 12px;
+                          }
+                          td { 
+                            border: 1px solid #000; 
+                            padding: 10px 6px; 
+                            text-align: center;
+                            color: #000;
+                            font-size: 12px;
+                          }
+                          td.text-left { text-align: left; }
+                          .total-row { font-weight: bold; background-color: #fff; }
+                          .signature-section { margin-top: 50px; }
+                          .signature-line { margin: 40px 0; display: flex; align-items: center; color: #000; }
+                          .signature-label { width: 140px; font-weight: normal; color: #000; font-size: 13px; }
+                          .signature-line-draw { flex: 1; border-bottom: 1px solid #000; margin: 0 10px; }
+                          @media print {
+                            body { margin: 0; padding: 10px; }
+                            table { page-break-inside: avoid; }
+                          }
+                        </style>
+                      </head>
+                      <body>
+                        <div class="header">
+                          <h1>University of Perpetual Help System</h1>
+                          <p>Test Data Bank System</p>
+                          <p>Biñan Campus</p>
+                          <div class="filename">${filename}</div>
+                          <p><strong style="color: #000;">${courseName}</strong></p>
+                        </div>
+                        
+                        <h2>Table of Specification</h2>
+                        
+                        <table border="1" cellpadding="5" cellspacing="0">
+                          <thead>
+                            <tr>
+                              <th rowspan="2" style="width: 100px;">Topics</th>
+                              <th rowspan="2" style="width: 60px;">Hours</th>
+                              <th colspan="2" style="width: 140px;">Remembering & Understanding (30%)</th>
+                              <th colspan="2" style="width: 140px;">Applying & Analyzing (30%)</th>
+                              <th colspan="2" style="width: 140px;">Evaluating & Creating (40%)</th>
+                              <th rowspan="2" style="width: 70px;">Total Items</th>
+                              <th rowspan="2" style="width: 70px;">Percentage</th>
+                            </tr>
+                            <tr>
+                              <th style="width: 70px;">No. Questions</th>
+                              <th style="width: 70px;">Placement</th>
+                              <th style="width: 70px;">No. Questions</th>
+                              <th style="width: 70px;">Placement</th>
+                              <th style="width: 70px;">No. Questions</th>
+                              <th style="width: 70px;">Placement</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            ${generatedSpec.specs.map((spec, idx) => {
+                              return `
+                                <tr>
+                                  <td class="text-left"><strong>${spec.topicName}</strong></td>
+                                  <td>${spec.hours}</td>
+                                  <td>${spec.cognitive.low.count}</td>
+                                  <td class="text-left">${spec.cognitive.low.placements.join(', ')}</td>
+                                  <td>${spec.cognitive.middle.count}</td>
+                                  <td class="text-left">${spec.cognitive.middle.placements.join(', ')}</td>
+                                  <td>${spec.cognitive.high.count}</td>
+                                  <td class="text-left">${spec.cognitive.high.placements.join(', ')}</td>
+                                  <td><strong>${spec.total}</strong></td>
+                                  <td><strong>${spec.percentage}%</strong></td>
+                                    </tr>
+                                  `;
+                                }).join('')}
+                                <tr class="total-row">
+                                  <td colspan="2"><strong>TOTALS</strong></td>
+                                  <td><strong>${generatedSpec.totals.low}</strong></td>
+                              <td><strong>All</strong></td>
+                                  <td><strong>${generatedSpec.totals.middle}</strong></td>
+                              <td><strong>All</strong></td>
+                                  <td><strong>${generatedSpec.totals.high}</strong></td>
+                              <td><strong>All</strong></td>
+                                  <td><strong>${generatedSpec.totals.grand}</strong></td>
+                              <td><strong>100%</strong></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                        
+                        <div class="signature-section" style="margin-top:90px;">
+                          <div style="display:flex; justify-content:space-between; gap:20px;">
+                            <div style="flex:1; display:flex; align-items:center;">
+                              <span class="signature-label" style="display:inline-block; width:auto; white-space:nowrap;">Prepared By:</span>
+                              <span style="display:inline-block; width:160px; border-bottom:1px solid #000; margin-left:1px; transform:translateY(6px);"></span>
+                            </div>
+                            <div style="flex:1; display:flex; align-items:center; justify-content:flex-end;">
+                              <span class="signature-label" style="display:inline-block; width:auto; white-space:nowrap;">Assessed By:</span>
+                              <span style="display:inline-block; width:160px; border-bottom:1px solid #000; margin-left:1px; transform:translateY(6px);"></span>
+                            </div>
+                          </div>
+                          <div style="display:flex; justify-content:center; margin-top:40px;">
+                            <div style="width:60%; display:flex; align-items:center; justify-content:center;">
+                              <span class="signature-label" style="display:inline-block; width:auto; white-space:nowrap;">Approved By:</span>
+                              <span style="display:inline-block; width:220px; border-bottom:1px solid #000; margin-left:1px; transform:translateY(6px);"></span>
+                            </div>
+                          </div>
+                        </div>
+                      </body>
+                    </html>
+                  `;
+                  printWindow.document.write(tableHTML);
+                  printWindow.document.close();
+                  setTimeout(() => printWindow.print(), 250);
+                } else if (printOption === 'exam') {
+                  if (!generatedSpec) {
+                    setError('Please generate the table of specification first');
+                    return;
+                  }
+                  
+                  // Auto-generate sample exam if it doesn't exist
+                  let examToPrint = sampleExam;
+                  if (!examToPrint || !examToPrint.questions || examToPrint.questions.length === 0) {
+                    const allQuestions = [];
+                    generatedSpec.specs.forEach(spec => {
+                      spec.cognitive.low.questions.forEach(q => {
+                        allQuestions.push({
+                          ...q,
+                          topicName: spec.topicName,
+                          level: 'Remembering'
+                        });
+                      });
+                      spec.cognitive.middle.questions.forEach(q => {
+                        allQuestions.push({
+                          ...q,
+                          topicName: spec.topicName,
+                          level: 'Applying'
+                        });
+                      });
+                      spec.cognitive.high.questions.forEach(q => {
+                        allQuestions.push({
+                          ...q,
+                          topicName: spec.topicName,
+                          level: 'Evaluating'
+                        });
+                      });
+                    });
+                    allQuestions.sort((a, b) => a.placement - b.placement);
+                    examToPrint = {
+                      questions: allQuestions,
+                      date: new Date().toLocaleDateString(),
+                      totalQuestions: generatedSpec.totalItems
+                    };
+                  }
+                  
+                  // Convert image to data URL
+                  const img = new Image();
+                  img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    const dataUrl = canvas.toDataURL('image/png');
+                    
+                    const printWindow = window.open('', '', 'width=1200,height=800');
+                    const now = new Date();
+                    const courseCode = selectedCourse && courses.find(c => c.id === parseInt(selectedCourse))?.code || 'XXXX';
+                    const date = `${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}${String(now.getFullYear()).slice(-2)}`;
+                    const time = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+                    const courseName = selectedCourse && courses.find(c => c.id === parseInt(selectedCourse))?.name || 'Course Name';
+                    const filename = `${examType}_${semester}_${schoolYear}_${courseCode}_${date}_${time}`;
+                    
+                    let examHTML = `
+                      <html>
+                        <head>
+                          <title>Exam Paper</title>
+                          <style>
+                            * { color: #000; }
+                            body { font-family: Arial, sans-serif; margin: 20px; color: #000; line-height: 1.6; }
+                            .exam-header { display: flex; align-items: flex-start; gap: 20px; margin-bottom: 20px; padding-bottom: 15px; }
+                            .logo-section { flex-shrink: 0; }
+                            .logo-section img { height: 140px; width: auto; }
+                            .header-text { flex: 1; text-align: center; }
+                            .header-text h2 { font-size: 18px; margin: 5px 0; font-weight: bold; color: #000; }
+                            .header-text p { margin: 3px 0; color: #000; font-size: 14px; }
+                            .course-info { font-weight: bold; font-size: 15px; margin: 10px 0; color: #000; }
+                            .filename { font-weight: bold; margin: 8px 0; font-size: 12px; color: #000; }
+                            .form-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 15px 0; }
+                            .form-field { display: flex; align-items: center; gap: 5px; }
+                            .form-field label { color: #000; font-size: 14px; white-space: nowrap; }
+                            .form-field-blank { flex: 1; border-bottom: 1px solid #000; min-width: 150px; height: 0; }
+                            .reminders { margin: 15px 0; font-size: 13px; color: #000; }
+                            .reminders p { margin: 5px 0; }
+                            .questions-section { margin: 20px 0; }
+                            .question-item { margin-bottom: 15px; color: #000; }
+                            .question-text { font-weight: normal; margin-bottom: 5px; font-size: 14px; }
+                            .choices { display: flex; flex-wrap: wrap; gap: 15px; margin-left: 20px; }
+                            .choice-item { font-size: 14px; flex: 1 1 calc(25% - 15px); min-width: 120px; word-wrap: break-word; white-space: normal; }
+                            .choice-letter { font-weight: normal; }
+                            @media print {
+                              body { margin: 0; padding: 10px; }
+                              .question-item { page-break-inside: avoid; }
+                            }
+                          </style>
+                        </head>
+                        <body>
+                          <div class="exam-header">
+                            <div class="logo-section">
+                              <img src="${dataUrl}" alt="UPHSL Logo" />
+                            </div>
+                            <div class="header-text">
+                              <h2>University of Perpetual Help System</h2>
+                              <p>Test Data Bank System</p>
+                              <p>Biñan Campus</p>
+                              <div class="filename">${filename}</div>
+                              <p class="course-info">${courseName}</p>
+                            </div>
+                          </div>
+
+                          <div class="form-fields">
+                            <div class="form-field">
+                              <label>Name:</label>
+                              <div class="form-field-blank"></div>
+                            </div>
+                            <div class="form-field">
+                              <label>Date:</label>
+                              <div class="form-field-blank"></div>
+                            </div>
+                            <div class="form-field">
+                              <label>Professor:</label>
+                              <div class="form-field-blank"></div>
+                            </div>
+                            <div class="form-field">
+                              <label>Permit #:</label>
+                              <div class="form-field-blank"></div>
+                            </div>
+                          </div>
+
+                          <div class="reminders">
+                            <p><strong>REMINDER: CHEATING during examinations, BORROWING and LENDING of examination permit fall under Major offenses and are punishable under the existing University Policy</strong></p>
+                            <p><strong>Direction:</strong> Multiple Choice: Choose the letter of the correct answer.</p>
+                          </div>
+
+                          <div class="questions-section">
+                            ${examToPrint.questions.map((q, idx) => {
+                              const questionText = q.content || q.Content || q.question || 'Question text not available';
+                              const options = q.options || q.Options || q.choices || [];
+                              let choicesHTML = '';
+                              if (options && options.length > 0) {
+                                choicesHTML = options.map((option, optIdx) => {
+                                  const letter = String.fromCharCode(65 + optIdx);
+                                  const optText = option.content || option.Content || option.optionText || option.text || option || '';
+                                  return '<div class="choice-item"><span class="choice-letter">' + letter + '.</span> ' + optText + '</div>';
+                                }).join('');
+                              }
+                              return '<div class="question-item"><div class="question-text">' + (idx + 1) + '.) ' + questionText + '</div><div class="choices">' + choicesHTML + '</div></div>';
+                            }).join('')}
+                          </div>
+                        </body>
+                      </html>
+                    `;
+                    printWindow.document.write(examHTML);
+                    printWindow.document.close();
+                    setTimeout(() => printWindow.print(), 250);
+                  };
+                  img.src = UPHSLLogo;
+                } else if (printOption === 'answer') {
+                  if (!generatedSpec) {
+                    setError('Please generate the table of specification first');
+                    return;
+                  }
+                  
+                  // Auto-generate sample exam if it doesn't exist
+                  let examToPrint = sampleExam;
+                  if (!examToPrint || !examToPrint.questions || examToPrint.questions.length === 0) {
+                    const allQuestions = [];
+                    generatedSpec.specs.forEach(spec => {
+                      spec.cognitive.low.questions.forEach(q => {
+                        allQuestions.push({
+                          ...q,
+                          topicName: spec.topicName,
+                          level: 'Remembering'
+                        });
+                      });
+                      spec.cognitive.middle.questions.forEach(q => {
+                        allQuestions.push({
+                          ...q,
+                          topicName: spec.topicName,
+                          level: 'Applying'
+                        });
+                      });
+                      spec.cognitive.high.questions.forEach(q => {
+                        allQuestions.push({
+                          ...q,
+                          topicName: spec.topicName,
+                          level: 'Evaluating'
+                        });
+                      });
+                    });
+                    allQuestions.sort((a, b) => a.placement - b.placement);
+                    examToPrint = {
+                      questions: allQuestions,
+                      date: new Date().toLocaleDateString(),
+                      totalQuestions: generatedSpec.totalItems
+                    };
+                  }
+                  
+                  // Convert image to data URL
+                  const img2 = new Image();
+                  img2.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img2.width;
+                    canvas.height = img2.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img2, 0, 0);
+                    const dataUrl = canvas.toDataURL('image/png');
+                    
+                    const printWindow = window.open('', '', 'width=1200,height=800');
+                    const now = new Date();
+                    const courseCode = selectedCourse && courses.find(c => c.id === parseInt(selectedCourse))?.code || 'XXXX';
+                    const date = `${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}${String(now.getFullYear()).slice(-2)}`;
+                    const time = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+                    const courseName = selectedCourse && courses.find(c => c.id === parseInt(selectedCourse))?.name || 'Course Name';
+                    const filename = `${examType}_${semester}_${schoolYear}_${courseCode}_${date}_${time}`;
+
+                    // Determine column count based on total answers
+                    const totalAnswers = (examToPrint.questions || []).length || 0;
+                    const cols = totalAnswers > 75 ? 3 : 2; // <=75 -> 2 cols, >75 -> 3 cols
+                    const answerFontSize = cols === 3 ? '10px' : '11px';
+
+                    // Build the answers HTML robustly (support numeric index or letter answers)
+                    const renderAnswersHTML = (examToPrint.questions || []).map((q, idx) => {
+                      let correctAnswer = '';
+                      const ca = q.correctAnswer;
+                      if (typeof ca === 'number' && !isNaN(ca)) {
+                        correctAnswer = String.fromCharCode(65 + ca);
+                      } else if (typeof ca === 'string' && ca.trim() !== '') {
+                        // If string like 'A' or 'a' or '0' (index), handle appropriately
+                        const trimmed = ca.trim();
+                        if (/^[A-Za-z]$/.test(trimmed)) {
+                          correctAnswer = trimmed.toUpperCase();
+                        } else if (!isNaN(parseInt(trimmed))) {
+                          correctAnswer = String.fromCharCode(65 + parseInt(trimmed));
+                        } else {
+                          // Fallback: if choices exist and correctAnswer matches one of them
+                          const choices = q.options || q.Options || q.choices || [];
+                          const matchIndex = choices ? choices.findIndex(c => String(c.content || c.Content || c).trim().toUpperCase() === trimmed.toUpperCase()) : -1;
+                          if (matchIndex >= 0) correctAnswer = String.fromCharCode(65 + matchIndex);
+                        }
+                      }
+                      return '<div class="answer-item"><span class="question-num">' + (idx + 1) + '.</span> <span class="answer-letter">' + correctAnswer + '</span></div>';
+                    }).join('');
+
+                    let answerHTML = `
+                      <html>
+                        <head>
+                          <title>Answer Key</title>
+                          <style>
+                            * { color: #000; }
+                            body { font-family: Arial, sans-serif; margin: 12px; color: #000; line-height: 1.25; }
+                            .exam-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; padding-bottom: 8px; }
+                            .logo-section { flex-shrink: 0; }
+                            .logo-section img { height: 90px; width: auto; }
+                            .header-text { flex: 1; text-align: center; }
+                            .header-text h2 { font-size: 15px; margin: 2px 0; font-weight: bold; color: #000; }
+                            .header-text p { margin: 2px 0; color: #000; font-size: 11px; }
+                            .course-info { font-weight: bold; font-size: 12px; margin: 4px 0; color: #000; }
+                            .filename { font-weight: bold; margin: 4px 0; font-size: 10px; color: #000; }
+                            .answer-title { font-weight: bold; text-align: center; font-size: 14px; margin: 8px 0; }
+
+                            /* Multi-column layout (2 or 3 columns) so numbering can reach bottom of paper */
+                            .answers-section {
+                              margin: 6px 0;
+                              -webkit-column-count: ${cols};
+                              -moz-column-count: ${cols};
+                              column-count: ${cols};
+                              -webkit-column-gap: 14px;
+                              -moz-column-gap: 14px;
+                              column-gap: 14px;
+                              -webkit-column-fill: auto;
+                              -moz-column-fill: auto;
+                              column-fill: auto;
+                            }
+
+                            .answer-item { font-size: ${answerFontSize}; margin: 4px 0; color: #000; display: inline-block; width: 100%; }
+                            .question-num { font-weight: normal; display: inline-block; width: 28px; }
+                            .answer-letter { font-weight: bold; display: inline-block; width: 20px; }
+
+                            @media print {
+                              @page { size: auto; margin: 8mm; }
+                              body { margin: 0; padding: 0; }
+                              .answers-section { column-count: 3; column-gap: 12px; }
+                              .answer-item { page-break-inside: avoid; }
+                            }
+                          </style>
+                        </head>
+                        <body>
+                          <div class="exam-header">
+                            <div class="logo-section">
+                              <img src="${dataUrl}" alt="UPHSL Logo" />
+                            </div>
+                            <div class="header-text">
+                              <h2>University of Perpetual Help System</h2>
+                              <p>Test Data Bank System</p>
+                              <p>Biñan Campus</p>
+                              <div class="filename">${filename}</div>
+                              <p class="course-info">${courseName}</p>
+                            </div>
+                          </div>
+
+                          <div class="answer-title">ANSWER KEY</div>
+
+                          <div class="answers-section">
+                            ${renderAnswersHTML}
+                          </div>
+                        </body>
+                      </html>
+                    `;
+                    printWindow.document.write(answerHTML);
+                    printWindow.document.close();
+                    setTimeout(() => printWindow.print(), 250);
+                  };
+                  img2.src = UPHSLLogo;
+                } else {
+                  window.print();
+                }
+                setShowPrintModal(false);
+              }}>Print</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmation.show && (
+        <div className="modal-overlay">
+          <div className="modal-dialog confirmation-modal">
+            <h3>Confirm Delete</h3>
+            <p>Are you sure you want to delete this row?</p>
+            <div className="modal-buttons">
+              <button className="btn btn-secondary" onClick={cancelDeleteRow}>Cancel</button>
+              <button className="btn btn-danger" onClick={confirmDeleteRow}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Logout Modal */}
+      <LogoutModal
+        isOpen={isLogoutModalOpen}
+        onClose={() => setIsLogoutModalOpen(false)}
+        onConfirm={handleConfirmLogout}
+        isDarkMode={isDarkMode}
+      />
+    </div>
+  );
+};
+
+export default TestGeneration;

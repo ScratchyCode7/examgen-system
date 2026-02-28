@@ -1,4 +1,5 @@
 using Databank.Entities;
+using Databank.Features.Options;
 
 namespace Databank.Features.Questions;
 
@@ -8,7 +9,8 @@ public sealed record QuestionRequest(
     string QuestionType,
     BloomLevel BloomLevel,
     int Points,
-    int DisplayOrder
+    int DisplayOrder,
+    List<OptionRequest>? Options = null
 );
 
 public sealed record QuestionResponse(
@@ -19,6 +21,7 @@ public sealed record QuestionResponse(
     BloomLevel BloomLevel,
     int Points,
     int DisplayOrder,
-    bool IsActive
+    bool IsActive,
+    List<OptionResponse>? Options = null
 );
 

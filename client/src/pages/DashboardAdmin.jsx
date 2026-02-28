@@ -63,7 +63,7 @@ const DashboardAdmin = () => {
     navigate('/login');
   };
 
-  const dataEntryItems = ["Course - Topic", "Test Encoding", "Test Question Editing"];
+  const dataEntryItems = ["Program - Topic", "Test Encoding", "Test Question Editing"];
   const isDataEntryActive = dataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
 
   return (
@@ -88,18 +88,19 @@ const DashboardAdmin = () => {
               dropdownItems={dataEntryItems}
               onSelect={(item) => {
                 setActiveTab(item);
-                  if (item === 'Course - Topic') {
-                    // Navigate to last selected department (fallback to first non-admin)
+                  if (item === 'Program - Topic') {
+                    // Navigate to first non-admin department if available
                     const firstDept = departments?.find(d => d.code !== 'IT') || departments?.[0];
-                    const code = localStorage.getItem('lastDepartmentCode') || firstDept?.code || 'IT';
-                    localStorage.setItem('lastDepartmentCode', code);
+                    const code = firstDept?.code || 'IT';
                     navigate(`/course-topic/${code}`);
                   } else if (item === 'Test Encoding' || item === 'Test Question Editing') {
-                    navigate('/test-encoding');
+                    const firstDept = departments?.find(d => d.code !== 'IT') || departments?.[0];
+                    const code = firstDept?.code || 'CCS';
+                    navigate(`/test-encoding/${code}`);
                   }
               }}
             />
-            <NavItem icon={BookOpen} label="Reports" isActive={activeTab === 'Reports'} onClick={() => setActiveTab('Reports')} />
+            <NavItem icon={BookOpen} label="Reports" isActive={activeTab === 'Reports'} onClick={() => { setActiveTab('Reports'); navigate('/test-generation'); }} />
           </div>
 
           <div className="nav-right" ref={userMenuRef}>
@@ -131,7 +132,7 @@ const DashboardAdmin = () => {
           <div className="search-and-view">
             <div className="search-bar">
               <Search className="search-icon" />
-              <input type="text" placeholder="Search Program/Course..." />
+              <input type="text" placeholder="Search Programs..." />
             </div>
 
             <div className="view-toggle">
@@ -161,11 +162,11 @@ const DashboardAdmin = () => {
                     const logo = DEPARTMENT_LOGOS[d.code] || null;
                     return (
                       <div
-                          key={d.id}
-                          className="program-card"
-                          style={{ flex: '0 0 calc(25% - 1rem)', cursor: 'pointer' }} // 4 per row
-                          onClick={() => { localStorage.setItem('lastDepartmentCode', d.code); navigate(`/course-topic/${d.code}`); }}
-                        >
+                        key={d.id}
+                        className="program-card"
+                        style={{ flex: '0 0 calc(25% - 1rem)', cursor: 'pointer' }} // 4 per row
+                        onClick={() => navigate(`/course-topic/${d.code}`)}
+                      >
                         {logo ? (
                           <img src={logo} alt={d.name} onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/96x96/FFFFFF/1C4DA1?text=LOGO'; }} />
                         ) : (
@@ -185,7 +186,7 @@ const DashboardAdmin = () => {
                 <p>Loading departments...</p>
               ) : departments.length ? (
                 departments.map(d => (
-                  <div key={d.id} className="program-list-item" style={{cursor: 'pointer'}} onClick={() => { localStorage.setItem('lastDepartmentCode', d.code); navigate(`/course-topic/${d.code}`); }}>
+                  <div key={d.id} className="program-list-item" style={{cursor: 'pointer'}} onClick={() => navigate(`/course-topic/${d.code}`)}>
                     <p>{d.name}</p>
                   </div>
                 ))

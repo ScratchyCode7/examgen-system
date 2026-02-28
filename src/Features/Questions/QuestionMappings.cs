@@ -1,4 +1,5 @@
 using Databank.Entities;
+using Databank.Features.Options;
 
 namespace Databank.Features.Questions;
 
@@ -14,8 +15,10 @@ public static class QuestionMappings
             question.BloomLevel,
             question.Points,
             question.DisplayOrder,
-            question.IsActive
+            question.IsActive,
+            question.Options?.Select(o => o.ToResponse()).ToList()
         );
     }
 }
+
 

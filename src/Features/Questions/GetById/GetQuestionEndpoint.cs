@@ -10,7 +10,9 @@ public sealed class GetQuestionEndpoint : IEndpoint
     {
         app.MapGet("/api/questions/{id:int}", async Task<IResult> (int id, AppDbContext dbContext, CancellationToken ct) =>
         {
-            var question = await dbContext.Questions.AsNoTracking()
+            var question = await dbContext.Questions
+                .AsNoTracking()
+                .Include(q => q.Options)
                 .FirstOrDefaultAsync(q => q.Id == id, ct);
 
             return question is null

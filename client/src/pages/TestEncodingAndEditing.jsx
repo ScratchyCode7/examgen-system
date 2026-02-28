@@ -1,11 +1,10 @@
-// Changes made (Dec 9, 2025):
-// - Use `useAuth` to display the correct logged-in username and perform logout.
-// - Make Home navigation admin-aware (redirects to /admin for admins).
-// - Use ThemeContext for persistent dark mode.
-// - Various UX fixes to rich-text and selection handling.
-// See README for full details.
+// Refactored to integrate with backend API
+// - Added department, course, and subject dropdowns
+// - Replaced mock data with real API calls
+// - Implemented save/update/delete functionality with backend
+// - Uses Bloom's taxonomy levels from backend
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { 
     Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search, 
     FileText, Plus, Edit2, Trash2, Save,
@@ -17,34 +16,40 @@ import DropdownNavItem from '../components/DropdownNavItem';
 import LogoutModal from '../components/LogoutModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { apiService } from '../services/api';
+import DEPARTMENT_LOGOS from '../constants/departmentLogos';
 import '../styles/TestEncodingAndEditing.css';
 
-// Mock Assets (Replace with your actual paths)
+// Assets
 import TDBLogo from '../assets/TDB logo.png';
-import UPHSL from '../assets/uphsl.png';
-import CCS from '../assets/CCS.png'; 
+import UPHSL from '../assets/uphsl.png'; 
 
-// --- MOCK DATA / STATIC CONFIG ---
-const dataEntryItems = ["Course - Topic", "Test Question Encoding", "Test Question Editing"];
+// --- STATIC CONFIG ---
+const dataEntryItems = ["Program - Topic", "Test Question Encoding", "Test Question Editing"];
 
-const MOCK_SUBJECTS = [
-    { code: "CS", name: "Computer Science" },
-    { code: "IT", name: "Information Technology" },
-    { code: "EMC", name: "Entertainment and Multimedia Computing" }
-];
-
-const MOCK_TOPICS = [
-    { id: 1, topic: "Data Structures and Algorithms", subjectCode: "CS" },
-    { id: 2, topic: "Database Management Systems", subjectCode: "CS" },
-    { id: 3, topic: "Web Development Fundamentals (HTML/CSS)", subjectCode: "IT" },
-    { id: 4, topic: "Networking Protocols (TCP/IP)", subjectCode: "IT" },
-    { id: 5, topic: "Game Design Principles", subjectCode: "EMC" },
-];
-
-const MOCK_QUESTION_TYPES = [
-    "Remembering and Understanding",
-    "Applying and Analyzing",
-    "Evaluation and Creating"
+// Grouped Bloom's Taxonomy Levels (mapped to backend BloomLevel enum)
+const BLOOM_LEVELS = [
+    { 
+        id: 1, 
+        label: "Remembering & Understanding (30%)", 
+        value: "RememberUnderstand",
+        backendValues: ["Remember", "Understand"],
+        targetPercent: 30
+    },
+    { 
+        id: 2, 
+        label: "Applying & Analyzing (30%)", 
+        value: "ApplyAnalyze",
+        backendValues: ["Apply", "Analyze"],
+        targetPercent: 30
+    },
+    { 
+        id: 3, 
+        label: "Evaluating & Creating (40%)", 
+        value: "EvaluateCreate",
+        backendValues: ["Evaluate", "Create"],
+        targetPercent: 40
+    }
 ];
 
 const MATH_SYMBOLS = [
@@ -201,23 +206,31 @@ const RichTextToolbar = ({ onFormat, onSaveRange, activeCommands }) => {
 
 
 // --- HeaderTitleBlock Component ---
-const HeaderTitleBlock = ({ activeTab, isDarkMode }) => (
-    <div className="header-section">
-        <h1 className="page-title">{activeTab}</h1> 
-        <hr className="header-separator-line" /> 
-        <div className={`college-title-block centered-only ${isDarkMode ? 'dark' : ''}`}>
-            <img src={CCS} alt="CCS Logo" className="dept-logo" /> 
-            <span className="college-text">College of Computer Studies</span>
+const HeaderTitleBlock = ({ activeTab, isDarkMode, selectedDepartment }) => {
+    const deptLogo = selectedDepartment?.code && DEPARTMENT_LOGOS[selectedDepartment.code] 
+        ? DEPARTMENT_LOGOS[selectedDepartment.code] 
+        : DEPARTMENT_LOGOS['CCS'];
+    const deptName = selectedDepartment?.name || 'College of Computer Studies';
+    
+    return (
+        <div className="header-section">
+            <h1 className="page-title">{activeTab}</h1> 
+            <hr className="header-separator-line" /> 
+            <div className={`college-title-block centered-only ${isDarkMode ? 'dark' : ''}`}>
+                <img src={deptLogo} alt={`${deptName} Logo`} className="dept-logo" /> 
+                <span className="college-text">{deptName}</span>
+            </div>
+            <hr className="header-separator-line" />
         </div>
-        <hr className="header-separator-line" />
-    </div>
-);
+    );
+};
 // -----------------
 
 
 // --- Main Component ---
 const TestEncodingAndEditing = () => {
     const navigate = useNavigate();
+    const { departmentCode } = useParams();
     const { user, logout, isAdmin } = useAuth();
     const { isDarkMode, toggleDarkMode } = useTheme();
     const [activeTab, setActiveTab] = useState('Test Question Encoding');
@@ -225,10 +238,28 @@ const TestEncodingAndEditing = () => {
     const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
     const userMenuRef = useRef(null);
 
+    // Backend data state
+    const [departments, setDepartments] = useState([]);
+    const [courses, setCourses] = useState([]);
+    const [subjects, setSubjects] = useState([]);
+    const [topics, setTopics] = useState([]);
+    const [isLoadingCourses, setIsLoadingCourses] = useState(false);
+    const [isLoadingSubjects, setIsLoadingSubjects] = useState(false);
+    const [isLoadingTopics, setIsLoadingTopics] = useState(false);
+
+    const [department, setDepartment] = useState("");
+    const [course, setCourse] = useState("");
     const [subject, setSubject] = useState("");
-    const [topicDescription, setTopicDescription] = useState("");
-    // questionType is kept for encoding the type of a NEW/EDITED question
-    const [questionType, setQuestionType] = useState(""); 
+    const [topic, setTopic] = useState("");
+    const [bloomLevel, setBloomLevel] = useState(""); 
+
+    const getActiveDepartmentCode = useCallback(() => {
+        if (departmentCode) return departmentCode;
+        const selectedDept = departments.find(d => d.id === Number(department));
+        if (selectedDept?.code) return selectedDept.code;
+        const fallback = departments.find(d => (d.code || '').toUpperCase() !== 'IT') || departments[0];
+        return fallback?.code || 'CCS';
+    }, [departmentCode, departments, department]);
 
     // State for Rich Text Editor
     const [isMathPickerOpen, setIsMathPickerOpen] = useState(false);
@@ -240,13 +271,9 @@ const TestEncodingAndEditing = () => {
 
     const [searchText, setSearchText] = useState("");
     
-    // Initial dummy data for testing the Editing view
-    const [questions, setQuestions] = useState([
-        { id: 1, text: 'What is the runtime complexity of binary search?', choiceA:'O(n)', choiceB:'O(log n)', choiceC:'O(n^2)', choiceD:'O(1)', correctAnswer:'B', explanation:'Binary search halves the input size in each step.', subject: 'CS', topic: 'Data Structures and Algorithms', type: 'Applying and Analyzing' },
-        { id: 2, text: 'Which tag is used for an unordered list in HTML?', choiceA:'<ulb>', choiceB:'<ol>', choiceC:'<ul>', choiceD:'<list>', correctAnswer:'C', explanation:'<ul> stands for unordered list.', subject: 'IT', 'topic': 'Web Development Fundamentals (HTML/CSS)', type: 'Remembering and Understanding' },
-        { id: 3, text: 'Find the value of $x$ in $x+5=10$.', choiceA:'3', choiceB:'5', choiceC:'7', choiceD:'9', correctAnswer:'B', explanation:'Simple algebra, $x=10-5$.', subject: 'CS', topic: 'Database Management Systems', type: 'Remembering and Understanding' },
-        { id: 4, text: 'Design an efficient database schema for a library management system.', choiceA:'Flat file', choiceB:'Relational model', choiceC:'Hierarchical model', choiceD:'Network model', correctAnswer:'B', explanation:'Relational model is best for structured data like library systems.', subject: 'CS', topic: 'Database Management Systems', type: 'Evaluation and Creating' },
-    ]);
+    // Questions from backend
+    const [questions, setQuestions] = useState([]);
+    const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
     
     // States for question encoding fields
     const [questionText, setQuestionText] = useState(''); 
@@ -262,6 +289,119 @@ const TestEncodingAndEditing = () => {
 
     // --- Effects & Handlers ---
 
+    // Load departments on mount
+    useEffect(() => {
+        const loadDepartments = async () => {
+            try {
+                const data = await apiService.getDepartments();
+                setDepartments(Array.isArray(data) ? data : []);
+            } catch (err) {
+                console.error('Failed to load departments:', err);
+            }
+        };
+        void loadDepartments();
+    }, []);
+
+    // Auto-select department based on URL parameter
+    useEffect(() => {
+        if (!departmentCode || departments.length === 0) return;
+        const dept = departments.find(d => d.code === departmentCode);
+        if (dept) {
+            console.log('Auto-selecting department from URL:', dept);
+            setDepartment(String(dept.id));
+        } else {
+            console.warn('Department code not found:', departmentCode);
+        }
+    }, [departmentCode, departments]);
+
+    // Load courses when department changes
+    useEffect(() => {
+        const loadCourses = async () => {
+            if (!department) {
+                setCourses([]);
+                return;
+            }
+            const dept = departments.find(d => d.id === Number(department));
+            if (!dept) return;
+            
+            try {
+                setIsLoadingCourses(true);
+                const data = await apiService.getCourses(dept.id);
+                setCourses(Array.isArray(data) ? data : []);
+            } catch (err) {
+                console.error('Failed to load courses:', err);
+                setCourses([]);
+            } finally {
+                setIsLoadingCourses(false);
+            }
+        };
+        void loadCourses();
+    }, [department, departments]);
+
+    // Load subjects when course changes
+    useEffect(() => {
+        const loadSubjects = async () => {
+            if (!course) {
+                setSubjects([]);
+                return;
+            }
+            try {
+                setIsLoadingSubjects(true);
+                const data = await apiService.getSubjects({ courseId: course, pageSize: 100 });
+                setSubjects(Array.isArray(data) ? data : []);
+            } catch (err) {
+                console.error('Failed to load subjects:', err);
+                setSubjects([]);
+            } finally {
+                setIsLoadingSubjects(false);
+            }
+        };
+        void loadSubjects();
+    }, [course]);
+
+    // Load topics when subject changes
+    useEffect(() => {
+        const loadTopics = async () => {
+            if (!subject) {
+                setTopics([]);
+                return;
+            }
+            try {
+                setIsLoadingTopics(true);
+                const data = await apiService.getTopics(subject);
+                setTopics(Array.isArray(data) ? data : []);
+            } catch (err) {
+                console.error('Failed to load topics:', err);
+                setTopics([]);
+            } finally {
+                setIsLoadingTopics(false);
+            }
+        };
+        void loadTopics();
+    }, [subject]);
+
+    // Load questions when topic changes
+    useEffect(() => {
+        const loadQuestions = async () => {
+            if (!topic) {
+                setQuestions([]);
+                return;
+            }
+            try {
+                setIsLoadingQuestions(true);
+                const data = await apiService.getQuestionsByTopic(topic);
+                console.log('Loaded questions for topic', topic, ':', data);
+                setQuestions(Array.isArray(data) ? data : []);
+            } catch (err) {
+                console.error('Failed to load questions:', err);
+                setQuestions([]);
+            } finally {
+                setIsLoadingQuestions(false);
+            }
+        };
+        void loadQuestions();
+    }, [topic]);
+
     // --- REFACTORED RESET FUNCTIONS ---
     const resetInputContent = useCallback(() => {
         setQuestionText(''); 
@@ -271,6 +411,7 @@ const TestEncodingAndEditing = () => {
         setChoiceD('');
         setExplanation('');
         setCorrectAnswer(''); 
+        setBloomLevel('');
         setEditingQuestion(null);
         
         // Clear contentEditable divs visually
@@ -289,18 +430,23 @@ const TestEncodingAndEditing = () => {
             }
             return;
         }
+
+        if (item === 'Reports') {
+            const deptCode = getActiveDepartmentCode();
+            navigate(`/test-generation/${deptCode}`);
+            return;
+        }
         
         if (item !== activeTab) {
-            // Note: Filters (subject/topic) are retained if user clicks 'Add Question'
-            // but are cleared when switching to a different section (e.g., Reports, Home)
-            // or if the tab requires clean state (like the previous Encoding/Editing refactoring).
-            // For now, let's keep the filter reset logic simple on tab switch:
+            // Note: Filters are retained if staying in Data Entry, cleared otherwise
             if (!dataEntryItems.includes(item)) {
+                setDepartment('');
+                setCourse('');
                 setSubject('');
-                setTopicDescription('');
+                setTopic('');
             }
             // Always reset encoding/editing state on tab switch
-            setQuestionType(''); 
+            setBloomLevel(''); 
             resetInputContent();
         }
         setActiveTab(item);
@@ -319,6 +465,19 @@ const TestEncodingAndEditing = () => {
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [isMathPickerOpen]);
+
+    // Handle department change - update URL
+    const handleDepartmentChange = (deptId) => {
+        const dept = departments.find(d => d.id === Number(deptId));
+        if (dept) {
+            navigate(`/test-encoding/${dept.code}`);
+            setDepartment(deptId);
+            setCourse('');
+            setSubject('');
+            setTopic('');
+            resetInputContent();
+        }
+    };
 
     const updateActiveCommands = useCallback(() => {
         if (!activeEditableRef.current) {
@@ -536,140 +695,194 @@ const TestEncodingAndEditing = () => {
     
     // Loads question data into input fields
     const handleEditQuestion = (question) => {
-        // Preserve current filter values
-        const currentSubject = question.subject;
-        const currentTopic = question.topic;
-
-        // Clear content state first to prevent brief flicker/mixup
+        // Clear content state first
         resetInputContent(); 
         
-        // FIX: Switch to the 'Test Question Encoding' tab, as this contains the actual
-        // input form for modifying the question content.
+        // Switch to the 'Test Question Encoding' tab
         handleSetActiveTab('Test Question Encoding'); 
         
         // Set the question object currently being edited
         setEditingQuestion(question); 
         
-        // Populate the filter/type fields for the Encoding View
-        setSubject(currentSubject);
-        setTopicDescription(currentTopic);
-        setQuestionType(question.type); // Set cognitive level for the input field
+        // Map backend bloom level to grouped level
+        const backendBloomLevel = question.bloomLevel || '';
+        const groupedBloom = BLOOM_LEVELS.find(bl => bl.backendValues.includes(backendBloomLevel));
+        setBloomLevel(groupedBloom ? groupedBloom.value : ''); 
         
         // Populate the content fields with the question data
-        setQuestionText(question.text); 
-        setChoiceA(question.choiceA); 
-        setChoiceB(question.choiceB); 
-        setChoiceC(question.choiceC); 
-        setChoiceD(question.choiceD); 
-        setCorrectAnswer(question.correctAnswer); 
-        setExplanation(question.explanation); 
+        setQuestionText(question.content || ''); 
+        
+        // Extract options (A, B, C, D) from question.options array
+        if (question.options && Array.isArray(question.options)) {
+            const sortedOptions = question.options.sort((a, b) => a.displayOrder - b.displayOrder);
+            setChoiceA(sortedOptions[0]?.content || '');
+            setChoiceB(sortedOptions[1]?.content || '');
+            setChoiceC(sortedOptions[2]?.content || '');
+            setChoiceD(sortedOptions[3]?.content || '');
+            
+            // Find the correct answer (A, B, C, or D)
+            const correctOption = sortedOptions.find(opt => opt.isCorrect);
+            if (correctOption) {
+                const correctIndex = sortedOptions.indexOf(correctOption);
+                setCorrectAnswer(String.fromCharCode(65 + correctIndex)); // 65 is 'A'
+            }
+        }
+        
+        setExplanation(question.explanation || ''); 
     };
     
-    // Handles both 'Add' and 'Save Edit' while preserving filters for history.
-    const handleAction = () => { 
+    // Delete question handler
+    const handleDeleteQuestion = async (questionId) => {
+        if (!window.confirm('Are you sure you want to delete this question?')) return;
+        
+        try {
+            await apiService.deleteQuestion(questionId);
+            setQuestions(questions.filter(q => q.id !== questionId));
+            alert('Question deleted successfully!');
+        } catch (err) {
+            console.error('Failed to delete question:', err);
+            alert('Failed to delete question. Please try again.');
+        }
+    };
+    
+    // Handles both 'Add' and 'Save Edit' with backend API
+    const handleAction = async () => { 
         // 1. Validation 
-        if (!subject || !topicDescription || !questionType || !questionText || !correctAnswer) { 
-            alert("Fill all required fields (Subject, Topic, Question Type, Question Text, Answer)."); 
+        if (!topic || !bloomLevel || !questionText || !correctAnswer) { 
+            alert("Fill all required fields (Topic, Bloom Level, Question Text, Answer)."); 
             return; 
         }
+        if (!choiceA || !choiceB || !choiceC || !choiceD) {
+            alert('All four choices (A, B, C, D) must be filled.');
+            return;
+        }
+        if (!['A', 'B', 'C', 'D'].includes(correctAnswer.toUpperCase())) {
+            alert('Correct Answer must be A, B, C, or D');
+            return;
+        }
 
-        // Preserve current filter values
-        const currentSubject = subject;
-        const currentTopic = topicDescription;
-        const currentType = questionType;
-        const wasEditing = !!editingQuestion; 
+        const wasEditing = !!editingQuestion;
+        const correctIndex = correctAnswer.toUpperCase().charCodeAt(0) - 65; // A=0, B=1, C=2, D=3
 
-        // 2. Create the new question object / Updated object
-        const newQ = { 
-            text: questionText, 
-            choiceA, 
-            choiceB, 
-            choiceC, 
-            choiceD, 
-            correctAnswer, 
-            explanation, 
-            subject: currentSubject, 
-            topic: currentTopic,     
-            type: currentType, 
-            id: editingQuestion ? editingQuestion.id : Date.now() 
+        // Map grouped bloom level to individual backend value
+        const selectedBloomGroup = BLOOM_LEVELS.find(bl => bl.value === bloomLevel);
+        const backendBloomLevel = selectedBloomGroup 
+            ? selectedBloomGroup.backendValues[Math.floor(Math.random() * selectedBloomGroup.backendValues.length)]
+            : bloomLevel;
+
+        // 2. Create the question payload for the backend
+        const questionData = { 
+            topicId: Number(topic),
+            content: questionText,
+            questionType: 'MultipleChoice',
+            bloomLevel: backendBloomLevel, // Mapped to individual backend enum: Remember, Understand, Apply, Analyze, Evaluate, Create
+            points: 1,
+            displayOrder: 0,
+            options: [
+                { questionId: 0, content: choiceA, isCorrect: correctIndex === 0, displayOrder: 0 },
+                { questionId: 0, content: choiceB, isCorrect: correctIndex === 1, displayOrder: 1 },
+                { questionId: 0, content: choiceC, isCorrect: correctIndex === 2, displayOrder: 2 },
+                { questionId: 0, content: choiceD, isCorrect: correctIndex === 3, displayOrder: 3 }
+            ]
         };
         
-        let updatedQuestions;
-        let alertMessage;
-
-        if (wasEditing) {
-            updatedQuestions = questions.map(q => 
-                q.id === editingQuestion.id ? newQ : q
-            );
-            alertMessage = `Question ID ${editingQuestion.id} saved successfully!`;
-        } else {
-            updatedQuestions = [...questions, newQ];
-            alertMessage = `Question added successfully!`;
+        // Debug logging
+        console.log('🔍 Sending question data:', JSON.stringify(questionData, null, 2));
+        console.log('📋 Topic ID:', topic, 'Bloom Level:', bloomLevel);
+        
+        try {
+            let savedQuestion;
+            if (wasEditing) {
+                // Update existing question
+                console.log('✏️ Updating question ID:', editingQuestion.id);
+                savedQuestion = await apiService.updateQuestion(editingQuestion.id, questionData);
+                setQuestions(questions.map(q => q.id === editingQuestion.id ? savedQuestion : q));
+                alert(`Question ID ${editingQuestion.id} updated successfully!`);
+            } else {
+                // Create new question
+                console.log('➕ Creating new question...');
+                savedQuestion = await apiService.createQuestion(questionData);
+                setQuestions([...questions, savedQuestion]);
+                alert('Question added successfully!');
+            }
+            
+            console.log('✅ Saved question:', savedQuestion);
+            
+            // 3. Reset content fields but keep filters
+            resetInputContent(); 
+            
+            // 4. Ensure we are in the Encoding tab to show the new history
+            setActiveTab('Test Question Encoding'); 
+        } catch (err) {
+            console.error('❌ Failed to save question:', err);
+            console.error('📄 Error response:', err.response?.data);
+            console.error('📄 Error status:', err.response?.status);
+            
+            const errorData = err.response?.data;
+            const errorMessage = errorData?.message 
+                || errorData?.title 
+                || err.message 
+                || 'Unknown error';
+            
+            const errorDetails = errorData?.details 
+                ? `\n\nDetails:\n${errorData.details}` 
+                : '';
+            
+            alert(`Failed to save question:\n${errorMessage}${errorDetails}\n\nCheck console for full details.`);
         }
-
-        setQuestions(updatedQuestions);
-        
-        // 3. Reset ONLY the content fields and editing status
-        resetInputContent(); 
-        
-        // 4. Restore preserved filters (Subject, Topic, Type)
-        setSubject(currentSubject);
-        setTopicDescription(currentTopic);
-        setQuestionType(currentType); 
-        
-        // 5. Ensure we are in the Encoding tab to show the new history
-        setActiveTab('Test Question Encoding'); 
-        
-        alert(alertMessage);
     };
     
-    // Filtering based ONLY on Subject and Topic
-    const getFilteredQuestions = useCallback(() => {
-        if (!subject || !topicDescription) {
-            return []; 
-        }
-        
-        return questions.filter(q => 
-            q.subject === subject &&
-            q.topic === topicDescription
-        );
-    }, [questions, subject, topicDescription]);
-
-    const filteredQuestions = getFilteredQuestions();
-    const isFilterComplete = subject && topicDescription; // Only need Subject and Topic
+    // Filter questions - all questions are already filtered by topic from useEffect
+    const filteredQuestions = questions;
+    const isFilterComplete = topic; // Need topic selected
     
-    // Modified computeDataSummary to calculate based on the provided array (filteredQuestions)
+    // Modified computeDataSummary to calculate based on Bloom levels
     const computeDataSummary = useCallback((targetQuestions) => {
         const totalQuestions = targetQuestions.length;
-        const counts = { 'Remembering and Understanding':0, 'Applying and Analyzing':0, 'Evaluation and Creating':0 };
+        const counts = { 
+            'Lower': 0,  // Remember, Understand
+            'Middle': 0,  // Apply, Analyze
+            'Higher': 0   // Evaluate, Create
+        };
         
-        targetQuestions.forEach(q=>{ 
-            if(counts.hasOwnProperty(q.type)) counts[q.type]++; 
+        targetQuestions.forEach(q => {
+            const level = q.bloomLevel || '';
+            if (['Remember', 'Understand'].includes(level)) {
+                counts['Lower']++;
+            } else if (['Apply', 'Analyze'].includes(level)) {
+                counts['Middle']++;
+            } else if (['Evaluate', 'Create'].includes(level)) {
+                counts['Higher']++;
+            }
         });
         
-        const getPercent = (c)=>totalQuestions>0?((c/totalQuestions)*100).toFixed(1):0;
+        const getPercent = (c) => totalQuestions > 0 ? ((c / totalQuestions) * 100).toFixed(1) : 0;
         const bloomData = [
-            {level:'Remembering and Understanding', count:counts['Remembering and Understanding'], achieved:getPercent(counts['Remembering and Understanding']), target:30},
-            {level:'Applying and Analyzing', count:counts['Applying and Analyzing'], achieved:getPercent(counts['Applying and Analyzing']), target:30},
-            {level:'Evaluation and Creating', count:counts['Evaluation and Creating'], achieved:getPercent(counts['Evaluation and Creating']), target:40},
+            { level: 'Lower Order (Remember/Understand)', count: counts['Lower'], achieved: getPercent(counts['Lower']), target: 30 },
+            { level: 'Middle Order (Apply/Analyze)', count: counts['Middle'], achieved: getPercent(counts['Middle']), target: 30 },
+            { level: 'Higher Order (Evaluate/Create)', count: counts['Higher'], achieved: getPercent(counts['Higher']), target: 40 },
         ];
         return { totalQuestions, bloomData };
     }, []);
 
     const summary = computeDataSummary(filteredQuestions);
     
-    // Group questions by Type for display
+    // Group questions by Bloom Level for display (map backend values to grouped values)
     const groupedQuestions = filteredQuestions.reduce((acc, question) => {
-        const type = question.type;
-        if (!acc[type]) {
-            acc[type] = [];
+        const backendLevel = question.bloomLevel || 'Unknown';
+        // Find which group this backend level belongs to
+        const group = BLOOM_LEVELS.find(bl => bl.backendValues.includes(backendLevel));
+        const groupValue = group ? group.value : 'Unknown';
+        
+        if (!acc[groupValue]) {
+            acc[groupValue] = [];
         }
-        acc[type].push(question);
+        acc[groupValue].push(question);
         return acc;
     }, {});
     
-    // Sort keys based on MOCK_QUESTION_TYPES order
-    const sortedQuestionTypes = MOCK_QUESTION_TYPES.filter(type => groupedQuestions.hasOwnProperty(type));
+    // Sort keys based on BLOOM_LEVELS order
+    const sortedBloomLevels = BLOOM_LEVELS.map(bl => bl.value).filter(level => groupedQuestions.hasOwnProperty(level));
 
 
     // -----------------
@@ -704,10 +917,11 @@ const TestEncodingAndEditing = () => {
                             dropdownItems={dataEntryItems}
                             onSelect={(item) => {
                                 handleSetActiveTab(item);
-                                if (item === 'Course - Topic') {
-                                    navigate('/course-topic/1');
+                                const deptCode = getActiveDepartmentCode();
+                                if (item === 'Program - Topic') {
+                                    navigate(`/course-topic/${deptCode}`);
                                 } else if (item === 'Test Question Encoding' || item === 'Test Question Editing') {
-                                    navigate('/test-encoding');
+                                    navigate(`/test-encoding/${deptCode}`);
                                 }
                             }}
                         />
@@ -737,55 +951,75 @@ const TestEncodingAndEditing = () => {
                 </div>
 
                 <div className="main-card">
-                    <HeaderTitleBlock activeTab={activeTab} isDarkMode={isDarkMode} />
+                    <HeaderTitleBlock 
+                        activeTab={activeTab} 
+                        isDarkMode={isDarkMode} 
+                        selectedDepartment={departments.find(d => d.id === Number(department))}
+                    />
                     
                     {/* ###################################################### */}
                     {/* ################## ENCODING VIEW ##################### */}
                     {/* ###################################################### */}
                     {activeTab === 'Test Question Encoding' && (
                         <>
-                            {/* 🚀 1. 3-COLUMN SELECTION FIELDS for ENCODING (Subject, Topic, Type) 🚀 */}
+                            {/* Selection Fields for ENCODING (Department, Course, Subject, Topic, Bloom Level) */}
                             <div className="selection-fields encoding-filter-block">
+                                {/* Department */}
+                                <div className="input-group">
+                                    <label htmlFor="department">Department</label>
+                                    <select id="department" value={department} onChange={e=>handleDepartmentChange(e.target.value)}>
+                                        <option value="" disabled>Select Department</option>
+                                        {departments.map(d=><option key={d.id} value={d.id}>{d.code} - {d.name}</option>)}
+                                    </select>
+                                </div>
+                                {/* Program */}
+                                <div className="input-group">
+                                    <label htmlFor="course">Program</label>
+                                    <select id="course" value={course} onChange={e=>{setCourse(e.target.value); setSubject(''); setTopic(''); resetInputContent();}} disabled={!department || isLoadingCourses}>
+                                        <option value="" disabled>{isLoadingCourses ? "Loading..." : department ? "Select Program" : "Select Department first"}</option>
+                                        {courses.map(c=><option key={c.id} value={c.id}>{c.code} - {c.name}</option>)}
+                                    </select>
+                                </div>
                                 {/* Subject */}
                                 <div className="input-group">
                                     <label htmlFor="subject">Subject</label>
-                                    <select id="subject" value={subject} onChange={e=>{setSubject(e.target.value); setTopicDescription(''); resetInputContent();}}>
-                                        <option value="" disabled>Select Subject Code</option>
-                                        {MOCK_SUBJECTS.map(s=><option key={s.code} value={s.code}>{s.code} - {s.name}</option>)}
+                                    <select id="subject" value={subject} onChange={e=>{setSubject(e.target.value); setTopic(''); resetInputContent();}} disabled={!course || isLoadingSubjects}>
+                                        <option value="" disabled>{isLoadingSubjects ? "Loading..." : course ? "Select Subject" : "Select Program first"}</option>
+                                        {subjects.map(s=><option key={s.id} value={s.id}>{s.code} - {s.name}</option>)}
                                     </select>
                                 </div>
-                                {/* Topic Description */}
+                                {/* Topic */}
                                 <div className="input-group">
-                                    <label htmlFor="topicDesc">Topic Description</label>
-                                    <select id="topicDesc" value={topicDescription} onChange={e=>{setTopicDescription(e.target.value); resetInputContent();}} disabled={!subject}>
-                                        <option value="" disabled>{subject?"Select Topic from list":"Select Subject first"}</option>
-                                        {MOCK_TOPICS.filter(t=>t.subjectCode===subject).map(t=><option key={t.id} value={t.topic}>{t.topic}</option>)}
+                                    <label htmlFor="topic">Topic</label>
+                                    <select id="topic" value={topic} onChange={e=>{setTopic(e.target.value); resetInputContent();}} disabled={!subject || isLoadingTopics}>
+                                        <option value="" disabled>{isLoadingTopics ? "Loading..." : subject ? "Select Topic" : "Select Subject first"}</option>
+                                        {topics.map(t=><option key={t.id} value={t.id}>{t.title}</option>)}
                                     </select>
                                 </div>
-                                {/* Type of Question (Cognitive Level) - Now in the 3-column grid for clarity */}
+                                {/* Bloom Level */}
                                 <div className="input-group">
-                                    <label htmlFor="questionType">Type of Question (Cognitive Level)</label>
-                                    <select id="questionType" value={questionType} onChange={e=>setQuestionType(e.target.value)}>
-                                        <option value="" disabled>Select Cognitive Level</option>
-                                        {MOCK_QUESTION_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
+                                    <label htmlFor="bloomLevel">Bloom Level</label>
+                                    <select id="bloomLevel" value={bloomLevel} onChange={e=>setBloomLevel(e.target.value)}>
+                                        <option value="" disabled>Select Bloom Level</option>
+                                        {BLOOM_LEVELS.map(bl=><option key={bl.id} value={bl.value}>{bl.label}</option>)}
                                     </select>
                                 </div>
                             </div>
                             
-                            <hr className="section-separator" /> {/* Separator after the 3-column selector */}
+                            <hr className="section-separator" />
 
                             {/* Editing Notification */}
                             {editingQuestion && (
                                 <div className="editing-notification">
                                     <Edit2 size={20} style={{ marginRight: '10px' }} />
-                                    You are currently **EDITING** Question ID: **{editingQuestion.id}** for **{subject}** - **{topicDescription}** ({questionType}).
+                                    You are currently **EDITING** Question ID: **{editingQuestion.id}**
                                 </div>
                             )}
 
-                            {/* Data Summary - ONLY SHOW IF SUBJECT AND TOPIC ARE SELECTED, and uses FILTERED data */}
+                            {/* Data Summary - ONLY SHOW IF TOPIC IS SELECTED, and uses FILTERED data */}
                             {isFilterComplete ? (
                                 <div className="data-summary-block separate-blooms-view">
-                                    <h3 className="data-summary-heading">Data Summary for **{topicDescription}**</h3> 
+                                    <h3 className="data-summary-heading">Data Summary for **{topics.find(t => t.id === Number(topic))?.title || 'Selected Topic'}**</h3> 
                                     <div className="summary-details-grid three-col-blooms">
                                         <div className="summary-card total-stats">
                                             <h4>Total Encoding Status</h4>
@@ -809,7 +1043,7 @@ const TestEncodingAndEditing = () => {
                                 </div>
                             ) : (
                                 <div className="filter-prompt data-summary-prompt">
-                                    <p>Please select a **Subject** and **Topic Description** above to start encoding and view the current **Data Summary**.</p>
+                                    <p>Please select all filters (Department, Program, Subject, Topic) above to start encoding and view the current **Data Summary**.</p>
                                 </div>
                             )}
                             
@@ -901,47 +1135,58 @@ const TestEncodingAndEditing = () => {
                             </div>
                             
                             {/* ############ HISTORY SECTION ############ */}
-                            {isFilterComplete && sortedQuestionTypes.length > 0 && (
+                            {isFilterComplete && sortedBloomLevels.length > 0 && (
                                 <div className="history-section">
                                     <hr className="section-separator" />
                                     <h3 className="editing-list-heading history-heading">
-                                        Recently Encoded Questions for **{subject}** - **{topicDescription}**
+                                        Recently Encoded Questions for **{topics.find(t => t.id === Number(topic))?.title || 'Selected Topic'}**
                                     </h3>
                                     
-                                    {/* Loop through sorted question types (groups) */}
-                                    {sortedQuestionTypes.map(type => (
-                                        <div key={type} className="question-group-section">
-                                            <h4 className="question-type-subheader type-display-box">{type} <span className="question-count">({groupedQuestions[type].length} questions)</span></h4>
-                                            
-                                            <div className="question-editing-list">
-                                                <div className="history-table-container">
-                                                    <table className="history-table">
-                                                        <thead>
-                                                            <tr><th>#</th><th>Question</th><th>Answer</th><th>Actions</th></tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {groupedQuestions[type].map((q, idx) => (
-                                                                <tr key={q.id}>
-                                                                    <td>{idx + 1}</td>
-                                                                    <td>{q.text.replace(/<[^>]*>?/gm, '').substring(0, 70) + '...'}</td>
-                                                                    <td className="answer-cell">{q.correctAnswer}</td>
-                                                                    <td className="actions-cell">
-                                                                        <button 
-                                                                            className="action-edit" 
-                                                                            title="Edit" 
-                                                                            onClick={() => handleEditQuestion(q)}>
-                                                                            <Edit2 size={16} />
-                                                                        </button>
-                                                                        <button className="action-delete" title="Delete" onClick={() => alert(`Delete QID: ${q.id}`)}><Trash2 size={16} /></button>
-                                                                    </td>
-                                                                </tr>
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
+                                    {/* Loop through sorted Bloom levels (groups) */}
+                                    {sortedBloomLevels.map(level => {
+                                        const levelLabel = BLOOM_LEVELS.find(bl => bl.value === level)?.label || level;
+                                        return (
+                                            <div key={level} className="question-group-section">
+                                                <h4 className="question-type-subheader type-display-box">{levelLabel} <span className="question-count">({groupedQuestions[level].length} questions)</span></h4>
+                                                
+                                                <div className="question-editing-list">
+                                                    <div className="history-table-container">
+                                                        <table className="history-table">
+                                                            <thead>
+                                                                <tr><th>#</th><th>Question</th><th>Actions</th></tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {groupedQuestions[level].map((q, idx) => {
+                                                                    const correctOption = q.options?.find(opt => opt.isCorrect);
+                                                                    const correctIndex = q.options?.indexOf(correctOption);
+                                                                    const correctLetter = correctIndex !== undefined ? String.fromCharCode(65 + correctIndex) : '?';
+                                                                    
+                                                                    return (
+                                                                        <tr key={q.id}>
+                                                                            <td>{idx + 1}</td>
+                                                                            <td>
+                                                                                <div>{(q.content || '').replace(/<[^>]*>?/gm, '').substring(0, 70)}...</div>
+                                                                                <small style={{color: '#666'}}>Answer: {correctLetter}</small>
+                                                                            </td>
+                                                                            <td className="actions-cell">
+                                                                                <button 
+                                                                                    className="action-edit" 
+                                                                                    title="Edit" 
+                                                                                    onClick={() => handleEditQuestion(q)}>
+                                                                                    <Edit2 size={16} />
+                                                                                </button>
+                                                                                <button className="action-delete" title="Delete" onClick={() => handleDeleteQuestion(q.id)}><Trash2 size={16} /></button>
+                                                                            </td>
+                                                                        </tr>
+                                                                    );
+                                                                })}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             )}
                             {/* ########## END HISTORY SECTION ########## */}
@@ -954,80 +1199,109 @@ const TestEncodingAndEditing = () => {
                     {/* ###################################################### */}
                     {activeTab === 'Test Question Editing' && (
                         <div className="editing-view-container">
-                            {/* 🎯 2. 2-COLUMN SELECTION FIELDS for FILTERING (Subject, Topic ONLY) 🎯 */}
+                            {/* Selection Fields for FILTERING (Department, Course, Subject, Topic) */}
                             <div className="selection-fields two-col-filter filter-block-top">
                                 <div className="input-group">
-                                    <label htmlFor="subject">Subject</label>
-                                    <select id="subject" value={subject} onChange={e=>{setSubject(e.target.value); setTopicDescription(''); resetInputContent();}}>
-                                        <option value="" disabled>Select Subject Code</option>
-                                        {MOCK_SUBJECTS.map(s=><option key={s.code} value={s.code}>{s.code} - {s.name}</option>)}
+                                    <label htmlFor="department">Department</label>
+                                    <select id="department" value={department} onChange={e=>handleDepartmentChange(e.target.value)}>
+                                        <option value="" disabled>Select Department</option>
+                                        {departments.map(d=><option key={d.id} value={d.id}>{d.code} - {d.name}</option>)}
                                     </select>
                                 </div>
                                 <div className="input-group">
-                                    <label htmlFor="topicDesc">Topic Description</label>
-                                    <select id="topicDesc" value={topicDescription} onChange={e=>{setTopicDescription(e.target.value); resetInputContent();}} disabled={!subject}>
-                                        <option value="" disabled>{subject?"Select Topic from list":"Select Subject first"}</option>
-                                        {MOCK_TOPICS.filter(t=>t.subjectCode===subject).map(t=><option key={t.id} value={t.topic}>{t.topic}</option>)}
+                                    <label htmlFor="course">Program</label>
+                                    <select id="course" value={course} onChange={e=>{setCourse(e.target.value); setSubject(''); setTopic(''); resetInputContent();}} disabled={!department || isLoadingCourses}>
+                                        <option value="" disabled>{isLoadingCourses ? "Loading..." : department ? "Select Program" : "Select Department first"}</option>
+                                        {courses.map(c=><option key={c.id} value={c.id}>{c.code} - {c.name}</option>)}
+                                    </select>
+                                </div>
+                                <div className="input-group">
+                                    <label htmlFor="subject">Subject</label>
+                                    <select id="subject" value={subject} onChange={e=>{setSubject(e.target.value); setTopic(''); resetInputContent();}} disabled={!course || isLoadingSubjects}>
+                                        <option value="" disabled>{isLoadingSubjects ? "Loading..." : course ? "Select Subject" : "Select Program first"}</option>
+                                        {subjects.map(s=><option key={s.id} value={s.id}>{s.code} - {s.name}</option>)}
+                                    </select>
+                                </div>
+                                <div className="input-group">
+                                    <label htmlFor="topic">Topic</label>
+                                    <select id="topic" value={topic} onChange={e=>{setTopic(e.target.value); resetInputContent();}} disabled={!subject || isLoadingTopics}>
+                                        <option value="" disabled>{isLoadingTopics ? "Loading..." : subject ? "Select Topic" : "Select Subject first"}</option>
+                                        {topics.map(t=><option key={t.id} value={t.id}>{t.title}</option>)}
                                     </select>
                                 </div>
                             </div>
                             
-                            <hr className="section-separator" /> {/* Separator after the 2-column filter */}
+                            <hr className="section-separator" />
                             
                             {isFilterComplete ? (
                                 // --- STAGE 2: Filter is complete, show the grouped list ---
                                 <>
                                     {/* Filter Display Box */}
                                     <h3 className="editing-list-heading filter-display-box">
-                                        Questions Encoded for: **{subject}** - **{topicDescription}**
+                                        Questions Encoded for: **{topics.find(t => t.id === Number(topic))?.title || 'Selected Topic'}**
                                     </h3>
                                     
-                                    {sortedQuestionTypes.length === 0 ? (
+                                    {isLoadingQuestions ? (
+                                        <div className="filter-prompt">
+                                            <p>Loading questions...</p>
+                                        </div>
+                                    ) : sortedBloomLevels.length === 0 ? (
                                         <div className="filter-prompt no-questions no-data">
-                                            <p>No questions found for the selected Subject and Topic Description.</p>
+                                            <p>No questions found for the selected Topic.</p>
                                         </div>
                                     ) : (
-                                        // Loop through sorted question types (groups)
-                                        sortedQuestionTypes.map(type => (
-                                            <div key={type} className="question-group-section">
-                                                {/* Type Display Box (Used for visual grouping) */}
-                                                <h4 className="question-type-subheader type-display-box">{type} <span className="question-count">({groupedQuestions[type].length} questions)</span></h4>
-                                                
-                                                <div className="question-editing-list">
-                                                    <div className="history-table-container">
-                                                        <table className="history-table">
-                                                            <thead>
-                                                                <tr><th>#</th><th>Question</th><th>Answer</th><th>Actions</th></tr>
-                                                            </thead>
-                                                            <tbody>
-                                                                {groupedQuestions[type].map((q, idx) => (
-                                                                    <tr key={q.id}>
-                                                                        <td>{idx + 1}</td>
-                                                                        <td>{q.text.replace(/<[^>]*>?/gm, '').substring(0, 70) + '...'}</td>
-                                                                        <td className="answer-cell">{q.correctAnswer}</td>
-                                                                        <td className="actions-cell">
-                                                                            <button 
-                                                                                className="action-edit" 
-                                                                                title="Edit" 
-                                                                                onClick={() => handleEditQuestion(q)}>
-                                                                                <Edit2 size={16} />
-                                                                            </button>
-                                                                            <button className="action-delete" title="Delete" onClick={() => alert(`Delete QID: ${q.id}`)}><Trash2 size={16} /></button>
-                                                                        </td>
-                                                                    </tr>
-                                                                ))}
-                                                            </tbody>
-                                                        </table>
+                                        // Loop through sorted Bloom levels (groups)
+                                        sortedBloomLevels.map(level => {
+                                            const levelLabel = BLOOM_LEVELS.find(bl => bl.value === level)?.label || level;
+                                            return (
+                                                <div key={level} className="question-group-section">
+                                                    {/* Bloom Level Display Box */}
+                                                    <h4 className="question-type-subheader type-display-box">{levelLabel} <span className="question-count">({groupedQuestions[level].length} questions)</span></h4>
+                                                    
+                                                    <div className="question-editing-list">
+                                                        <div className="history-table-container">
+                                                            <table className="history-table">
+                                                                <thead>
+                                                                    <tr><th>#</th><th>Question</th><th>Actions</th></tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {groupedQuestions[level].map((q, idx) => {
+                                                                        const correctOption = q.options?.find(opt => opt.isCorrect);
+                                                                        const correctIndex = q.options?.indexOf(correctOption);
+                                                                        const correctLetter = correctIndex !== undefined ? String.fromCharCode(65 + correctIndex) : '?';
+                                                                        
+                                                                        return (
+                                                                            <tr key={q.id}>
+                                                                                <td>{idx + 1}</td>
+                                                                                <td>
+                                                                                    <div>{(q.content || '').replace(/<[^>]*>?/gm, '').substring(0, 70)}...</div>
+                                                                                    <small style={{color: '#666'}}>Answer: {correctLetter}</small>
+                                                                                </td>
+                                                                                <td className="actions-cell">
+                                                                                    <button 
+                                                                                        className="action-edit" 
+                                                                                        title="Edit" 
+                                                                                        onClick={() => handleEditQuestion(q)}>
+                                                                                        <Edit2 size={16} />
+                                                                                    </button>
+                                                                                    <button className="action-delete" title="Delete" onClick={() => handleDeleteQuestion(q.id)}><Trash2 size={16} /></button>
+                                                                                </td>
+                                                                            </tr>
+                                                                        );
+                                                                    })}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        ))
+                                            );
+                                        })
                                     )}
                                 </>
                             ) : (
                                 // --- STAGE 1: Filter is incomplete, show a prompt ---
                                 <div className="filter-prompt">
-                                    <p>Please select a **Subject** and **Topic Description** above to view and edit questions.</p>
+                                    <p>Please select all filters (Department, Program, Subject, Topic) above to view and edit questions.</p>
                                 </div>
                             )}
                         </div>

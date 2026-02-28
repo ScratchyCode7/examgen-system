@@ -71,7 +71,7 @@ const Dashboard = () => {
     navigate('/login');
   };
 
-  const dataEntryItems = ["Course - Topic", "Test Encoding", "Test Question Editing"];
+  const dataEntryItems = ["Program - Topic", "Test Encoding", "Test Question Editing"];
   const isDataEntryActive = dataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
 
   return (
@@ -96,16 +96,18 @@ const Dashboard = () => {
               dropdownItems={dataEntryItems}
               onSelect={(item) => {
                 setActiveTab(item);
-                if (item === 'Course - Topic') {
+                if (item === 'Program - Topic') {
                   const firstDept = departments?.find(d => d.code !== 'IT') || departments?.[0];
                   const code = firstDept?.code || 'IT';
                   navigate(`/course-topic/${code}`);
                 } else if (item === 'Test Encoding' || item === 'Test Question Editing' || item === 'Test Question Encoding') {
-                  navigate('/test-encoding');
+                  const firstDept = departments?.find(d => d.code !== 'IT') || departments?.[0];
+                  const code = firstDept?.code || 'CCS';
+                  navigate(`/test-encoding/${code}`);
                 }
               }}
             />
-            <NavItem icon={BookOpen} label="Reports" isActive={activeTab === 'Reports'} onClick={() => setActiveTab('Reports')} />
+            <NavItem icon={BookOpen} label="Reports" isActive={activeTab === 'Reports'} onClick={() => { setActiveTab('Reports'); navigate('/test-generation'); }} />
           </div>
 
           <div className="nav-right" ref={userMenuRef}>
@@ -137,7 +139,7 @@ const Dashboard = () => {
           <div className="search-and-view">
             <div className="search-bar">
               <Search className="search-icon" />
-              <input type="text" placeholder="Search Program/Course..." />
+              <input type="text" placeholder="Search Programs..." />
             </div>
 
             <div className="view-toggle">

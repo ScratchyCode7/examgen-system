@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json.Serialization;
 using Databank.Database;
 using Databank.Entities;
 using Databank.Extensions;
@@ -51,6 +52,8 @@ builder.Services.AddSwaggerGen();
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+    // Allow enums to be deserialized from both integer values and string names
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
 });
 
 builder.Services.AddCors(options =>
@@ -72,8 +75,20 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
+// Enable CORS for local frontends before other middleware short-circuits
 app.UseCors("ReactFrontend");
+
+// Apply migrations at startup so schema stays current
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    dbContext.Database.Migrate();
+    Console.WriteLine("✓ Checked for pending migrations on startup");
+}
+
+// Global exception handler
+app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
+
 app.UseAuthentication();
 app.UseAuthorization();
 

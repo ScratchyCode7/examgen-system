@@ -14,8 +14,11 @@ public sealed class GenerateTestEndpoint : IEndpoint
                 AppDbContext dbContext,
                 CancellationToken ct) =>
         {
-            var subjectExists = await dbContext.Subjects.AnyAsync(s => s.Id == request.SubjectId, ct);
-            if (!subjectExists)
+            var subject = await dbContext.Subjects
+                .Include(s => s.Course)
+                    .ThenInclude(c => c.Department)
+                .FirstOrDefaultAsync(s => s.Id == request.SubjectId, ct);
+            if (subject is null)
             {
                 return TypedResults.BadRequest("Subject not found.");
             }
@@ -49,10 +52,19 @@ public sealed class GenerateTestEndpoint : IEndpoint
                 .Take(request.QuestionCount)
                 .ToList();
 
+            // Build signature for reproducibility
+            var signature = TestSignatureHelper.BuildSignature(selectedQuestions.Select((q, index) => (q.Id, index)));
+            var examType = request.ExamType ?? "Generated";
+            var semester = request.Semester ?? string.Empty;
+            var schoolYear = request.SchoolYear ?? string.Empty;
+            var setLabel = request.SetLabel ?? string.Empty;
+
             // Create the test
             var test = new Test
             {
                 SubjectId = request.SubjectId,
+                CourseId = subject.CourseId,
+                DepartmentId = subject.Course?.DepartmentId,
                 Title = request.Title,
                 Description = request.Description ?? $"Generated test with {request.QuestionCount} questions",
                 DurationMinutes = request.DurationMinutes,
@@ -61,6 +73,11 @@ public sealed class GenerateTestEndpoint : IEndpoint
                 IsPublished = request.IsPublished,
                 PublishedAt = request.IsPublished ? DateTime.UtcNow : null,
                 AvailableFrom = request.AvailableFrom ?? DateTime.UtcNow,
+                ExamType = examType,
+                Semester = semester,
+                SchoolYear = schoolYear,
+                SetLabel = setLabel,
+                QuestionSignature = signature,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
@@ -97,7 +114,11 @@ public sealed record GenerateTestRequest(
     int DurationMinutes,
     bool IsPublished,
     DateTime? AvailableFrom,
-    BloomLevel? BloomLevel
+    BloomLevel? BloomLevel,
+    string? ExamType = null,
+    string? Semester = null,
+    string? SchoolYear = null,
+    string? SetLabel = null
 );
 
 

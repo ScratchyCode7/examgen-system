@@ -21,7 +21,10 @@ public sealed class GetQuestionsEndpoint : IEndpoint
                 CancellationToken ct = default) =>
         {
             var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
-            var query = dbContext.Questions.AsNoTracking();
+            
+            IQueryable<Question> query = dbContext.Questions
+                .AsNoTracking()
+                .Include(q => q.Options);
 
             if (topicId.HasValue)
             {

@@ -35,9 +35,19 @@ public sealed class LoggingService : ILoggingService
 
     private async Task LogAsync(string? userId, string category, string action, string? details, string severity)
     {
+        var userGuid = userId != null && Guid.TryParse(userId, out var guid) ? guid : (Guid?)null;
+        var departmentId = await ResolveDepartmentIdAsync(userGuid);
+
+        if (departmentId is null)
+        {
+            // No departments available yet; skip logging to avoid FK violations
+            return;
+        }
+
         var log = new ActivityLog
         {
-            UserId = userId != null && Guid.TryParse(userId, out var guid) ? guid : null,
+            DepartmentId = departmentId.Value,
+            UserId = userGuid,
             Category = category,
             Action = action,
             Details = details,
@@ -47,6 +57,29 @@ public sealed class LoggingService : ILoggingService
 
         _dbContext.ActivityLogs.Add(log);
         await _dbContext.SaveChangesAsync();
+    }
+
+    private async Task<int?> ResolveDepartmentIdAsync(Guid? userId)
+    {
+        if (userId.HasValue)
+        {
+            var userDepartmentId = await _dbContext.Users
+                .AsNoTracking()
+                .Where(u => u.UserId == userId.Value)
+                .Select(u => (int?)u.DepartmentId)
+                .FirstOrDefaultAsync();
+
+            if (userDepartmentId.HasValue)
+            {
+                return userDepartmentId.Value;
+            }
+        }
+
+        return await _dbContext.Departments
+            .AsNoTracking()
+            .OrderBy(d => d.Id)
+            .Select(d => (int?)d.Id)
+            .FirstOrDefaultAsync();
     }
 }
 

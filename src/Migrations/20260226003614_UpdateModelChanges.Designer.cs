@@ -3,6 +3,7 @@ using System;
 using Databank.Database;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace src.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260226003614_UpdateModelChanges")]
+    partial class UpdateModelChanges
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -327,9 +330,6 @@ namespace src.Migrations
                     b.Property<DateTime?>("AvailableTo")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int?>("CourseId")
-                        .HasColumnType("integer");
-
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
@@ -337,9 +337,6 @@ namespace src.Migrations
 
                     b.Property<Guid?>("CreatedByUserId")
                         .HasColumnType("uuid");
-
-                    b.Property<int?>("DepartmentId")
-                        .HasColumnType("integer");
 
                     b.Property<string>("Description")
                         .HasMaxLength(2000)
@@ -349,10 +346,6 @@ namespace src.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasDefaultValue(60);
-
-                    b.Property<string>("ExamType")
-                        .IsRequired()
-                        .HasColumnType("text");
 
                     b.Property<string>("GenerationNotes")
                         .HasMaxLength(1000)
@@ -365,25 +358,6 @@ namespace src.Migrations
 
                     b.Property<DateTime?>("PublishedAt")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("QuestionSignature")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("SchoolYear")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Semester")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("SetLabel")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("SpecificationSnapshot")
-                        .HasColumnType("text");
 
                     b.Property<int>("SubjectId")
                         .HasColumnType("integer");
@@ -410,11 +384,7 @@ namespace src.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CourseId");
-
                     b.HasIndex("CreatedByUserId");
-
-                    b.HasIndex("DepartmentId");
 
                     b.HasIndex("SubjectId");
 
@@ -636,18 +606,10 @@ namespace src.Migrations
 
             modelBuilder.Entity("Databank.Entities.Test", b =>
                 {
-                    b.HasOne("Databank.Entities.Course", "Course")
-                        .WithMany()
-                        .HasForeignKey("CourseId");
-
                     b.HasOne("Databank.Entities.User", "CreatedByUser")
                         .WithMany()
                         .HasForeignKey("CreatedByUserId")
                         .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("Databank.Entities.Department", "Department")
-                        .WithMany()
-                        .HasForeignKey("DepartmentId");
 
                     b.HasOne("Databank.Entities.Subject", "Subject")
                         .WithMany("Tests")
@@ -655,11 +617,7 @@ namespace src.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("Course");
-
                     b.Navigation("CreatedByUser");
-
-                    b.Navigation("Department");
 
                     b.Navigation("Subject");
                 });

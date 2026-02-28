@@ -9,15 +9,18 @@ public sealed class GlobalExceptionHandlerMiddleware
     private readonly RequestDelegate _next;
     private readonly ILogger<GlobalExceptionHandlerMiddleware> _logger;
     private readonly IServiceScopeFactory _serviceScopeFactory;
+    private readonly IWebHostEnvironment _environment;
 
     public GlobalExceptionHandlerMiddleware(
         RequestDelegate next,
         ILogger<GlobalExceptionHandlerMiddleware> logger,
-        IServiceScopeFactory serviceScopeFactory)
+        IServiceScopeFactory serviceScopeFactory,
+        IWebHostEnvironment environment)
     {
         _next = next;
         _logger = logger;
         _serviceScopeFactory = serviceScopeFactory;
+        _environment = environment;
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -37,6 +40,16 @@ public sealed class GlobalExceptionHandlerMiddleware
     private async Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
         context.Response.ContentType = "application/json";
+        
+        // Get the root cause (innermost exception)
+        var innerException = exception;
+        while (innerException.InnerException != null)
+        {
+            innerException = innerException.InnerException;
+        }
+        
+        _logger.LogError(exception, "Exception: {Message}. Inner: {InnerMessage}", 
+            exception.Message, innerException.Message);
         
         var response = exception switch
         {
@@ -61,8 +74,11 @@ public sealed class GlobalExceptionHandlerMiddleware
             _ => new ErrorResponse
             {
                 StatusCode = (int)HttpStatusCode.InternalServerError,
-                Message = "An error occurred while processing your request.",
-                Error = "InternalServerError"
+                Message = _environment.IsDevelopment() 
+                    ? $"{exception.Message}\n\nInner Exception: {innerException.Message}" 
+                    : "An error occurred while processing your request.",
+                Error = "InternalServerError",
+                Details = _environment.IsDevelopment() ? innerException.StackTrace : null
             }
         };
 
@@ -103,6 +119,7 @@ public sealed class GlobalExceptionHandlerMiddleware
         public required int StatusCode { get; init; }
         public required string Message { get; init; }
         public required string Error { get; init; }
+        public string? Details { get; init; }
     }
 }
 

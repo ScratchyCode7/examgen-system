@@ -16,14 +16,14 @@ import '../styles/CourseTopic.css';
 import TDBLogo from '../assets/TDB logo.png';
 import UPHSL from '../assets/uphsl.png';
 import DEPARTMENT_LOGOS from '../constants/departmentLogos';
-const dataEntryItems = ["Course - Topic", "Test Encoding", "Test Question Editing"];
+const dataEntryItems = ["Program - Topic", "Test Encoding", "Test Question Editing"];
 
 const CourseTopic = () => {
   const { user, logout } = useAuth();
   const { isDarkMode, toggleDarkMode } = useTheme();
   const navigate = useNavigate();
   const { departmentCode } = useParams();
-  const [activeTab, setActiveTab] = useState('Course - Topic');
+  const [activeTab, setActiveTab] = useState('Program - Topic');
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const userMenuRef = useRef(null);
@@ -45,7 +45,20 @@ const CourseTopic = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Topic Management states
+  const [expandedSubjectsMap, setExpandedSubjectsMap] = useState({});
+  const [subjectTopicsMap, setSubjectTopicsMap] = useState({});
+  const [topicFormData, setTopicFormData] = useState({ title: '', sequenceOrder: '', allocatedHours: '' });
+  const [selectedSubjectForTopic, setSelectedSubjectForTopic] = useState(null);
+  const [topicCreating, setTopicCreating] = useState(false);
+
   const isDataEntryActive = dataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
+
+  const resolveDepartmentCode = () => {
+    if (departmentCode) return departmentCode;
+    const fallback = departments.find(d => (d.code || '').toUpperCase() !== 'IT') || departments[0];
+    return fallback?.code || 'CCS';
+  };
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -63,33 +76,50 @@ const CourseTopic = () => {
       try {
         setIsLoading(true);
         setError('');
-        const result = await apiService.getSubjects(1, 100);
-        const items = result.items || result.Items || [];
+        // Call getSubjects with proper params object
+        const result = await apiService.getSubjects({ pageNumber: 1, pageSize: 100 });
+        const items = Array.isArray(result) ? result : (result?.items || result?.Items || []);
+
+        console.log('Raw API response for subjects:', result);
+        console.log('Items extracted:', items);
 
         const mapped = items
           .map((s) => {
-            if (!s.description) return null;
+            // prefer strongly-typed courseId returned by the API, fall back to metadata
+            let courseIdFromMeta = null;
+            if (!s.description && s.courseId == null) return null;
             try {
-              const meta = JSON.parse(s.description);
-              if (!meta.topicCode || !meta.topicDesc || !meta.hours) return null;
+              const meta = s.description ? JSON.parse(s.description) : {};
+              courseIdFromMeta = meta.course != null ? Number(meta.course) : null;
+
+              if (!meta.topicCode || !meta.topicDesc || !meta.hours) {
+                // If important meta fields are missing, still allow if API provides courseId and name/code
+                if (!s.courseId && !(meta.topicCode && meta.topicDesc && meta.hours)) return null;
+              }
+
               return {
                 subjectId: s.id,
-                course: meta.course || '',
-                topicCode: meta.topicCode,
+                // use API field if present, otherwise use parsed meta.course
+                courseId: s.courseId != null ? Number(s.courseId) : courseIdFromMeta,
+                topicCode: meta.topicCode || s.code || '',
                 value: meta.value || '',
-                topicDesc: meta.topicDesc,
-                hours: meta.hours,
+                topicDesc: meta.topicDesc || s.name || '',
+                hours: meta.hours || (s.hours ? Number(s.hours) : ''),
                 createdAt: s.createdAt,
+                topic: null, // Will be loaded on-demand when expanding
               };
-            } catch {
+            } catch (ex) {
+              console.warn('Invalid subject description JSON for subject', s.id, ex);
               return null;
             }
           })
           .filter(Boolean);
+        
+        console.log('Loaded subjects:', mapped);
         setAllSubjects(mapped);
       } catch (err) {
         console.error('Failed to load subjects for CourseTopic history:', err);
-        setError('Failed to load existing course topics. You can still add new ones.');
+        setError('Failed to load existing program topics. You can still add new ones.');
       } finally {
         setIsLoading(false);
       }
@@ -100,15 +130,32 @@ const CourseTopic = () => {
 
   // Filter history to show only subjects from courses in the current department
   useEffect(() => {
-    if (!courses || courses.length === 0) {
+    const dept = departments.find(d => d.code === departmentCode);
+    if (!dept) {
+      console.log('No matching department for code', departmentCode);
       setHistory([]);
       return;
     }
-    
-    const courseIds = courses.map(c => String(c.id));
-    const filtered = allSubjects.filter(s => courseIds.includes(String(s.course)));
+
+    if (!courses || courses.length === 0) {
+      console.log('Courses not loaded yet for department', dept.id);
+      setHistory([]);
+      return;
+    }
+
+    const courseIds = courses.map(c => Number(c.id));
+    console.log('Filtering subjects by course IDs for department', dept.code, courseIds);
+
+    const filtered = allSubjects.filter(s => {
+      const subjCourseId = Number(s.courseId || s.course || 0);
+      const match = courseIds.includes(subjCourseId);
+      if (!match) console.debug(`Excluding subject ${s.topicCode} course:${subjCourseId}`);
+      return match;
+    });
+
+    console.log('Filtered subjects for this department:', filtered);
     setHistory(filtered);
-  }, [courses, allSubjects]);
+  }, [departments, departmentCode, courses, allSubjects]);
 
   useEffect(() => {
     const loadDepartments = async () => {
@@ -182,26 +229,41 @@ const CourseTopic = () => {
           hours,
         });
 
-        const payload = {
+        const subjectPayload = {
           courseId: Number(course),
           code: topicCode,
-          name: topicDesc,
+          name: topicCode,
           description,
         };
 
-        const created = await apiService.createSubject(payload);
+        // 1. Create Subject
+        const createdSubject = await apiService.createSubject(subjectPayload);
+        console.log('Subject created:', createdSubject);
+
+        // 2. Create Topic for this Subject with topicDesc as the title
+        const topicPayload = {
+          subjectId: createdSubject.id,
+          title: topicDesc,  // Topic Description becomes Topic.Title
+          description: '',
+          sequenceOrder: 1,
+          allocatedHours: Number(hours),
+        };
+
+        const createdTopic = await apiService.createTopic(topicPayload);
+        console.log('Topic created:', createdTopic);
 
         // Update local history table
         setHistory((prev) => [
           ...prev,
           {
-            subjectId: created.id,
-            courseId: created.courseId || Number(course),
+            subjectId: createdSubject.id,
+            courseId: createdSubject.courseId || Number(course),
             topicCode,
             value,
             topicDesc,
             hours,
-            createdAt: created.createdAt,
+            createdAt: createdSubject.createdAt,
+            topic: createdTopic, // Include the created topic
           },
         ]);
 
@@ -211,18 +273,103 @@ const CourseTopic = () => {
         setTopicDesc("");
         setHours("");
       } catch (err) {
-        console.error('Failed to save course topic:', err);
+        console.error('Failed to save program topic:', err);
         const message =
           err.response?.data?.message ||
           err.response?.data ||
-          'Failed to save course topic. Make sure you are logged in as an admin.';
-        setError(typeof message === 'string' ? message : 'Failed to save course topic.');
+          'Failed to save program topic. Make sure you are logged in as an admin.';
+        setError(typeof message === 'string' ? message : 'Failed to save program topic.');
       } finally {
         setIsLoading(false);
       }
     };
 
     void saveAsync();
+  };
+
+  // Toggle subject expansion and load topics
+  const toggleSubjectExpansion = async (subjectId) => {
+    const isExpanded = expandedSubjectsMap[subjectId];
+    
+    if (isExpanded) {
+      // Collapse
+      setExpandedSubjectsMap(prev => ({
+        ...prev,
+        [subjectId]: false
+      }));
+    } else {
+      // Expand and load topics
+      setExpandedSubjectsMap(prev => ({
+        ...prev,
+        [subjectId]: true
+      }));
+      
+      // Load topics if not already loaded
+      if (!subjectTopicsMap[subjectId]) {
+        try {
+          const topics = await apiService.getTopics(subjectId);
+          const topicList = Array.isArray(topics) ? topics : topics.items || topics.data || [];
+          setSubjectTopicsMap(prev => ({
+            ...prev,
+            [subjectId]: topicList
+          }));
+        } catch (err) {
+          console.error('Failed to load topics for subject:', err);
+        }
+      }
+      
+      setSelectedSubjectForTopic(subjectId);
+      setTopicFormData({ title: '', sequenceOrder: '', allocatedHours: '' });
+    }
+  };
+
+  // Create new topic for selected subject
+  const handleAddTopic = () => {
+    if (!selectedSubjectForTopic || !topicFormData.title || !topicFormData.allocatedHours) {
+      setError('Please fill in Topic Title and Hours');
+      return;
+    }
+
+    const createTopicAsync = async () => {
+      try {
+        setTopicCreating(true);
+        setError('');
+
+        const topicPayload = {
+          subjectId: selectedSubjectForTopic,
+          title: topicFormData.title,
+          description: '',
+          sequenceOrder: parseInt(topicFormData.sequenceOrder) || 1,
+          allocatedHours: Number(topicFormData.allocatedHours),
+        };
+
+        const createdTopic = await apiService.createTopic(topicPayload);
+        console.log('Topic created:', createdTopic);
+
+        // Update local topics map
+        setSubjectTopicsMap(prev => ({
+          ...prev,
+          [selectedSubjectForTopic]: [
+            ...(prev[selectedSubjectForTopic] || []),
+            createdTopic
+          ]
+        }));
+
+        // Reset form
+        setTopicFormData({ title: '', sequenceOrder: '', allocatedHours: '' });
+      } catch (err) {
+        console.error('Failed to create topic:', err);
+        const message =
+          err.response?.data?.message ||
+          err.response?.data ||
+          'Failed to create topic.';
+        setError(typeof message === 'string' ? message : 'Failed to create topic.');
+      } finally {
+        setTopicCreating(false);
+      }
+    };
+
+    void createTopicAsync();
   };
 
   return (
@@ -247,15 +394,25 @@ const CourseTopic = () => {
               isActive={isDataEntryActive}
               dropdownItems={dataEntryItems}
               onSelect={(item) => {
+                const targetCode = resolveDepartmentCode();
                 setActiveTab(item);
-                if (item === 'Course - Topic') {
-                    navigate('/course-topic/1');
+                if (item === 'Program - Topic') {
+                  navigate(`/course-topic/${targetCode}`);
                 } else if (item === 'Test Encoding' || item === 'Test Question Editing') {
-                  navigate('/test-encoding');
+                  navigate(`/test-encoding/${targetCode}`);
                 }
               }}
             />
-            <NavItem icon={BookOpen} label="Reports" isActive={activeTab === 'Reports'} onClick={() => setActiveTab('Reports')} />
+            <NavItem
+              icon={BookOpen}
+              label="Reports"
+              isActive={activeTab === 'Reports'}
+              onClick={() => {
+                setActiveTab('Reports');
+                const targetCode = resolveDepartmentCode();
+                navigate(`/test-generation/${targetCode}`);
+              }}
+            />
           </div>
 
           <div className="nav-right" ref={userMenuRef}>
@@ -282,13 +439,13 @@ const CourseTopic = () => {
         <div className="search-and-view" style={{ maxWidth: '1140px', margin: '0 auto 20px auto' }}>
           <div className="search-bar">
             <Search className="search-icon" />
-            <input type="text" placeholder="Search Program/Course..." />
+            <input type="text" placeholder="Search Program/Topic..." />
           </div>
         </div>
 
         {/* Course & Topic Container */}
         <div className="course-topic-container">
-          <h2>Course & Topic Management</h2>
+          <h2>Program & Topic Management</h2>
 
           {/* Program Header */}
           <div className="program-header-line">
@@ -315,13 +472,13 @@ const CourseTopic = () => {
 
           {/* Fields */}
           <div className="field-container">
-            <label>Course</label>
+            <label>Program</label>
             <select value={course} onChange={(e) => setCourse(e.target.value)}>
-              <option value="">Select Course</option>
+              <option value="">Select Program</option>
               {isLoadingCourses ? (
-                <option disabled>Loading courses...</option>
+                <option disabled>Loading programs...</option>
               ) : courses.length === 0 ? (
-                <option disabled>No courses found for this department</option>
+                <option disabled>No programs found for this department</option>
               ) : (
                 courses.map(c => (
                   <option key={c.id} value={c.id}>{(c.code ? `${c.code} - ` : '') + c.name}</option>
@@ -364,26 +521,125 @@ const CourseTopic = () => {
 
           <button className="save-btn" onClick={handleSave}>Save</button>
 
-          {/* History Table */}
+          {/* History Table - Subject and Topic */}
           <div className="history-table">
             <div className="history-row header">
-              <span>#</span>
-              <span>Topic Code</span>
-              <span>Topic Description</span>
-              <span>Hours Per Topic</span>
+              <span style={{width: '5%'}}>#</span>
+              <span style={{width: '20%'}}>Subject Code</span>
+              <span style={{width: '50%'}}>Topic</span>
+              <span style={{width: '15%'}}>Hrs</span>
+              <span style={{width: '10%'}}></span>
             </div>
             {isLoading && history.length === 0 && (
               <div className="history-row">
-                <span colSpan={4}>Loading course topics...</span>
+                <span colSpan={5}>Loading subjects and topics...</span>
+              </div>
+            )}
+            {history.length === 0 && !isLoading && (
+              <div className="history-row">
+                <span colSpan={5}>No subjects created yet</span>
               </div>
             )}
             {history.map((item, index) => (
-              <div key={item.subjectId ?? index} className="history-row">
-                <span>{index + 1}</span>
-                <span>{item.topicCode}</span>
-                <span>{item.topicDesc}</span>
-                <span>{item.hours}</span>
-              </div>
+              <React.Fragment key={item.subjectId}>
+                {/* Subject Row with Manage Topics button */}
+                <div className="history-row subject-row">
+                  <span style={{width: '5%'}}>{index + 1}</span>
+                  <span style={{width: '25%'}}>{item.topicCode}</span>
+                  <span style={{width: '50%'}}><strong>{item.topicDesc}</strong></span>
+                  <span style={{width: '15%'}}>{item.hours}</span>
+                  <span style={{width: '10%', display: 'flex', justifyContent: 'center', alignItems: 'center'}}>
+                    <button 
+                      className={`expand-btn ${expandedSubjectsMap[item.subjectId] ? 'expanded' : ''}`}
+                      onClick={() => toggleSubjectExpansion(item.subjectId)}
+                      title={expandedSubjectsMap[item.subjectId] ? 'Collapse topics' : 'Manage topics'}
+                    >
+                      {expandedSubjectsMap[item.subjectId] ? '▼' : '▶'}
+                    </button>
+                  </span>
+                </div>
+                
+                {/* Default Topic Row - automatically created with subject */}
+                {item.topic && (
+                  <div className="history-row topic-row">
+                    <span style={{width: '5%'}}>└</span>
+                    <span style={{width: '20%'}}>-</span>
+                    <span style={{width: '50%'}}>{item.topic.title} (Topic)</span>
+                    <span style={{width: '15%'}}>{item.topic.allocatedHours}</span>
+                    <span style={{width: '10%'}}></span>
+                  </div>
+                )}
+
+                {/* Expanded Topics Section */}
+                {expandedSubjectsMap[item.subjectId] && (
+                  <div className="subject-topics-container">
+                    {/* Existing Topics List */}
+                    <div className="topics-list-section">
+                      <h4>Topics for {item.topicDesc}</h4>
+                      {subjectTopicsMap[item.subjectId] && subjectTopicsMap[item.subjectId].length > 0 ? (
+                        <div className="topics-list">
+                          {subjectTopicsMap[item.subjectId].map((topic, topicIdx) => (
+                            <div key={topic.id} className="history-row topic-item-row">
+                              <span style={{width: '5%'}}>{topicIdx + 1}</span>
+                              <span style={{width: '20%'}}>{course.code}</span>
+                              <span style={{width: '50%'}}>• {topic.title}</span>
+                              <span style={{width: '15%'}}>{topic.allocatedHours} hrs</span>
+                              <span style={{width: '10%'}}></span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="no-topics-msg">No additional topics created yet</p>
+                      )}
+                    </div>
+
+                    {/* Form to Add New Topic */}
+                    {selectedSubjectForTopic === item.subjectId && (
+                      <div className="topic-form-section">
+                        <h4>Add New Topic</h4>
+                        <div className="topic-form">
+                          <div className="form-row">
+                            <div className="form-field">
+                              <label>Topic Title</label>
+                              <input 
+                                type="text"
+                                value={topicFormData.title}
+                                onChange={(e) => setTopicFormData({...topicFormData, title: e.target.value})}
+                                placeholder="Enter topic title"
+                              />
+                            </div>
+                            <div className="form-field">
+                              <label>Value</label>
+                              <input 
+                                type="number"
+                                value={topicFormData.sequenceOrder}
+                                onChange={(e) => setTopicFormData({...topicFormData, sequenceOrder: e.target.value})}
+                                placeholder="1"
+                              />
+                            </div>
+                            <div className="form-field">
+                              <label>Hours</label>
+                              <input 
+                                type="number"
+                                value={topicFormData.allocatedHours}
+                                onChange={(e) => setTopicFormData({...topicFormData, allocatedHours: e.target.value})}
+                                placeholder="0"
+                              />
+                            </div>
+                          </div>
+                          <button 
+                            className="add-topic-btn"
+                            onClick={handleAddTopic}
+                            disabled={topicCreating}
+                          >
+                            {topicCreating ? 'Creating...' : 'Add Topic'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </React.Fragment>
             ))}
           </div>
         </div>

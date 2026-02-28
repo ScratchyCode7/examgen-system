@@ -2,11 +2,132 @@
 
 Full-stack application for managing exam/test databank with C# ASP.NET Core backend and React frontend.
 
-## ✨ Latest Updates (v2.1 - Course Hierarchy)
+## ✨ Latest Updates (v2.6 - Saved Exam Sets & Printing Suite)
+
+**Released Feb 27, 2026 - Persist generated exams with deterministic signatures and manage printable sets from the new reports view.**
+
+### New Changes (v2.6):
+- ✅ **Save Generated Exam endpoint (`POST /api/tests/save-generated`):**
+  - Persists subject/course/department metadata, semester, school year, set labels, and the exact ordered question list in a single call.
+  - Computes a question signature (displayOrder + questionId) to guarantee unique saves per generation and auto-assigns the next `Set A/B/C...` label for the same term.
+  - Stores the full specification snapshot and generation warnings for perfect reload fidelity.
+- ✅ **Test Generation save flow overhaul:**
+  - Save button now validates department/course/subject context, reuses the ordered payload, and surfaces the returned set label inline.
+  - Save modal summarizes the upcoming set (course, subject, exam period, total items) instead of relying on a free-text exam name.
+  - UI banner shows the latest saved set so instructors know which version is synced.
+- ✅ **Program terminology alignment (frontend):**
+  - Dashboards, navigation dropdowns, and search placeholders now use **Program - Topic** wording.
+  - Saved Exam Sets filters, print/preview headers, and filename fallbacks show Program naming for consistency.
+  - Test Generation and encoding flows use shared `program-info` styles in print exports.
+- ✅ **Reports ▸ Saved Exam Sets page (`/reports/saved-exams/:departmentCode?`):**
+  - Filter saved sets by department, course, subject, exam type, semester, and school year before selecting one.
+  - View the stored exam (with toggleable answer key) and reuse the printing modal to output the Table of Specification, exam paper, or answer key exactly as saved.
+  - Printing pulls from the persisted snapshot/questions so instructors can regenerate PDFs long after the original session.
+
+## ✨ Latest Updates (v2.5 - Department-Aware Routing & Spec Cleanup)
+
+**Released Feb 26, 2026 - Department-context URLs for encoding/generation plus smarter topic hour handling.**
+
+### New Changes (v2.5):
+- ✅ **Department-aware Test Encoding/Test Generation routes:**
+  - `/test-encoding/:departmentCode` and `/test-generation/:departmentCode` keep the selected college in the URL for deep links and bookmarking.
+  - Dashboard shortcuts compute the proper `departmentCode` before navigating so instructors always land in their scope.
+  - Dropdown changes push updated routes to keep Course-Topic/Test Encoding/Test Generation pages in sync.
+- ✅ **Spec hours auto-filled from topics:**
+  - Topic selection now pulls allocated hours directly from the database and locks the hours cell (read-only) to prevent manual drift from the syllabus plan.
+  - Specification calculations (distribution, totals, Bloom counts) were wrapped in `useCallback` and had dependency arrays fixed to eliminate stale state issues during re-renders.
+- ✅ **ESLint/stability cleanup:**
+  - Removed the deprecated `validationErrors` UI references plus unused loading state in encoding flows so `npm start` compiles cleanly.
+  - Hook dependency warnings resolved across TestGeneration/TestEncoding by sharing memoized helpers and keeping dependency arrays minimal and correct.
+
+## ✨ Latest Updates (v2.4 - Topic Management & Multi-Topic Support)
+
+**Released Feb 20, 2026 - Collapsible Topic Management section with full dark mode and responsive design**
+
+### New Changes (v2.4):
+- ✅ **Collapsible Topic Management Section:**
+  - Click "▶ Topics" button on any Subject row to expand Topic management for that subject
+  - Displays all existing topics for the selected subject
+  - Form to add new topics without creating a new subject
+  - Collapsible interface: Click "▼ Collapse" to hide managed topics
+  
+- ✅ **Multi-Topic Support:**
+  - Each Subject can now have multiple Topics
+  - "Add New Topic" form with Title, Sequence Order, and Hours fields
+  - Topics persist to database via `POST /api/topics`
+  - Existing topics load dynamically when expanding a subject
+  
+- ✅ **Full Dark Mode & Light Mode Support:**
+  - Collapsible sections styled for both themes
+  - Form inputs adapt to dark/light backgrounds
+  - Buttons with theme-aware hover states
+  - Focus states with theme-appropriate borders
+  
+- ✅ **Responsive Design:**
+  - Desktop: 4-column topic form layout (Title, Order, Hours, Button)
+  - Tablet (1024px): 3-column condensed form layout
+  - Mobile (768px): Single-column form with full-width button
+  - Extra small (480px): Single-row grid for all elements
+  
+- ✅ **User Experience:**
+  - Click "Topics" button to expand a subject's topic management
+  - View all existing topics in a scrollable list
+  - Add new topics without losing the form data
+  - Clear visual hierarchy with indentation and borders
+  - Form validation (Title and Hours required)
+
+### New Changes (v2.2 - Exam Question Encoding):
+- ✅ **Test Encoding page with department/course/topic hierarchy:**
+  - Department dropdown (required first step)
+  - Course Selection dropdown (depends on department)
+  - Topic/Subject dropdown (depends on course)
+  - Dependent dropdowns with cascading resets
+- ✅ **Exam question creation (backed by database):**
+  - Rich-text question editor with formatting toolbar (bold, italic, underline, lists, headings, links, math symbols, images)
+  - Multiple-choice answer entry (A, B, C, D) with rich-text support
+  - Answer key field (specify correct answer: A-D)
+  - Explanation editor (rich-text support)
+  - Cognitive level selection (Remembering & Understanding / Applying & Analyzing / Evaluation & Creating)
+- ✅ **BloomLevel classification for exam generation:**
+  - "Remembering and Understanding" → BloomLevel 1 (stored in database)
+  - "Applying and Analyzing" → BloomLevel 3 (stored in database)
+  - "Evaluation and Creating" → BloomLevel 5 (stored in database)
+  - Enables 30-30-40 distribution rule enforcement during exam generation
+- ✅ **Backend integration:**
+  - `POST /api/questions` saves questions with options to the database
+  - `GET /api/questions?topicId=X` loads existing questions for the selected topic
+  - Questions are persisted to `Questions` and `Options` tables
+- ✅ **Dynamic department logo and name:**
+  - Header updates logo and college text based on selected department (from `/constants/departmentLogos.js`)
+- ✅ **Course and subject filtering:**
+  - Only courses for the selected department appear in Course dropdown
+  - Only subjects for the selected course appear in Topic dropdown
+- ✅ **Validation:**
+  - Prevents submission if Department, Course, Topic, or Question Type is not selected
+  - Validates all required form fields before saving
+
+**Testing workflow:**
+1. Hard-refresh browser: `Cmd+Shift+R`
+2. Navigate to `/test-encoding`
+3. Select Department (e.g., CCS) — logo and college name update
+4. Select Course (e.g., BSCS) — only CCS courses show
+5. Select Topic/Subject (e.g., "Data Structures") — load only that topic's questions
+6. Fill in question: text, choices A-D, correct answer, explanation
+7. Select cognitive level (e.g., "Applying and Analyzing")
+8. Click "Add Question" → Question is saved to backend and appears in history
+
+### Saved Exam Sets workflow
+1. Generate an exam via `/test-generation/:departmentCode`, then click **Save Exam** once the Table of Specification is ready.
+2. Confirm the save modal summary (course, subject, exam period, total items); the backend assigns the next `Set A/B/C...` label and stores the ordered question list plus specification snapshot.
+3. Navigate to **Reports ▸ Saved Exam Sets** (URL: `/reports/saved-exams/:departmentCode`) and select the same department/course/subject/exam filters to load matching sets.
+4. Click any set in the sidebar to view the saved exam or toggle the inline answer key; use the **Print** button to export the Table of Specification, exam paper, or answer key directly from the stored snapshot.
+5. Repeat the save process to create `Set D`, `Set E`, etc.—the system prevents duplicates by comparing question signatures, ensuring each saved set is unique for the chosen term.
+
+## ✨ Previous Updates (v2.1 - Course Hierarchy)
 
 **Added Course-level organizational hierarchy to better represent degree programs.**
 
-### New Changes (v2.1):
+### Changes (v2.1):
 - ✅ Added Course entity (degree programs: BSc CS, BSc Data Science, etc.)
 - ✅ Restructured Subject-Course relationship (Subjects now belong to Courses, not Departments)
 - ✅ New database hierarchy: Department → Course → Subject → Topic → Question
@@ -23,14 +144,51 @@ Full-stack application for managing exam/test databank with C# ASP.NET Core back
   - Saving a subject no longer clears the selected course — only the topic inputs are reset so bulk entry is faster.
 - ✅ Adding a course to a department (via `POST /api/courses`) immediately appears in the `Course` dropdown for that department.
 
-Test these hotfixes:
-1. Start backend and frontend.
-2. Navigate to `http://localhost:3000/course-topic/CCS`.
-3. Select a course (e.g., BSCS), add a subject and click Save — the course selection should persist and the subject should appear in the history.
-4. Add a course to `CBA` (departmentId = 3) via `POST /api/courses` and hard-refresh; it should show in the CBA course dropdown.
+### Major Update (Feb 20, 2026 - v2.3): Unified Subject + Topic Creation
 
+**Streamlined the Course-Topic management page for better UX — now creates both Subject AND Topic with a single Save action.**
 
-### Previous Changes (v2.0 - REFACTORED):
+#### Changes (v2.3):
+- ✅ **Course-Topic Page Refactor (`/course-topic`):**
+  - Simplified workflow: Single form → Single Save → Creates both Subject AND Topic
+  - "Topic Description" input now serves dual purpose:
+    - Creates Subject.Name (with code, value, and hours metadata)
+    - Creates Topic.Title (auto-created with same name, sequence order 1, matching hours)
+  - History table redesigned:
+    - Shows Subject row + indented Topic row below it
+    - Visual hierarchy makes Subject ↔ Topic relationship clear
+    - No more complex nested forms
+  
+- ✅ **Test Encoding Page Updates (`/test-encoding`):**
+  - Enhanced hierarchy: Department → Course → **Subject** → **Topic**
+  - Added Subject dropdown (shows course subjects)
+  - Added Topic dropdown (shows selected subject's topics)
+  - Questions now scoped to specific Topic (not Subject)
+  - No need for topic expansion/collapse UI
+  
+- ✅ **API Additions:**
+  - Added `apiService.getTopics(subjectId)` - Fetch topics for a subject
+  - Added `apiService.createTopic(topicData)` - Create new topic
+  
+- ✅ **Dark Mode Support:**
+  - Fixed history table styling (text visibility, padding, colors)
+  - Subject rows: Bold on light gray background
+  - Topic rows: Indented on slightly different background
+  - Dark mode properly themes Subject/Topic rows
+
+- ✅ **Removed:**
+  - Nested expandable topic forms
+  - Complex topic creation form per subject
+  - Unused state management (expandedSubjects, subjectTopicsMap, etc.)
+
+**Benefits:**
+- ✅ Faster data entry (one Save = Subject + Topic)
+- ✅ Clearer UI hierarchy (Subject → Topic relationship visual)
+- ✅ Reduced complexity (single form instead of nested)
+- ✅ Better for exam generation (Question → Topic → Subject → Course → Department chain complete)
+
+## 📋 Core Refactoring (v2.0+)
+
 **The project has been comprehensively refactored to align with the Test Databank and Automated Exam Generation System specification.**
 
 - ✅ Added Department-based organizational structure
@@ -195,8 +353,11 @@ SELECT s.*, t.* FROM "Subjects" s LEFT JOIN "Topics" t ON s."Id" = t."SubjectId"
 ### Tests/Exams (`/api/tests`)
 - `POST /api/tests` - Create test (Admin only)
 - `POST /api/tests/generate` - Generate exam from databank by selecting questions matching criteria (Admin only)
+- `POST /api/tests/save-generated` - Persist a generated exam (Admin only)
+  - Body: `departmentId`, `courseId`, `subjectId`, `examType`, `semester`, `schoolYear`, `durationMinutes`, `totalPoints`, `questions[] (questionId + displayOrder)`, optional `specificationSnapshot`, `generationNotes`, and `description`.
+  - Auto-computes `Set A/B/...` based on existing exams for the same subject/term and refuses duplicates using the deterministic question signature.
 - `GET /api/tests` - List all tests with pagination (Requires auth)
-  - Query params: `pageNumber`, `pageSize`
+  - Query params: `pageNumber`, `pageSize`, `subjectId?`, `examType?`, `semester?`, `schoolYear?`
 - `GET /api/tests/{id}` - Get test by ID (Requires auth)
 - `PUT /api/tests/{id}` - Update test (Admin only)
 - `DELETE /api/tests/{id}` - Delete test (Admin only)
@@ -302,26 +463,73 @@ The frontend will be available at `http://localhost:3000`.
   - Regular dashboard with program cards, search, grid/list view, dark mode, user menu
   - Admin dashboard with extended program list and same UX
 - Data Entry – **Course & Topic** (`/course-topic`):
-  - Form for selecting Course + entering Topic Code, Value, Topic Description, Hours per Topic
-  - Persists entries to backend `Subject` table via `POST /api/subjects` (Admin only)
+  - **Single Form for Subject + Topic Creation** (streamlined workflow):
+    - Select Department → Course
+    - Fill in form fields:
+      - **Topic Code** → Subject.Code
+      - **Value** → Subject metadata field
+      - **Topic Description** → Both Subject.Name and Topic.Title
+      - **Hours Per Topic** → Topic.AllocatedHours
+    - Click **Save** → Creates both Subject AND Topic in one action
+  - **History Table:**
+    - Shows all Subjects created with their corresponding Topics
+    - Subject row displays: Code, Description, Hours
+    - Topic row (indented below) displays: Topic name and allocated hours
+    - Auto-creates Topic when Subject is created (no separate topic creation needed)
+  - Persists entries to backend:
+    - `POST /api/subjects` (Admin only) - Creates Subject
+    - `POST /api/topics` (Admin only) - Creates Topic with same name as Topic Description input
   - Uses `Subject.Description` JSON metadata to store course/topic/value/hours
-  - History table shows all topics previously created through this page
 - Data Entry – **Test Encoding & Editing** (`/test-encoding`):
-  - Rich-text question editor with toolbar (bold/italic/underline, lists, headings, links, images, math symbols)
-  - Multiple-choice A–D answer entry with rich-text
-  - Answer key explanation editor
-  - Cognitive level selection (Remembering & Understanding / Applying & Analyzing / Evaluation & Creating)
-  - Local in-page history grouped by cognitive level for the selected Subject + Topic
+  - **Department/Course/Subject/Topic Hierarchy** with dependent dropdowns:
+    - Department dropdown (required, loads all departments from `/api/departments`)
+    - Course dropdown (disabled until department selected; shows only courses for selected department via `/api/courses?departmentId`)
+    - Subject dropdown (disabled until course selected; shows only subjects for selected course via `/api/subjects?courseId`)
+    - Topic dropdown (disabled until subject selected; shows only topics for selected subject via `/api/topics?subjectId`)
+    - Selections are preserved after saving a question (only form inputs reset)
+    - Dynamic header: Department logo and college name update based on selected department
+  - **Question Encoding:**
+    - Rich-text question editor with toolbar (bold/italic/underline, lists, headings, links, images, math symbols)
+    - Multiple-choice A–D answer entry with rich-text
+    - Answer key explanation editor
+    - Cognitive level selection (Remembering & Understanding / Applying & Analyzing / Evaluation & Creating) → Maps to BloomLevel for exam generation
+  - **BloomLevel Classification** for exam distribution rule (30-30-40):
+    - "Remembering & Understanding" → BloomLevel 1
+    - "Applying & Analyzing" → BloomLevel 3
+    - "Evaluation & Creating" → BloomLevel 5
+  - **Backend Integration:**
+    - Questions saved to backend via `POST /api/questions` with payload:
+      ```json
+      {
+        "topicId": <number>,
+        "questionType": "MultipleChoice",
+        "text": "question text",
+        "bloomLevel": <1|3|5>,
+        "points": 1,
+        "isActive": true,
+        "options": [
+          { "text": "Choice A", "isCorrect": true, "displayOrder": 1 },
+          { "text": "Choice B", "isCorrect": false, "displayOrder": 2 },
+          { "text": "Choice C", "isCorrect": false, "displayOrder": 3 },
+          { "text": "Choice D", "isCorrect": false, "displayOrder": 4 }
+        ]
+      }
+      ```
+    - Questions loaded from backend via `GET /api/questions?topicId={id}&pageSize=500` (replaces mock data)
+    - In-page history shows questions loaded from the selected Topic with their BloomLevel classification
 - Global:
   - Dark mode toggle
   - Logout modal and flow
   - Consistent navigation bar (Home, Data Entry, Reports) across pages
 
 🚧 **Planned/Next Steps:**
-- Wire `TestEncodingAndEditing.jsx` to real backend questions/tests using:
-  - `POST /api/questions/bulk` for saving encoded questions + options
-  - `GET /api/questions` for loading existing questions per Subject/Topic
-- Add true Subject/Test-driven filtering instead of MOCK_SUBJECTS/MOCK_TOPICS
+- Test end-to-end workflow: Select Department → Course → Topic → Encode Question → Verify save to backend
+- Verify backend endpoint accepts MultipleChoice question payload and stores BloomLevel correctly
+- Implement exam generation endpoint with 30-30-40 distribution rule
+  - Query questions by TopicId, filter by BloomLevel (1→30%, 3→30%, 5→40%), generate test
+  - Create test creation UI that calls exam generation endpoint
+- Add test-taking interface (`/test-take`) where students can take generated exams
+- Add statistics/reporting dashboard showing question coverage by Topic and BloomLevel
 - Replace remaining mock data (e.g., program lists) with API-driven content
 
 ## 🧪 Testing

@@ -10,6 +10,8 @@ import Dashboard from './pages/Dashboard';
 import DashboardAdmin from './pages/DashboardAdmin';
 import CourseTopic from './pages/CourseTopic';
 import TestEncodingAndEditing from './pages/TestEncodingAndEditing';
+import TestGeneration from './pages/TestGeneration';
+import SavedExamsReport from './pages/SavedExamsReport';
 
 function App() {
   return (
@@ -43,10 +45,26 @@ function App() {
             }
           />
           <Route
-            path="/test-encoding"
+            path="/test-encoding/:departmentCode"
             element={
               <ProtectedRoute>
                 <TestEncodingAndEditing />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/test-generation/:departmentCode?"
+            element={
+              <ProtectedRoute>
+                <TestGeneration />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/reports/saved-exams/:departmentCode?"
+            element={
+              <ProtectedRoute>
+                <SavedExamsReport />
               </ProtectedRoute>
             }
           />
