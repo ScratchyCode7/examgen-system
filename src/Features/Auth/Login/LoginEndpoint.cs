@@ -22,8 +22,10 @@ public sealed class LoginEndpoint : IEndpoint
                 CancellationToken ct) =>
         {
             // Support both username and email login
-            var user = await dbContext.Users.SingleOrDefaultAsync(
-                u => u.Username == request.Username || u.Email == request.Username, ct);
+            var user = await dbContext.Users
+                .Include(u => u.UserDepartments)
+                .SingleOrDefaultAsync(
+                    u => u.Username == request.Username || u.Email == request.Username, ct);
             if (user is null)
             {
                 return TypedResults.Unauthorized();

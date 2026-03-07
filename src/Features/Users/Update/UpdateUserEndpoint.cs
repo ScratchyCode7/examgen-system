@@ -9,7 +9,7 @@ namespace Databank.Features.Users.Update;
 public sealed record UpdateUserRequest(
     string FirstName,
     string LastName,
-    int DepartmentId,
+    int[] DepartmentIds,
     string Email,
     bool? IsAdmin,
     bool? IsActive,
@@ -27,26 +27,42 @@ public sealed class UpdateUserEndpoint : IEndpoint
                 IPasswordHasher<User> passwordHasher,
                 CancellationToken ct) =>
         {
-            var user = await dbContext.Users.FirstOrDefaultAsync(u => u.UserId == userId, ct);
+            var user = await dbContext.Users
+                .Include(u => u.UserDepartments)
+                .FirstOrDefaultAsync(u => u.UserId == userId, ct);
 
             if (user is null)
             {
                 return TypedResults.NotFound();
             }
 
-            // Verify department exists
-            var departmentExists = await dbContext.Departments
-                .AnyAsync(d => d.Id == request.DepartmentId, ct);
-            
-            if (!departmentExists)
+            // Verify all departments exist
+            if (request.DepartmentIds == null || request.DepartmentIds.Length == 0)
             {
-                return TypedResults.BadRequest("Department does not exist.");
+                return TypedResults.BadRequest("At least one department must be specified.");
+            }
+            
+            var existingDeptCount = await dbContext.Departments
+                .CountAsync(d => request.DepartmentIds.Contains(d.Id), ct);
+            
+            if (existingDeptCount != request.DepartmentIds.Length)
+            {
+                return TypedResults.BadRequest("One or more departments do not exist.");
             }
 
             user.FirstName = request.FirstName;
             user.LastName = request.LastName;
-            user.DepartmentId = request.DepartmentId;
             user.Email = request.Email;
+            
+            // Update department assignments
+            user.UserDepartments.Clear();
+            user.UserDepartments = request.DepartmentIds
+                .Select(deptId => new UserDepartment
+                {
+                    UserId = userId,
+                    DepartmentId = deptId
+                })
+                .ToList();
 
             if (request.IsAdmin.HasValue)
             {

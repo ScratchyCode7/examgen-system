@@ -40,7 +40,18 @@ export const AuthProvider = ({ children }) => {
       
       const payload = JSON.parse(atob(tokenParts[1]));
       
-      // Backend JWT includes: sub (userId), unique_name (username), email, isAdmin (as string)
+      // Parse department IDs from JWT claims (can be multiple)
+      let departmentIds = [];
+      if (payload.departmentId) {
+        // Single claim (string or number)
+        if (Array.isArray(payload.departmentId)) {
+          departmentIds = payload.departmentId.map(id => parseInt(id, 10));
+        } else {
+          departmentIds = [parseInt(payload.departmentId, 10)];
+        }
+      }
+      
+      // Backend JWT includes: sub (userId), unique_name (username), email, isAdmin (as string), departmentId (array)
       const userData = {
         userId: payload.sub,
         username: payload.unique_name || credentials.username,
@@ -48,7 +59,8 @@ export const AuthProvider = ({ children }) => {
         firstName: '', // Will need to fetch from API if needed
         lastName: '',  // Will need to fetch from API if needed
         isAdmin: payload.isAdmin === 'true' || payload.isAdmin === true,
-        departmentId: payload.departmentId || null,
+        departmentIds: departmentIds,
+        departmentId: departmentIds[0] || null, // Legacy: keep first department for backward compatibility
       };
       
       // Try to fetch full user details if userId is available
@@ -57,7 +69,8 @@ export const AuthProvider = ({ children }) => {
           const fullUser = await apiService.getUser(userData.userId);
           userData.firstName = fullUser.firstName || '';
           userData.lastName = fullUser.lastName || '';
-          userData.departmentId = fullUser.departmentId || userData.departmentId;
+          userData.departmentIds = fullUser.departmentIds || userData.departmentIds;
+          userData.departmentId = fullUser.departmentId || userData.departmentIds[0] || null;
         } catch (err) {
           console.warn('Could not fetch user details:', err);
           // Continue with basic user data from token
@@ -82,8 +95,29 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('activeDepartmentId');
     setUser(null);
     setIsAuthenticated(false);
+  };
+
+  const hasAccessToDepartment = (departmentId) => {
+    if (!user) return false;
+    if (user.isAdmin) return true;
+    return user.departmentIds?.includes(parseInt(departmentId, 10)) || false;
+  };
+
+  const hasAccessToDepartmentCode = async (departmentCode) => {
+    if (!user || !departmentCode) return false;
+    if (user.isAdmin) return true;
+    
+    try {
+      // Fetch department by code to get its ID
+      const dept = await apiService.getDepartmentByCode(departmentCode);
+      return hasAccessToDepartment(dept.id);
+    } catch (error) {
+      console.error('Error checking department access:', error);
+      return false;
+    }
   };
 
   const value = {
@@ -91,6 +125,9 @@ export const AuthProvider = ({ children }) => {
     loading,
     isAuthenticated,
     isAdmin: user?.isAdmin || false,
+    allowedDepartments: user?.departmentIds || [],
+    hasAccessToDepartment,
+    hasAccessToDepartmentCode,
     login,
     logout,
   };

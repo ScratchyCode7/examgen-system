@@ -22,6 +22,12 @@ public sealed class JwtTokenService(IOptions<JwtOptions> jwtOptions) : ITokenSer
             new(JwtRegisteredClaimNames.Email, user.Email),
             new("isAdmin", user.IsAdmin.ToString().ToLowerInvariant())
         };
+        
+        // Add department IDs as separate claims
+        foreach (var userDept in user.UserDepartments)
+        {
+            claims.Add(new Claim("departmentId", userDept.DepartmentId.ToString()));
+        }
 
         var signingCredentials = new SigningCredentials(
             new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.SigningKey)),

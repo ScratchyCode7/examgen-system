@@ -69,6 +69,13 @@ export const apiService = {
     return response.data;
   },
 
+  assignUserDepartments: async (userId, departmentIds) => {
+    const response = await apiClient.post(`/api/users/${userId}/departments`, { 
+      departmentIds 
+    });
+    return response.data;
+  },
+
   // Subjects
   getSubjects: async (params = {}) => {
     const queryParams = new URLSearchParams();
@@ -169,6 +176,19 @@ export const apiService = {
     const response = await apiClient.get('/api/departments');
     const data = response.data;
     // normalize: some endpoints return { items: [...] } while others return an array
+    if (Array.isArray(data)) return data;
+    if (data?.items && Array.isArray(data.items)) return data.items;
+    return [];
+  },
+
+  getDepartmentByCode: async (code) => {
+    const response = await apiClient.get(`/api/departments/by-code/${code}`);
+    return response.data;
+  },
+
+  getUserDepartments: async (userId) => {
+    const response = await apiClient.get(`/api/users/${userId}/departments`);
+    const data = response.data;
     if (Array.isArray(data)) return data;
     if (data?.items && Array.isArray(data.items)) return data.items;
     return [];

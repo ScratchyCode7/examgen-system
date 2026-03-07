@@ -12,13 +12,23 @@ public sealed class User
     public string Username { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
-    public int DepartmentId { get; set; }
+    
+    /// <summary>
+    /// Legacy single-department FK. Will be removed after migration to UserDepartments.
+    /// TODO: Remove after all code paths updated to use UserDepartments
+    /// </summary>
+    [Obsolete("Use UserDepartments collection instead")]
+    public int? DepartmentId { get; set; }
+    
     public bool IsAdmin { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 
     // Navigation
-    public Department Department { get; set; } = null!;
+    [Obsolete("Use UserDepartments collection instead")]
+    public Department? Department { get; set; }
+    
+    public ICollection<UserDepartment> UserDepartments { get; set; } = new List<UserDepartment>();
     public ICollection<ActivityLog> ActivityLogs { get; set; } = new List<ActivityLog>();
 }

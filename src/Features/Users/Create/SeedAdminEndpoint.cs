@@ -51,11 +51,19 @@ public sealed class SeedAdminEndpoint : IEndpoint
                 LastName = "User",
                 Username = "admin",
                 Email = "admin@databank.dev",
-                DepartmentId = itDept.Id,
                 IsAdmin = true,
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
+            };
+            
+            admin.UserDepartments = new List<UserDepartment>
+            {
+                new UserDepartment
+                {
+                    DepartmentId = itDept.Id,
+                    UserId = admin.UserId
+                }
             };
 
             admin.Password = passwordHasher.HashPassword(admin, "Admin123!");

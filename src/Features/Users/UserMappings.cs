@@ -11,6 +11,7 @@ public static class UserMappings
             user.FirstName,
             user.LastName,
             user.DepartmentId,
+            user.UserDepartments.Select(ud => ud.DepartmentId).ToArray(),
             user.Username,
             user.Email,
             user.IsAdmin,

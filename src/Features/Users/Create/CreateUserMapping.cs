@@ -6,15 +6,25 @@ public static class CreateUserMapping
 {
     public static User ToCreate(this CreateUserRequest req)
     {
-        return new User
+        var user = new User
         {
             FirstName = req.FirstName,
             LastName = req.LastName,
             Username = req.Username,
-            DepartmentId = req.DepartmentId,
             Email = req.Email,
             IsAdmin = req.IsAdmin
         };
+        
+        // Initialize UserDepartments collection
+        user.UserDepartments = req.DepartmentIds
+            .Select(deptId => new UserDepartment
+            {
+                DepartmentId = deptId,
+                UserId = user.UserId
+            })
+            .ToList();
+            
+        return user;
     }
 
     public static CreateUserResponse ToResponse(this User user)
@@ -22,7 +32,7 @@ public static class CreateUserMapping
         return new CreateUserResponse(
             user.FirstName,
             user.LastName,
-            user.DepartmentId,
+            user.UserDepartments.Select(ud => ud.DepartmentId).ToArray(),
             user.Username,
             user.Email,
             user.IsAdmin

@@ -15,7 +15,10 @@ public sealed class Department
     public DateTime UpdatedAt { get; set; }
 
     // Navigation
+    [Obsolete("Use UserDepartments collection instead")]
     public ICollection<User> Users { get; set; } = new List<User>();
+    
+    public ICollection<UserDepartment> UserDepartments { get; set; } = new List<UserDepartment>();
     public ICollection<Course> Courses { get; set; } = new List<Course>();
     public ICollection<ActivityLog> ActivityLogs { get; set; } = new List<ActivityLog>();
 }

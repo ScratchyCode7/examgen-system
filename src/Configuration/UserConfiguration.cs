@@ -44,7 +44,7 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .IsUnique();
 
         builder.Property(x => x.DepartmentId)
-            .IsRequired();
+            .IsRequired(false);  // Made nullable for transition to UserDepartments
 
         builder.Property(x => x.IsAdmin)
             .HasDefaultValue(false);
@@ -63,7 +63,8 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.HasOne(x => x.Department)
             .WithMany(x => x.Users)
             .HasForeignKey(x => x.DepartmentId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .OnDelete(DeleteBehavior.Restrict)
+            .IsRequired(false);
 
         builder.HasMany(x => x.ActivityLogs)
             .WithOne(x => x.User)

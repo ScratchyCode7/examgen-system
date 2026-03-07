@@ -6,8 +6,8 @@ using Databank.Entities;
 
 namespace Databank.Features.Users.Create;
 
-public sealed record CreateUserRequest(string FirstName, string LastName, int DepartmentId, string Username, string Password, string Email, bool IsAdmin = false);
-public sealed record CreateUserResponse(string FirstName, string LastName, int DepartmentId, string Username, string Email, bool IsAdmin);
+public sealed record CreateUserRequest(string FirstName, string LastName, int[] DepartmentIds, string Username, string Password, string Email, bool IsAdmin = false);
+public sealed record CreateUserResponse(string FirstName, string LastName, int[] DepartmentIds, string Username, string Email, bool IsAdmin);
 
 public sealed class CreateUserEndpoint : IEndpoint
 {
@@ -19,13 +19,18 @@ public sealed class CreateUserEndpoint : IEndpoint
                 AppDbContext dbContext,
                 CancellationToken ct) =>
         {
-            // Verify department exists
-            var departmentExists = await dbContext.Departments
-                .AnyAsync(d => d.Id == req.DepartmentId, ct);
-            
-            if (!departmentExists)
+            // Verify all departments exist
+            if (req.DepartmentIds == null || req.DepartmentIds.Length == 0)
             {
-                return TypedResults.BadRequest("Department does not exist.");
+                return TypedResults.BadRequest("At least one department must be specified.");
+            }
+            
+            var existingDeptCount = await dbContext.Departments
+                .CountAsync(d => req.DepartmentIds.Contains(d.Id), ct);
+            
+            if (existingDeptCount != req.DepartmentIds.Length)
+            {
+                return TypedResults.BadRequest("One or more departments do not exist.");
             }
 
             var exists = await dbContext.Users
