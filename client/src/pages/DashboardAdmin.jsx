@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search, Grid, List } from 'lucide-react';
+import { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search, Grid, List, Users } from 'lucide-react';
 import NavItem from '../components/NavItem';
 import DropdownNavItem from '../components/DropdownNavItem';
+import UserManagement from '../components/UserManagement';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import '../styles/Dashboard.css';
@@ -17,6 +18,7 @@ const DashboardAdmin = () => {
   const { isDarkMode, toggleDarkMode } = useTheme();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('Home');
+  const [activeView, setActiveView] = useState('home'); // 'home' or 'users'
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [programView, setProgramView] = useState('grid');
@@ -54,7 +56,12 @@ const DashboardAdmin = () => {
 
   const handleUserAction = (action) => {
     setIsUserMenuOpen(false);
-    if (action === 'Logout') setIsLogoutModalOpen(true);
+    if (action === 'Logout') {
+      setIsLogoutModalOpen(true);
+    } else if (action === 'User Management') {
+      setActiveView('users');
+      setActiveTab('User Management');
+    }
   };
 
   const handleConfirmLogout = () => {
@@ -80,7 +87,24 @@ const DashboardAdmin = () => {
           </div>
 
           <div className="nav-center">
-            <NavItem icon={Home} label="Home" isActive={activeTab === 'Home'} onClick={() => { setActiveTab('Home'); navigate('/admin'); }} />
+            <NavItem 
+              icon={Home} 
+              label="Home" 
+              isActive={activeTab === 'Home'} 
+              onClick={() => { 
+                setActiveTab('Home'); 
+                setActiveView('home');
+              }} 
+            />
+            <NavItem 
+              icon={Users} 
+              label="Users" 
+              isActive={activeTab === 'User Management'} 
+              onClick={() => { 
+                setActiveTab('User Management'); 
+                setActiveView('users');
+              }} 
+            />
             <DropdownNavItem
               icon={ClipboardList}
               label="Data Entry"
@@ -88,6 +112,7 @@ const DashboardAdmin = () => {
               dropdownItems={dataEntryItems}
               onSelect={(item) => {
                 setActiveTab(item);
+                setActiveView('home');
                   if (item === 'Program - Topic') {
                     // Navigate to first non-admin department if available
                     const firstDept = departments?.find(d => d.code !== 'IT') || departments?.[0];
@@ -100,7 +125,16 @@ const DashboardAdmin = () => {
                   }
               }}
             />
-            <NavItem icon={BookOpen} label="Reports" isActive={activeTab === 'Reports'} onClick={() => { setActiveTab('Reports'); navigate('/test-generation'); }} />
+            <NavItem 
+              icon={BookOpen} 
+              label="Reports" 
+              isActive={activeTab === 'Reports'} 
+              onClick={() => { 
+                setActiveTab('Reports'); 
+                setActiveView('home');
+                navigate('/test-generation'); 
+              }} 
+            />
           </div>
 
           <div className="nav-right" ref={userMenuRef}>
@@ -124,77 +158,83 @@ const DashboardAdmin = () => {
         </nav>
 
         <div className="main-card">
-          <div className="welcome-card">
-            <h2>Welcome {displayName},</h2>
-            <p>To the new and improved Test Data Bank System 2.0! You are now logged in. This updated version offers a faster, more organized, and user-friendly experience for managing exams and test items.</p>
-          </div>
+          {activeView === 'home' ? (
+            <>
+              <div className="welcome-card">
+                <h2>Welcome {displayName},</h2>
+                <p>To the new and improved Test Data Bank System 2.0! You are now logged in. This updated version offers a faster, more organized, and user-friendly experience for managing exams and test items.</p>
+              </div>
 
-          <div className="search-and-view">
-            <div className="search-bar">
-              <Search className="search-icon" />
-              <input type="text" placeholder="Search Programs..." />
-            </div>
+              <div className="search-and-view">
+                <div className="search-bar">
+                  <Search className="search-icon" />
+                  <input type="text" placeholder="Search Programs..." />
+                </div>
 
-            <div className="view-toggle">
-              <button className={programView === 'grid' ? 'active' : ''} onClick={() => setProgramView('grid')} title="Logo View">
-                <Grid />
-              </button>
-              <button className={programView === 'list' ? 'active' : ''} onClick={() => setProgramView('list')} title="Text View">
-                <List />
-              </button>
-            </div>
-          </div>
+                <div className="view-toggle">
+                  <button className={programView === 'grid' ? 'active' : ''} onClick={() => setProgramView('grid')} title="Logo View">
+                    <Grid />
+                  </button>
+                  <button className={programView === 'list' ? 'active' : ''} onClick={() => setProgramView('list')} title="Text View">
+                    <List />
+                  </button>
+                </div>
+              </div>
 
-          <h3>Your Programs</h3>
+              <h3>Your Programs</h3>
 
-          {programView === 'grid' ? (
-            <div className="program-grid" style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
-              {isLoadingDepartments ? (
-                <p>Loading departments...</p>
-              ) : departments.length ? (
-                departments
-                  .filter(d => {
-                    const code = (d.code || '').toString().trim().toUpperCase();
-                    const name = (d.name || '').toString().trim().toLowerCase();
-                    return code !== 'IT' && !name.includes('information technology');
-                  })
-                  .map((d) => {
-                    const logo = DEPARTMENT_LOGOS[d.code] || null;
-                    return (
-                      <div
-                        key={d.id}
-                        className="program-card"
-                        style={{ flex: '0 0 calc(25% - 1rem)', cursor: 'pointer' }} // 4 per row
-                        onClick={() => navigate(`/course-topic/${d.code}`)}
-                      >
-                        {logo ? (
-                          <img src={logo} alt={d.name} onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/96x96/FFFFFF/1C4DA1?text=LOGO'; }} />
-                        ) : (
-                          <div className="dept-icon">{d.code?.charAt(0) ?? 'D'}</div>
-                        )}
+              {programView === 'grid' ? (
+                <div className="program-grid" style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
+                  {isLoadingDepartments ? (
+                    <p>Loading departments...</p>
+                  ) : departments.length ? (
+                    departments
+                      .filter(d => {
+                        const code = (d.code || '').toString().trim().toUpperCase();
+                        const name = (d.name || '').toString().trim().toLowerCase();
+                        return code !== 'IT' && !name.includes('information technology');
+                      })
+                      .map((d) => {
+                        const logo = DEPARTMENT_LOGOS[d.code] || null;
+                        return (
+                          <div
+                            key={d.id}
+                            className="program-card"
+                            style={{ flex: '0 0 calc(25% - 1rem)', cursor: 'pointer' }} // 4 per row
+                            onClick={() => navigate(`/course-topic/${d.code}`)}
+                          >
+                            {logo ? (
+                              <img src={logo} alt={d.name} onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/96x96/FFFFFF/1C4DA1?text=LOGO'; }} />
+                            ) : (
+                              <div className="dept-icon">{d.code?.charAt(0) ?? 'D'}</div>
+                            )}
+                            <p>{d.name}</p>
+                          </div>
+                        );
+                      })
+                  ) : (
+                    <p>No departments available.</p>
+                  )}
+                </div>
+              ) : (
+                <div className="program-list">
+                  {isLoadingDepartments ? (
+                    <p>Loading departments...</p>
+                  ) : departments.length ? (
+                    departments.map(d => (
+                      <div key={d.id} className="program-list-item" style={{cursor: 'pointer'}} onClick={() => navigate(`/course-topic/${d.code}`)}>
                         <p>{d.name}</p>
                       </div>
-                    );
-                  })
-              ) : (
-                <p>No departments available.</p>
+                    ))
+                  ) : (
+                    <p>No departments available.</p>
+                  )}
+                </div>
               )}
-            </div>
-          ) : (
-            <div className="program-list">
-              {isLoadingDepartments ? (
-                <p>Loading departments...</p>
-              ) : departments.length ? (
-                departments.map(d => (
-                  <div key={d.id} className="program-list-item" style={{cursor: 'pointer'}} onClick={() => navigate(`/course-topic/${d.code}`)}>
-                    <p>{d.name}</p>
-                  </div>
-                ))
-              ) : (
-                <p>No departments available.</p>
-              )}
-            </div>
-          )}
+            </>
+          ) : activeView === 'users' ? (
+            <UserManagement />
+          ) : null}
         </div>
       </div>
 

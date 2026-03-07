@@ -29,25 +29,32 @@ const Dashboard = () => {
   useEffect(() => {
     if (isAdmin) {
       navigate('/admin');
+      return;
     }
 
     const loadDepartments = async () => {
+      if (!user?.userId) {
+        setDepartmentsError('User information not available.');
+        return;
+      }
+
       try {
         setIsLoadingDepartments(true);
-        const data = await apiService.getDepartments();
+        // Non-admin users only see their assigned departments
+        const data = await apiService.getUserDepartments(user.userId);
         const deptList = Array.isArray(data) ? data : [];
-        console.log('Loaded departments:', deptList);
+        console.log('Loaded user departments:', deptList);
         setDepartments(deptList);
       } catch (err) {
         console.error('Failed to load departments:', err);
-        setDepartmentsError('Failed to load departments.');
+        setDepartmentsError('Failed to load your departments. Please contact an administrator.');
       } finally {
         setIsLoadingDepartments(false);
       }
     };
 
     void loadDepartments();
-  }, [isAdmin, navigate]);
+  }, [isAdmin, navigate, user?.userId]);
 
   const displayName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username : 'User';
 
@@ -97,11 +104,11 @@ const Dashboard = () => {
               onSelect={(item) => {
                 setActiveTab(item);
                 if (item === 'Program - Topic') {
-                  const firstDept = departments?.find(d => d.code !== 'IT') || departments?.[0];
-                  const code = firstDept?.code || 'IT';
+                  const firstDept = departments?.[0];
+                  const code = firstDept?.code || 'CCS';
                   navigate(`/course-topic/${code}`);
                 } else if (item === 'Test Encoding' || item === 'Test Question Editing' || item === 'Test Question Encoding') {
-                  const firstDept = departments?.find(d => d.code !== 'IT') || departments?.[0];
+                  const firstDept = departments?.[0];
                   const code = firstDept?.code || 'CCS';
                   navigate(`/test-encoding/${code}`);
                 }
@@ -152,39 +159,33 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <h3>Your Programs</h3>
+          <h3>Your Departments</h3>
 
           {programView === 'grid' ? (
             <div className="program-grid">
               {isLoadingDepartments ? (
                 <p>Loading departments...</p>
               ) : departments.length === 0 ? (
-                <p>{departmentsError || 'No departments available.'}</p>
+                <p>{departmentsError || 'You have not been assigned to any departments. Please contact your administrator.'}</p>
               ) : (
-                departments
-                  .filter(d => {
-                    const code = (d.code || '').toString().trim().toUpperCase();
-                    const name = (d.name || '').toString().trim().toLowerCase();
-                    return code !== 'IT' && !name.includes('information technology');
-                  })
-                  .map((d) => {
-                    const logo = DEPARTMENT_LOGOS[d.code] || null;
-                    return (
-                      <div
-                        key={d.id}
-                        className="program-card"
-                        onClick={() => navigate(`/course-topic/${d.code}`)}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        {logo ? (
-                          <img src={logo} alt={d.name} onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/96x96/FFFFFF/1C4DA1?text=LOGO'; }} />
-                        ) : (
-                          <div className="dept-icon">{d.code?.charAt(0) ?? 'D'}</div>
-                        )}
-                        <p>{d.name}</p>
-                      </div>
-                    );
-                  })
+                departments.map((d) => {
+                  const logo = DEPARTMENT_LOGOS[d.code] || null;
+                  return (
+                    <div
+                      key={d.id}
+                      className="program-card"
+                      onClick={() => navigate(`/course-topic/${d.code}`)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      {logo ? (
+                        <img src={logo} alt={d.name} onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/96x96/FFFFFF/1C4DA1?text=LOGO'; }} />
+                      ) : (
+                        <div className="dept-icon">{d.code?.charAt(0) ?? 'D'}</div>
+                      )}
+                      <p>{d.name}</p>
+                    </div>
+                  );
+                })
               )}
             </div>
           ) : (
@@ -192,15 +193,13 @@ const Dashboard = () => {
               {isLoadingDepartments ? (
                 <p>Loading departments...</p>
               ) : departments.length === 0 ? (
-                <p>{departmentsError || 'No departments available.'}</p>
+                <p>{departmentsError || 'You have not been assigned to any departments. Please contact your administrator.'}</p>
               ) : (
-                departments
-                  .filter(d => d.code !== 'IT')
-                  .map((d) => (
-                    <div key={d.id} className="program-list-item" onClick={() => navigate(`/course-topic/${d.code}`)} style={{cursor: 'pointer'}}>
-                      <p>{d.name}</p>
-                    </div>
-                  ))
+                departments.map((d) => (
+                  <div key={d.id} className="program-list-item" onClick={() => navigate(`/course-topic/${d.code}`)} style={{cursor: 'pointer'}}>
+                    <p>{d.name}</p>
+                  </div>
+                ))
               )}
             </div>
           )}
