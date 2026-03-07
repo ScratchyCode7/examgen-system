@@ -26,6 +26,12 @@ public sealed record SaveGeneratedExamRequest(
 
 public sealed record SaveGeneratedExamQuestionDto(
     int QuestionId,
+    int DisplayOrder,
+    List<SaveGeneratedExamOptionDto>? Options = null
+);
+
+public sealed record SaveGeneratedExamOptionDto(
+    int OptionId,
     int DisplayOrder
 );
 
@@ -55,7 +61,8 @@ public sealed record TestResponse(
 public sealed record OptionResponse(
     int Id,
     string Content,
-    bool IsCorrect
+    bool IsCorrect,
+    int DisplayOrder
 );
 
 public sealed record QuestionResponse(

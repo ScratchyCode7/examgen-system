@@ -331,46 +331,64 @@ const SavedExamsReport = () => {
 
     const rawValue = option.isCorrect ?? option.IsCorrect ?? option.correct ?? option.is_correct ?? option.correctOption ?? option.answer ?? null;
 
-    if (typeof rawValue === 'boolean') {
-      return rawValue === true;
-    }
-
-    if (typeof rawValue === 'string') {
-      return rawValue.trim().toLowerCase() === 'true';
-    }
-
-    if (typeof rawValue === 'number') {
-      if (Number.isNaN(rawValue)) return false;
-      return rawValue === 1;
-    }
-
+    if (typeof rawValue === 'boolean') return rawValue === true;
+    if (typeof rawValue === 'string') return rawValue.trim().toLowerCase() === 'true';
+    if (typeof rawValue === 'number') return !Number.isNaN(rawValue) && rawValue === 1;
     return false;
   }, []);
 
   const getOrderedOptions = React.useCallback((options = []) => {
     return options
       .map((option, idx) => {
-        const rawOrder = option.displayOrder ?? option.DisplayOrder ?? option.order ?? option.Order ?? option.sequence ?? option.Sequence;
-        let normalizedOrder = idx;
-        if (typeof rawOrder === 'number' && !Number.isNaN(rawOrder)) {
-          normalizedOrder = rawOrder;
-        } else if (typeof rawOrder === 'string' && rawOrder.trim() !== '' && !Number.isNaN(Number(rawOrder))) {
-          normalizedOrder = Number(rawOrder);
-        } else if (typeof option.id === 'number') {
-          normalizedOrder = option.id;
-        } else if (typeof option.Id === 'number') {
-          normalizedOrder = option.Id;
-        }
-        return { option, normalizedOrder, idx };
+        const rawOrder = option?.displayOrder ?? option?.DisplayOrder ?? option?.order ?? option?.Order ?? option?.sequence ?? option?.Sequence;
+        const normalizedOrder = (() => {
+          if (typeof rawOrder === 'number' && Number.isFinite(rawOrder)) return rawOrder;
+          if (typeof rawOrder === 'string' && rawOrder.trim() !== '' && !Number.isNaN(Number(rawOrder))) return Number(rawOrder);
+          if (typeof option?.displayOrder === 'number' && Number.isFinite(option.displayOrder)) return option.displayOrder;
+          if (typeof option?.DisplayOrder === 'number' && Number.isFinite(option.DisplayOrder)) return option.DisplayOrder;
+          if (typeof option?.id === 'number' && Number.isFinite(option.id)) return option.id;
+          if (typeof option?.Id === 'number' && Number.isFinite(option.Id)) return option.Id;
+          return idx;
+        })();
+
+        const normalizedContent = option?.content ?? option?.Content ?? option?.optionText ?? option?.text ?? '';
+
+        return {
+          ...option,
+          content: normalizedContent,
+          _normalizedOrder: normalizedOrder,
+          _originalIndex: idx,
+          _isCorrectNormalized: isOptionMarkedCorrect(option)
+        };
       })
       .sort((a, b) => {
-        if (a.normalizedOrder === b.normalizedOrder) {
-          return a.idx - b.idx;
-        }
-        return a.normalizedOrder - b.normalizedOrder;
-      })
-      .map(item => item.option);
-  }, []);
+        if (a._normalizedOrder === b._normalizedOrder) return a._originalIndex - b._originalIndex;
+        return a._normalizedOrder - b._normalizedOrder;
+      });
+  }, [isOptionMarkedCorrect]);
+
+  const getCorrectLetter = React.useCallback((question, orderedOptions) => {
+    const options = orderedOptions && orderedOptions.length ? orderedOptions : getOrderedOptions(question?.options || []);
+
+    if (!options.length) {
+      console.warn('[SavedExamsReport] Answer key skipped: question has no options', {
+        questionId: question?.id,
+        question
+      });
+      return '—';
+    }
+
+    const correctIndex = options.findIndex(opt => opt?._isCorrectNormalized ?? isOptionMarkedCorrect(opt));
+    if (correctIndex >= 0) {
+      return String.fromCharCode(65 + correctIndex);
+    }
+
+    console.warn('[SavedExamsReport] Answer key skipped: no option marked correct', {
+      questionId: question?.id,
+      options
+    });
+    return '—';
+  }, [getOrderedOptions, isOptionMarkedCorrect]);
 
   const orderedQuestions = React.useMemo(() => {
     if (!selectedExam?.questions) return [];
@@ -417,48 +435,76 @@ const SavedExamsReport = () => {
         <head>
           <title>Table of Specification</title>
           <style>
+            @page {
+              size: Legal portrait;
+              margin: 0.5in;
+            }
             * { color: #000; }
             body { font-family: Arial, sans-serif; margin: 20px; color: #000; }
             .header { text-align: center; margin-bottom: 30px; }
-            .header h1 { font-size: 18px; margin: 5px 0; font-weight: bold; }
-            .header p { margin: 3px 0; }
-            .filename { font-weight: bold; margin: 10px 0; font-size: 13px; }
+            .header h1 { font-size: 18px; margin: 5px 0; font-weight: bold; color: #000; }
+            .header p { margin: 3px 0; color: #000; }
+            .filename { font-weight: bold; margin: 10px 0; font-size: 13px; color: #000; }
+            h2 { text-align: center; margin: 20px 0; color: #000; font-size: 16px; }
             table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
             table, th, td { border: 1px solid #000; }
-            th { background-color: #fff; padding: 12px 6px; text-align: center; font-size: 12px; }
-            td { padding: 10px 6px; text-align: center; font-size: 12px; }
+            th { 
+              background-color: #fff; 
+              color: #000;
+              padding: 12px 6px; 
+              text-align: center; 
+              font-weight: bold; 
+              border: 1px solid #000;
+              font-size: 12px;
+            }
+            td { 
+              border: 1px solid #000; 
+              padding: 10px 6px; 
+              text-align: center;
+              color: #000;
+              font-size: 12px;
+            }
             td.text-left { text-align: left; }
-            .total-row { font-weight: bold; }
+            .total-row { font-weight: bold; background-color: #fff; }
             .signature-section { margin-top: 50px; }
+            .signature-line { margin: 40px 0; display: flex; align-items: center; color: #000; }
+            .signature-label { width: 140px; font-weight: normal; color: #000; font-size: 13px; }
+            .signature-line-draw { flex: 1; border-bottom: 1px solid #000; margin: 0 10px; }
+            @media print {
+              body { margin: 0; padding: 10px; }
+              table { page-break-inside: avoid; }
+            }
           </style>
         </head>
         <body>
           <div class="header">
             <h1>University of Perpetual Help System</h1>
-            <p>Test Data Bank System · Biñan Campus</p>
+            <p>Test Data Bank System</p>
+            <p>Biñan Campus</p>
             <div class="filename">${filename}</div>
-            <p><strong>${programName}</strong></p>
-            <p>${subjectName}</p>
+            <p><strong style="color: #000;">${programName}</strong></p>
           </div>
-          <h2 style="text-align:center;">Table of Specification</h2>
-          <table>
+          
+          <h2>Table of Specification</h2>
+          
+          <table border="1" cellpadding="5" cellspacing="0">
             <thead>
               <tr>
-                <th rowspan="2">Topics</th>
-                <th rowspan="2">Hours</th>
-                <th colspan="2">Remembering & Understanding (30%)</th>
-                <th colspan="2">Applying & Analyzing (30%)</th>
-                <th colspan="2">Evaluating & Creating (40%)</th>
-                <th rowspan="2">Total Items</th>
-                <th rowspan="2">Percentage</th>
+                <th rowspan="2" style="width: 100px;">Topics</th>
+                <th rowspan="2" style="width: 60px;">Hours</th>
+                <th colspan="2" style="width: 140px;">Remembering & Understanding (30%)</th>
+                <th colspan="2" style="width: 140px;">Applying & Analyzing (30%)</th>
+                <th colspan="2" style="width: 140px;">Evaluating & Creating (40%)</th>
+                <th rowspan="2" style="width: 70px;">Total Items</th>
+                <th rowspan="2" style="width: 70px;">Percentage</th>
               </tr>
               <tr>
-                <th>No. Questions</th>
-                <th>Placement</th>
-                <th>No. Questions</th>
-                <th>Placement</th>
-                <th>No. Questions</th>
-                <th>Placement</th>
+                <th style="width: 70px;">No. Questions</th>
+                <th style="width: 70px;">Placement</th>
+                <th style="width: 70px;">No. Questions</th>
+                <th style="width: 70px;">Placement</th>
+                <th style="width: 70px;">No. Questions</th>
+                <th style="width: 70px;">Placement</th>
               </tr>
             </thead>
             <tbody>
@@ -476,23 +522,24 @@ const SavedExamsReport = () => {
               </tr>
             </tbody>
           </table>
-          <div class="signature-section">
-            <table style="width:100%; border:0; margin-top:40px;">
-              <tr>
-                <td style="border:0; text-align:center;">
-                  <div style="margin-bottom:5px;">Prepared By:</div>
-                  <div style="width:200px; margin:0 auto; border-bottom:1px solid #000; height:20px;"></div>
-                </td>
-                <td style="border:0; text-align:center;">
-                  <div style="margin-bottom:5px;">Assessed By:</div>
-                  <div style="width:200px; margin:0 auto; border-bottom:1px solid #000; height:20px;"></div>
-                </td>
-                <td style="border:0; text-align:center;">
-                  <div style="margin-bottom:5px;">Approved By:</div>
-                  <div style="width:220px; margin:0 auto; border-bottom:1px solid #000; height:20px;"></div>
-                </td>
-              </tr>
-            </table>
+          
+          <div class="signature-section" style="margin-top:90px;">
+            <div style="display:flex; justify-content:space-between; gap:20px;">
+              <div style="flex:1; display:flex; align-items:center;">
+                <span class="signature-label" style="display:inline-block; width:auto; white-space:nowrap;">Prepared By:</span>
+                <span style="display:inline-block; width:160px; border-bottom:1px solid #000; margin-left:1px; transform:translateY(6px);"></span>
+              </div>
+              <div style="flex:1; display:flex; align-items:center; justify-content:flex-end;">
+                <span class="signature-label" style="display:inline-block; width:auto; white-space:nowrap;">Assessed By:</span>
+                <span style="display:inline-block; width:160px; border-bottom:1px solid #000; margin-left:1px; transform:translateY(6px);"></span>
+              </div>
+            </div>
+            <div style="display:flex; justify-content:center; margin-top:40px;">
+              <div style="width:60%; display:flex; align-items:center; justify-content:center;">
+                <span class="signature-label" style="display:inline-block; width:auto; white-space:nowrap;">Approved By:</span>
+                <span style="display:inline-block; width:220px; border-bottom:1px solid #000; margin-left:1px; transform:translateY(6px);"></span>
+              </div>
+            </div>
           </div>
         </body>
       </html>
@@ -512,16 +559,15 @@ const SavedExamsReport = () => {
     const filename = buildFilename('Exam');
 
     const questionHtml = orderedQuestions.map((question, index) => {
-      const orderedOptions = getOrderedOptions(question.options || []);
-      const choices = orderedOptions.map((option, idx) => `
+      const options = getOrderedOptions(question.options || []);
+      const choices = options.map((option, idx) => `
         <div class="choice-item">
-          <span class="choice-letter">${String.fromCharCode(65 + idx)}.</span>
-          <span class="choice-text">${option.content}</span>
+          <span class="choice-letter">${String.fromCharCode(65 + idx)}.</span> ${option.content}
         </div>
       `).join('');
       return `
         <div class="question-item">
-          <div class="question-text"><strong>${index + 1}.)</strong> ${question.content}</div>
+          <div class="question-text">${index + 1}.) ${question.content}</div>
           <div class="choices">${choices}</div>
         </div>
       `;
@@ -532,9 +578,13 @@ const SavedExamsReport = () => {
         <head>
           <title>Exam Paper</title>
           <style>
+            @page {
+              size: Legal portrait;
+              margin: 0.5in;
+            }
             * { color: #000; }
             body { font-family: Arial, sans-serif; margin: 20px; color: #000; line-height: 1.6; }
-            .exam-header { display: flex; align-items: flex-start; gap: 20px; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #000; }
+            .exam-header { display: flex; align-items: flex-start; gap: 20px; margin-bottom: 20px; padding-bottom: 15px; }
             .logo-section { flex-shrink: 0; }
             .logo-section img { height: 140px; width: auto; }
             .header-text { flex: 1; text-align: center; }
@@ -543,18 +593,17 @@ const SavedExamsReport = () => {
             .filename { font-weight: bold; margin: 8px 0; font-size: 12px; color: #000; }
             .program-info { font-weight: bold; font-size: 15px; margin: 10px 0; color: #000; }
             .form-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 15px 0; }
-            .form-field { display: flex; align-items: center; gap: 6px; }
+            .form-field { display: flex; align-items: center; gap: 5px; }
             .form-field label { color: #000; font-size: 14px; white-space: nowrap; }
             .form-field-blank { flex: 1; border-bottom: 1px solid #000; min-width: 150px; height: 0; }
             .reminders { margin: 15px 0; font-size: 13px; color: #000; }
             .reminders p { margin: 5px 0; }
             .questions-section { margin: 20px 0; }
-            .question-item { margin-bottom: 18px; color: #000; }
-            .question-text { font-size: 14px; margin-bottom: 8px; }
+            .question-item { margin-bottom: 15px; color: #000; }
+            .question-text { font-weight: normal; margin-bottom: 5px; font-size: 14px; }
             .choices { display: flex; flex-wrap: wrap; gap: 15px; margin-left: 20px; }
-            .choice-item { font-size: 14px; flex: 1 1 calc(25% - 15px); min-width: 120px; display: flex; gap: 6px; }
-            .choice-letter { font-weight: bold; }
-            .choice-text { flex: 1; }
+            .choice-item { font-size: 14px; flex: 1 1 calc(25% - 15px); min-width: 120px; word-wrap: break-word; white-space: normal; }
+            .choice-letter { font-weight: normal; }
             @media print {
               body { margin: 0; padding: 10px; }
               .question-item { page-break-inside: avoid; }
@@ -570,18 +619,29 @@ const SavedExamsReport = () => {
               <p>Biñan Campus</p>
               <div class="filename">${filename}</div>
               <p class="program-info">${programName}</p>
-              <p>${subjectName}</p>
             </div>
           </div>
           <div class="form-fields">
-            <div class="form-field"><label>Student Name:</label><span class="form-field-blank"></span></div>
-            <div class="form-field"><label>Date:</label><span class="form-field-blank"></span></div>
-            <div class="form-field"><label>Professor:</label><span class="form-field-blank"></span></div>
-            <div class="form-field"><label>Permit #:</label><span class="form-field-blank"></span></div>
+            <div class="form-field">
+              <label>Name:</label>
+              <div class="form-field-blank"></div>
+            </div>
+            <div class="form-field">
+              <label>Date:</label>
+              <div class="form-field-blank"></div>
+            </div>
+            <div class="form-field">
+              <label>Professor:</label>
+              <div class="form-field-blank"></div>
+            </div>
+            <div class="form-field">
+              <label>Permit #:</label>
+              <div class="form-field-blank"></div>
+            </div>
           </div>
           <div class="reminders">
-            <p><strong>REMINDER:</strong> Cheating during examinations, borrowing, or lending permits are offenses under university policy.</p>
-            <p><strong>Direction:</strong> Multiple Choice — Choose the letter of the correct answer.</p>
+            <p><strong>REMINDER: CHEATING during examinations, BORROWING and LENDING of examination permit fall under Major offenses and are punishable under the existing University Policy</strong></p>
+            <p><strong>Direction:</strong> Multiple Choice: Choose the letter of the correct answer.</p>
           </div>
           <div class="questions-section">
             ${questionHtml}
@@ -593,24 +653,23 @@ const SavedExamsReport = () => {
     openPrintWindow(html);
   };
 
-  const printAnswerKey = () => {
+  const printAnswerKey = async () => {
     if (!orderedQuestions.length) {
       throw new Error('This saved exam has no questions.');
     }
 
+    const logoDataUrl = await loadImageAsDataUrl(UPHSLLogo);
+    const programName = getProgramName();
     const filename = buildFilename('AnswerKey');
-    const rows = orderedQuestions.map((question, index) => {
+
+    const totalAnswers = orderedQuestions.length;
+    const cols = totalAnswers > 75 ? 3 : 2;
+    const answerFontSize = cols === 3 ? '10px' : '11px';
+
+    const renderAnswersHTML = orderedQuestions.map((question, index) => {
       const options = getOrderedOptions(question.options || []);
-      const correctIndex = options.findIndex(isOptionMarkedCorrect);
-      const correctLetter = correctIndex >= 0 ? String.fromCharCode(65 + correctIndex) : '—';
-      const correctContent = options[correctIndex]?.content || 'N/A';
-      return `
-        <tr>
-          <td>${index + 1}</td>
-          <td>${correctLetter}</td>
-          <td class="text-left">${correctContent}</td>
-        </tr>
-      `;
+      const correctLetter = getCorrectLetter(question, options);
+      return '<div class="answer-item"><span class="question-num">' + (index + 1) + '.</span> <span class="answer-letter">' + correctLetter + '</span></div>';
     }).join('');
 
     const html = `
@@ -618,29 +677,66 @@ const SavedExamsReport = () => {
         <head>
           <title>Answer Key</title>
           <style>
+            @page {
+              size: Legal portrait;
+              margin: 0.5in;
+            }
             * { color: #000; }
-            body { font-family: Arial, sans-serif; margin: 30px; color: #000; }
-            h2 { text-align: center; margin-bottom: 20px; }
-            table { width: 100%; border-collapse: collapse; }
-            table, th, td { border: 1px solid #000; }
-            th, td { padding: 10px; text-align: center; font-size: 13px; }
-            td.text-left { text-align: left; }
+            body { font-family: Arial, sans-serif; margin: 12px; color: #000; line-height: 1.25; }
+            .exam-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; padding-bottom: 8px; }
+            .logo-section { flex-shrink: 0; }
+            .logo-section img { height: 90px; width: auto; }
+            .header-text { flex: 1; text-align: center; }
+            .header-text h2 { font-size: 15px; margin: 2px 0; font-weight: bold; color: #000; }
+            .header-text p { margin: 2px 0; color: #000; font-size: 11px; }
+            .program-info { font-weight: bold; font-size: 12px; margin: 4px 0; color: #000; }
+            .filename { font-weight: bold; margin: 4px 0; font-size: 10px; color: #000; }
+            .answer-title { font-weight: bold; text-align: center; font-size: 14px; margin: 8px 0; }
+
+            .answers-section {
+              margin: 6px 0;
+              -webkit-column-count: ${cols};
+              -moz-column-count: ${cols};
+              column-count: ${cols};
+              -webkit-column-gap: 14px;
+              -moz-column-gap: 14px;
+              column-gap: 14px;
+              -webkit-column-fill: auto;
+              -moz-column-fill: auto;
+              column-fill: auto;
+            }
+
+            .answer-item { font-size: ${answerFontSize}; margin: 4px 0; color: #000; display: inline-block; width: 100%; }
+            .question-num { font-weight: normal; display: inline-block; width: 28px; }
+            .answer-letter { font-weight: bold; display: inline-block; width: 20px; }
+
+            @media print {
+              @page { size: auto; margin: 8mm; }
+              body { margin: 0; padding: 0; }
+              .answers-section { column-count: 3; column-gap: 12px; }
+              .answer-item { page-break-inside: avoid; }
+            }
           </style>
         </head>
         <body>
-          <h2>Answer Key · ${filename}</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>Question No.</th>
-                <th>Answer</th>
-                <th>Explanation</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rows}
-            </tbody>
-          </table>
+          <div class="exam-header">
+            <div class="logo-section">
+              <img src="${logoDataUrl}" alt="UPHSL Logo" />
+            </div>
+            <div class="header-text">
+              <h2>University of Perpetual Help System</h2>
+              <p>Test Data Bank System</p>
+              <p>Biñan Campus</p>
+              <div class="filename">${filename}</div>
+              <p class="program-info">${programName}</p>
+            </div>
+          </div>
+
+          <div class="answer-title">ANSWER KEY</div>
+
+          <div class="answers-section">
+            ${renderAnswersHTML}
+          </div>
         </body>
       </html>
     `;
@@ -956,6 +1052,7 @@ const SavedExamsReport = () => {
 
                       <div className="exam-questions-section">
                         {orderedQuestions.map((question, index) => {
+                          // Sort options by displayOrder to ensure A, B, C, D order
                           const options = getOrderedOptions(question.options || []);
                           return (
                             <div key={question.id || index} className="exam-question-item">

@@ -10,6 +10,7 @@ public sealed class TestQuestion
     public int TestId { get; set; }
     public int QuestionId { get; set; }
     public int DisplayOrder { get; set; }
+    public string? OptionSnapshotJson { get; set; }
 
     // Navigation
     public Test Test { get; set; } = null!;

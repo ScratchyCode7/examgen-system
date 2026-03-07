@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using Databank.Abstract;
 using Databank.Database;
 using Databank.Entities;
@@ -43,6 +44,7 @@ public sealed class SaveGeneratedExamEndpoint : IEndpoint
             var questionIds = request.Questions.Select(q => q.QuestionId).ToList();
             var questions = await dbContext.Questions
                 .Include(q => q.Topic)
+                .Include(q => q.Options)
                 .Where(q => questionIds.Contains(q.Id))
                 .ToListAsync(ct);
 
@@ -108,15 +110,33 @@ public sealed class SaveGeneratedExamEndpoint : IEndpoint
             await dbContext.Tests.AddAsync(test, ct);
             await dbContext.SaveChangesAsync(ct);
 
-            var testQuestions = request.Questions
+            var questionLookup = questions.ToDictionary(q => q.Id);
+            var orderedRequestQuestions = request.Questions
                 .OrderBy(q => q.DisplayOrder)
-                .Select(q => new TestQuestion
+                .ToList();
+
+            var testQuestions = new List<TestQuestion>(orderedRequestQuestions.Count);
+            foreach (var requestQuestion in orderedRequestQuestions)
+            {
+                if (!questionLookup.TryGetValue(requestQuestion.QuestionId, out var questionEntity))
+                {
+                    return TypedResults.BadRequest($"Question {requestQuestion.QuestionId} could not be resolved.");
+                }
+
+                var snapshotResult = BuildOptionSnapshot(questionEntity, requestQuestion);
+                if (!snapshotResult.Success)
+                {
+                    return TypedResults.BadRequest(snapshotResult.ErrorMessage);
+                }
+
+                testQuestions.Add(new TestQuestion
                 {
                     TestId = test.Id,
-                    QuestionId = q.QuestionId,
-                    DisplayOrder = q.DisplayOrder
-                })
-                .ToList();
+                    QuestionId = requestQuestion.QuestionId,
+                    DisplayOrder = requestQuestion.DisplayOrder,
+                    OptionSnapshotJson = snapshotResult.Json
+                });
+            }
 
             await dbContext.TestQuestions.AddRangeAsync(testQuestions, ct);
             await dbContext.SaveChangesAsync(ct);
@@ -139,4 +159,49 @@ public sealed class SaveGeneratedExamEndpoint : IEndpoint
 
         return $"Set {sb}";
     }
+
+    private static (bool Success, string Json, string? ErrorMessage) BuildOptionSnapshot(Question question, SaveGeneratedExamQuestionDto dto)
+    {
+        var options = question.Options?.OrderBy(o => o.DisplayOrder).ToList() ?? new List<Option>();
+        if (options.Count == 0)
+        {
+            return (true, "[]", null);
+        }
+
+        if (dto.Options is null || dto.Options.Count == 0)
+        {
+            var fallback = options
+                .Select(o => new OptionSnapshotDto(o.Id, o.DisplayOrder))
+                .ToList();
+            return (true, JsonSerializer.Serialize(fallback), null);
+        }
+
+        var validOptionIds = options.Select(o => o.Id).ToHashSet();
+        var seen = new HashSet<int>();
+        var snapshotItems = new List<OptionSnapshotDto>(dto.Options.Count);
+
+        foreach (var optionDto in dto.Options.OrderBy(o => o.DisplayOrder))
+        {
+            if (!validOptionIds.Contains(optionDto.OptionId))
+            {
+                return (false, string.Empty, $"Option {optionDto.OptionId} does not belong to question {question.Id}.");
+            }
+
+            if (!seen.Add(optionDto.OptionId))
+            {
+                return (false, string.Empty, $"Option {optionDto.OptionId} is duplicated for question {question.Id}.");
+            }
+
+            snapshotItems.Add(new OptionSnapshotDto(optionDto.OptionId, optionDto.DisplayOrder));
+        }
+
+        if (snapshotItems.Count != options.Count)
+        {
+            return (false, string.Empty, $"All options must be included when saving question {question.Id}.");
+        }
+
+        return (true, JsonSerializer.Serialize(snapshotItems), null);
+    }
+
+    private sealed record OptionSnapshotDto(int OptionId, int DisplayOrder);
 }

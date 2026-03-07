@@ -636,6 +636,41 @@ const TestGeneration = () => {
   }, []);
 
   const buildQuestionsPayload = React.useCallback(() => {
+    const sampleQuestions = sampleExam?.questions;
+    if (Array.isArray(sampleQuestions) && sampleQuestions.length > 0) {
+      const orderedFromSample = sampleQuestions
+        .map((question, index) => {
+          const rawQuestionId = question?.id ?? question?.questionId ?? question?.QuestionId;
+          const questionId = Number(rawQuestionId);
+          if (!Number.isInteger(questionId)) return null;
+
+          const options = (question.options || question.Options || question.choices || [])
+            .map((option, optIdx) => {
+              const rawOptionId = option?.optionId ?? option?.OptionId ?? option?.id ?? option?.Id;
+              const optionId = Number(rawOptionId);
+              if (!Number.isInteger(optionId)) return null;
+              return {
+                optionId,
+                displayOrder: optIdx
+              };
+            })
+            .filter(Boolean);
+
+          return {
+            questionId,
+            displayOrder: index,
+            options
+          };
+        })
+        .filter(Boolean);
+
+      const signature = orderedFromSample
+        .map(item => `${item.displayOrder}:${item.questionId}`)
+        .join('|');
+
+      return { ordered: orderedFromSample, signature };
+    }
+
     if (!generatedSpec?.specs) {
       return { ordered: [], signature: '' };
     }
@@ -679,7 +714,7 @@ const TestGeneration = () => {
       .join('|');
 
     return { ordered, signature };
-  }, [generatedSpec]);
+  }, [sampleExam, generatedSpec]);
 
   const questionsPayload = React.useMemo(() => buildQuestionsPayload(), [buildQuestionsPayload]);
   const questionSignature = questionsPayload.signature;
@@ -1911,6 +1946,10 @@ const TestGeneration = () => {
                       <head>
                         <title>Table of Specification</title>
                         <style>
+                          @page {
+                            size: Legal portrait;
+                            margin: 0.5in;
+                          }
                           * { color: #000; }
                           body { font-family: Arial, sans-serif; margin: 20px; color: #000; }
                           .header { text-align: center; margin-bottom: 30px; }
@@ -2098,6 +2137,10 @@ const TestGeneration = () => {
                         <head>
                           <title>Exam Paper</title>
                           <style>
+                            @page {
+                              size: Legal portrait;
+                              margin: 0.5in;
+                            }
                             * { color: #000; }
                             body { font-family: Arial, sans-serif; margin: 20px; color: #000; line-height: 1.6; }
                             .exam-header { display: flex; align-items: flex-start; gap: 20px; margin-bottom: 20px; padding-bottom: 15px; }
@@ -2279,6 +2322,10 @@ const TestGeneration = () => {
                         <head>
                           <title>Answer Key</title>
                           <style>
+                            @page {
+                              size: Legal portrait;
+                              margin: 0.5in;
+                            }
                             * { color: #000; }
                             body { font-family: Arial, sans-serif; margin: 12px; color: #000; line-height: 1.25; }
                             .exam-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; padding-bottom: 8px; }

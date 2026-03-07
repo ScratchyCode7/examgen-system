@@ -23,6 +23,10 @@ public sealed class TestQuestionConfiguration : IEntityTypeConfiguration<TestQue
         builder.Property(x => x.DisplayOrder)
             .HasDefaultValue(0);
 
+        builder.Property(x => x.OptionSnapshotJson)
+            .HasColumnType("jsonb")
+            .HasColumnName("OptionSnapshotJson");
+
         // Relationships
         builder.HasOne(x => x.Test)
             .WithMany(x => x.TestQuestions)
