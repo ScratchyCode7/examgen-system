@@ -63,10 +63,12 @@ public sealed class LoggingService : ILoggingService
     {
         if (userId.HasValue)
         {
-            var userDepartmentId = await _dbContext.Users
+            // Get first department from UserDepartments join table
+            var userDepartmentId = await _dbContext.UserDepartments
                 .AsNoTracking()
-                .Where(u => u.UserId == userId.Value)
-                .Select(u => (int?)u.DepartmentId)
+                .Where(ud => ud.UserId == userId.Value)
+                .OrderBy(ud => ud.DepartmentId)
+                .Select(ud => (int?)ud.DepartmentId)
                 .FirstOrDefaultAsync();
 
             if (userDepartmentId.HasValue)

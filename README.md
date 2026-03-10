@@ -2,6 +2,39 @@
 
 Full-stack application for managing exam/test databank with C# ASP.NET Core backend and React frontend.
 
+## ✨ Latest Updates (v2.7 - Multi-Department Access System)
+
+**Released March 7, 2026 - Enable users to access multiple departments with granular permission control.**
+
+### New Changes (v2.7):
+- ✅ **Multi-Department User Access:**
+  - Users can now be assigned to multiple departments (e.g., College of Business AND College of Computer Studies)
+  - Many-to-many relationship via `UserDepartments` join table with composite primary key
+  - Legacy single `DepartmentId` preserved during transition, marked obsolete
+- ✅ **Enhanced Authentication:**
+  - JWT tokens now include multiple `departmentId` claims (one per assigned department)
+  - `DepartmentAccessService` validates user access to department-scoped resources
+  - Admin users automatically get access to all active departments
+- ✅ **Admin User Management UI:**
+  - New UserManagement component in Admin Dashboard under "Users" nav item
+  - Create/edit users with multi-select department assignment via checkboxes
+  - Password visibility toggle in user creation form
+  - Full dark mode support with theme-aware styling
+- ✅ **Department Switching:**
+  - New `DepartmentSwitcher` component for switching between assigned departments
+  - URL-based navigation with `/:departmentCode` parameter
+  - Protected routes validate department access before rendering
+- ✅ **Scoped Department Views:**
+  - Non-admin users see only their assigned departments on dashboard
+  - `getUserDepartments` API endpoint returns user-specific department list
+  - Department-aware routing preserves context across navigation
+- ✅ **Developer Experience:**
+  - Fixed all obsolete property warnings (11 total)
+  - Created migrations with SQL backfill for zero-downtime deployment
+  - Comprehensive documentation in `docs/multi-department-access-system.md`
+
+📖 **[View Full Multi-Department Documentation](docs/multi-department-access-system.md)**
+
 ## ✨ Latest Updates (v2.6 - Saved Exam Sets & Printing Suite)
 
 **Released Feb 27, 2026 - Persist generated exams with deterministic signatures and manage printable sets from the new reports view.**
@@ -600,7 +633,19 @@ The collection includes:
 - 🚧 Questions/Test integration with backend endpoints
 - 🚧 Advanced reporting and analytics views
 
-## 🔄 Recent Changes (Dec 8-9, 2025)
+## � Documentation
+
+### System Documentation
+- **[Multi-Department Access System](docs/multi-department-access-system.md)** - Complete guide to multi-department user access, JWT claims, admin UI, and migration strategy
+- **[Generated Exam Save Flow](docs/generated-exam-save-flow.md)** - Exam persistence workflow, signature detection, and retrieval mechanics
+- **[Refactoring Guide](REFACTORING_GUIDE.md)** - Database schema evolution and architectural decisions
+- **[Refactoring Summary](REFACTORING_SUMMARY.md)** - Quick reference for schema changes
+
+### API Documentation
+- **[Postman Commands](POSTMANCMD.MD)** - API endpoint reference and testing guide
+- **Postman Collection**: `postman/Databank.postman_collection.json`
+
+## �🔄 Recent Changes (Dec 8-9, 2025)
 
 - Migrated the working Create-React-App frontend into `client/` and updated `client/package.json` to use `react-scripts` so the `client/` folder now hosts the active frontend (backup copy kept in `tdb-frontend/`).
 - Implemented a global `ThemeContext` to persist dark-mode preference across pages (`client/src/contexts/ThemeContext.js`).

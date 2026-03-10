@@ -6,12 +6,13 @@ public static class UserMappings
 {
     public static UserResponse ToResponse(this User user)
     {
+        var departmentIds = user.UserDepartments.Select(ud => ud.DepartmentId).ToArray();
         return new UserResponse(
             user.UserId,
             user.FirstName,
             user.LastName,
-            user.DepartmentId,
-            user.UserDepartments.Select(ud => ud.DepartmentId).ToArray(),
+            departmentIds.FirstOrDefault() == 0 ? null : departmentIds.FirstOrDefault(),
+            departmentIds,
             user.Username,
             user.Email,
             user.IsAdmin,

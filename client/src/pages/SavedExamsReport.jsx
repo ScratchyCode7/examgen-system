@@ -93,6 +93,7 @@ const SavedExamsReport = () => {
   // Selection + UI
   const [selectedExam, setSelectedExam] = useState(null);
   const [showPrintModal, setShowPrintModal] = useState(false);
+  const [showPrintRequestModal, setShowPrintRequestModal] = useState(false);
   const [printOption, setPrintOption] = useState('specification');
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [examPendingDelete, setExamPendingDelete] = useState(null);
@@ -744,6 +745,19 @@ const SavedExamsReport = () => {
     openPrintWindow(html);
   };
 
+  const handlePrintButtonClick = () => {
+    if (!selectedExam) {
+      setError('Select a saved exam before printing.');
+      return;
+    }
+
+    if (user?.isAdmin) {
+      setShowPrintModal(true);
+    } else {
+      setShowPrintRequestModal(true);
+    }
+  };
+
   const handlePrint = async () => {
     if (!selectedExam) {
       setError('Select a saved exam before printing.');
@@ -762,6 +776,23 @@ const SavedExamsReport = () => {
     } catch (err) {
       console.error('Failed to print:', err);
       setError(err.message || 'Failed to print.');
+    }
+  };
+
+  const handleSubmitPrintRequest = async (notes, copies) => {
+    try {
+      if (!selectedExam?.id) {
+        setError('No exam selected for print request');
+        return;
+      }
+      
+      await apiService.submitPrintRequest(selectedExam.id, notes, copies);
+      setShowPrintRequestModal(false);
+      setError('');
+      alert('Print request submitted successfully! An admin will process your request.');
+    } catch (err) {
+      console.error('Failed to submit print request:', err);
+      setError(err.response?.data?.error || 'Failed to submit print request');
     }
   };
 
@@ -816,8 +847,11 @@ const SavedExamsReport = () => {
               onSelect={(item) => {
                 setActiveTab(item);
                 const code = resolveDepartmentCode();
-                if (item === 'Test Generation') navigate(`/test-generation/${code}`);
-                if (item === 'Saved Exam Sets') navigate(`/reports/saved-exams/${code}`);
+                if (item === 'Test Generation') {
+                  navigate(`/test-generation/${code}`);
+                } else if (item === 'Saved Exam Sets') {
+                  navigate(`/reports/saved-exams/${code}`);
+                }
               }}
             />
           </div>
@@ -1008,8 +1042,8 @@ const SavedExamsReport = () => {
                   </div>
 
                   <div className="action-buttons" style={{ justifyContent: 'flex-end', marginTop: '1rem' }}>
-                    <button className="btn btn-secondary" onClick={() => setShowPrintModal(true)} disabled={!selectedExam}>
-                      <Printer size={16} /> Print Options
+                    <button className="btn btn-secondary" onClick={handlePrintButtonClick} disabled={!selectedExam}>
+                      <Printer size={16} /> {user?.isAdmin ? 'Print Options' : 'Request Print'}
                     </button>
                     <button
                       className="btn btn-danger"
@@ -1112,6 +1146,77 @@ const SavedExamsReport = () => {
             <div className="modal-buttons print-modal-buttons">
               <button className="btn btn-secondary" onClick={() => setShowPrintModal(false)}>Cancel</button>
               <button className="btn btn-primary" onClick={() => void handlePrint()}>Print</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Print Request Modal (Non-Admin) */}
+      {showPrintRequestModal && (
+        <div className="modal-overlay">
+          <div className={`modal ${isDarkMode ? 'dark' : ''}`}>
+            <h3>Request Master Set Print</h3>
+            <div className="modal-content">
+              <p>Request a Master Set of this saved exam to be printed by an administrator.</p>
+              <p><strong>Exam:</strong> {selectedExam?.setLabel || 'N/A'}</p>
+              <p><strong>Type:</strong> {selectedExam?.examType} · {selectedExam?.semester} Semester · SY {selectedExam?.schoolYear}</p>
+              
+              <div style={{ margin: '1rem 0' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                  Number of Copies:
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="5"
+                  defaultValue="1"
+                  id="copiesInput"
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem',
+                    border: '1px solid var(--border-color, #dee2e6)',
+                    borderRadius: '4px'
+                  }}
+                />
+              </div>
+              
+              <div style={{ margin: '1rem 0' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                  Additional Notes (Optional):
+                </label>
+                <textarea
+                  id="notesInput"
+                  rows="3"
+                  placeholder="Any special instructions or requests..."
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem',
+                    border: '1px solid var(--border-color, #dee2e6)',
+                    borderRadius: '4px',
+                    resize: 'vertical'
+                  }}
+                />
+              </div>
+              
+              <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary, #6c757d)', marginTop: '1rem' }}>
+                Note: The master set includes the Table of Specifications, Exam Paper, and Answer Key.
+                You will be notified when it's ready for pickup.
+              </p>
+            </div>
+            <div className="modal-buttons">
+              <button className="btn btn-secondary" onClick={() => setShowPrintRequestModal(false)}>
+                Cancel
+              </button>
+              <button 
+                className="btn btn-primary" 
+                onClick={() => {
+                  const notes = document.getElementById('notesInput').value;
+                  const copies = parseInt(document.getElementById('copiesInput').value) || 1;
+                  handleSubmitPrintRequest(notes, copies);
+                }}
+              >
+                Submit Request
+              </button>
             </div>
           </div>
         </div>

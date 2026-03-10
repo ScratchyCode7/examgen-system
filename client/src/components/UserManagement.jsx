@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
+import { useTheme } from '../contexts/ThemeContext';
 import { apiService } from '../services/api';
 import '../styles/UserManagement.css';
 
 const UserManagement = () => {
+  const { isDarkMode } = useTheme();
   const [users, setUsers] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -10,6 +13,7 @@ const UserManagement = () => {
   const [editingUser, setEditingUser] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   
   const [formData, setFormData] = useState({
     firstName: '',
@@ -180,6 +184,7 @@ const UserManagement = () => {
     setShowModal(false);
     setEditingUser(null);
     setError('');
+    setShowPassword(false);
     setFormData({
       firstName: '',
       lastName: '',
@@ -328,14 +333,24 @@ const UserManagement = () => {
 
               <div className="form-group">
                 <label>Password {!editingUser && '*'}</label>
-                <input
-                  type="password"
-                  name="password"
-                  value={formData.password}
-                  onChange={handleInputChange}
-                  required={!editingUser}
-                  placeholder={editingUser ? 'Leave blank to keep current password' : ''}
-                />
+                <div className="password-input-wrapper">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    name="password"
+                    value={formData.password}
+                    onChange={handleInputChange}
+                    required={!editingUser}
+                    placeholder={editingUser ? 'Leave blank to keep current password' : ''}
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle-btn"
+                    onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
+                </div>
               </div>
 
               <div className="form-group">

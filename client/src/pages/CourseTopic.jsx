@@ -30,6 +30,8 @@ const CourseTopic = () => {
 
   const displayName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username : 'User';
 
+  const reportItems = ["Test Generation", "Saved Exam Sets"];
+
   // Course topic form states
   const [course, setCourse] = useState("");
   const [topicCode, setTopicCode] = useState("");
@@ -53,6 +55,7 @@ const CourseTopic = () => {
   const [topicCreating, setTopicCreating] = useState(false);
 
   const isDataEntryActive = dataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
+  const isReportsActive = reportItems.includes(activeTab) || activeTab === 'Reports';
 
   const resolveDepartmentCode = () => {
     if (departmentCode) return departmentCode;
@@ -403,14 +406,19 @@ const CourseTopic = () => {
                 }
               }}
             />
-            <NavItem
+            <DropdownNavItem
               icon={BookOpen}
               label="Reports"
-              isActive={activeTab === 'Reports'}
-              onClick={() => {
-                setActiveTab('Reports');
+              isActive={isReportsActive}
+              dropdownItems={reportItems}
+              onSelect={(item) => {
+                setActiveTab(item);
                 const targetCode = resolveDepartmentCode();
-                navigate(`/test-generation/${targetCode}`);
+                if (item === 'Test Generation') {
+                  navigate(`/test-generation/${targetCode}`);
+                } else if (item === 'Saved Exam Sets') {
+                  navigate(`/reports/saved-exams/${targetCode}`);
+                }
               }}
             />
           </div>

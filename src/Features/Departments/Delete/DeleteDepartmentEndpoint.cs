@@ -14,7 +14,7 @@ public sealed class DeleteDepartmentEndpoint : IEndpoint
                 CancellationToken ct) =>
         {
             var department = await dbContext.Departments
-                .Include(d => d.Users)
+                .Include(d => d.UserDepartments)
                 .Include(d => d.Courses)
                 .FirstOrDefaultAsync(d => d.Id == id, ct);
 
@@ -24,7 +24,7 @@ public sealed class DeleteDepartmentEndpoint : IEndpoint
             }
 
             // Check if department has users or courses
-            if (department.Users.Any() || department.Courses.Any())
+            if (department.UserDepartments.Any() || department.Courses.Any())
             {
                 return TypedResults.BadRequest(
                     "Cannot delete department with associated users or courses. " +

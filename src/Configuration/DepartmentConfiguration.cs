@@ -40,10 +40,11 @@ public sealed class DepartmentConfiguration : IEntityTypeConfiguration<Departmen
             .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
         // Relationships
-        builder.HasMany(x => x.Users)
-            .WithOne(x => x.Department)
-            .HasForeignKey(x => x.DepartmentId)
-            .OnDelete(DeleteBehavior.Restrict);
+        // Old single-department relationship removed - now using UserDepartments join table
+        // builder.HasMany(x => x.Users)
+        //     .WithOne(x => x.Department)
+        //     .HasForeignKey(x => x.DepartmentId)
+        //     .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasMany(x => x.Courses)
             .WithOne(x => x.Department)

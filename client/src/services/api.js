@@ -331,6 +331,44 @@ export const apiService = {
     if (data?.data && Array.isArray(data.data)) return data.data;
     return [];
   },
+
+  // Print Requests
+  submitPrintRequest: async (testId, notes = null, copiesRequested = 1) => {
+    const response = await apiClient.post('/api/printrequests', {
+      testId,
+      notes,
+      copiesRequested
+    });
+    return response.data;
+  },
+
+  getMyPrintRequests: async () => {
+    const response = await apiClient.get('/api/printrequests/my-requests');
+    return response.data;
+  },
+
+  getPendingPrintRequests: async () => {
+    const response = await apiClient.get('/api/printrequests/pending');
+    return response.data;
+  },
+
+  getPrintRequestsByDepartment: async (departmentId) => {
+    const response = await apiClient.get(`/api/printrequests/department/${departmentId}`);
+    return response.data;
+  },
+
+  updatePrintRequestStatus: async (printRequestId, status, notes = null) => {
+    const response = await apiClient.put(`/api/printrequests/${printRequestId}/status`, {
+      status,
+      notes
+    });
+    return response.data;
+  },
+
+  getMasterSet: async (printRequestId) => {
+    const response = await apiClient.get(`/api/printrequests/${printRequestId}/masterset`);
+    return response.data;
+  },
 };
 
 export default apiClient;

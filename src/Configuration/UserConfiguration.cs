@@ -60,11 +60,12 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
         // Relationships
-        builder.HasOne(x => x.Department)
-            .WithMany(x => x.Users)
-            .HasForeignKey(x => x.DepartmentId)
-            .OnDelete(DeleteBehavior.Restrict)
-            .IsRequired(false);
+        // Old single-department relationship removed - now using UserDepartments join table
+        // builder.HasOne(x => x.Department)
+        //     .WithMany(x => x.Users)
+        //     .HasForeignKey(x => x.DepartmentId)
+        //     .OnDelete(DeleteBehavior.Restrict)
+        //     .IsRequired(false);
 
         builder.HasMany(x => x.ActivityLogs)
             .WithOne(x => x.User)

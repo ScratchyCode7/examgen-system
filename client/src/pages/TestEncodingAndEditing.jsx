@@ -884,6 +884,10 @@ const TestEncodingAndEditing = () => {
     // Sort keys based on BLOOM_LEVELS order
     const sortedBloomLevels = BLOOM_LEVELS.map(bl => bl.value).filter(level => groupedQuestions.hasOwnProperty(level));
 
+    // Navigation helpers
+    const reportItems = ["Test Generation", "Saved Exam Sets"];
+    const isDataEntryActive = dataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
+    const isReportsActive = reportItems.includes(activeTab) || activeTab === 'Reports';
 
     // -----------------
 
@@ -913,7 +917,7 @@ const TestEncodingAndEditing = () => {
                         <DropdownNavItem
                             icon={ClipboardList}
                             label="Data Entry"
-                            isActive={dataEntryItems.includes(activeTab)}
+                            isActive={isDataEntryActive}
                             dropdownItems={dataEntryItems}
                             onSelect={(item) => {
                                 handleSetActiveTab(item);
@@ -925,7 +929,21 @@ const TestEncodingAndEditing = () => {
                                 }
                             }}
                         />
-                        <NavItem icon={BookOpen} label="Reports" isActive={activeTab==='Reports'} onClick={()=>handleSetActiveTab('Reports')} />
+                        <DropdownNavItem
+                            icon={BookOpen}
+                            label="Reports"
+                            isActive={isReportsActive}
+                            dropdownItems={reportItems}
+                            onSelect={(item) => {
+                                handleSetActiveTab(item);
+                                const deptCode = getActiveDepartmentCode();
+                                if (item === 'Test Generation') {
+                                    navigate(`/test-generation/${deptCode}`);
+                                } else if (item === 'Saved Exam Sets') {
+                                    navigate(`/reports/saved-exams/${deptCode}`);
+                                }
+                            }}
+                        />
                     </div>
                     <div className="nav-right" ref={userMenuRef}>
                         <button onClick={toggleDarkMode} className={`mode-switch ${isDarkMode?'dark':''}`}>

@@ -21,6 +21,7 @@ public sealed class AppDbContext(DbContextOptions options) : DbContext(options)
     public required DbSet<Option> Options { get; init; }
     public required DbSet<Test> Tests { get; init; }
     public required DbSet<TestQuestion> TestQuestions { get; init; }
+    public required DbSet<PrintRequest> PrintRequests { get; init; }
     public required DbSet<ActivityLog> ActivityLogs { get; init; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

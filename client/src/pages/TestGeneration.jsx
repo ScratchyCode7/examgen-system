@@ -28,6 +28,59 @@ const TestGeneration = () => {
 
   const displayName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username : 'User';
 
+  const createEmptyTopicRow = (id) => ({
+    id,
+    topicId: '',
+    topicName: '',
+    topic: '',
+    hours: '',
+    lowCount: '',
+    middleCount: '',
+    highCount: '',
+    lowPlacements: '',
+    middlePlacements: '',
+    highPlacements: ''
+  });
+
+  const getInitialTopicRows = () => [createEmptyTopicRow(1), createEmptyTopicRow(2)];
+
+  const normalizeApiArray = React.useCallback((payload) => {
+    if (Array.isArray(payload)) return payload;
+    if (payload?.items && Array.isArray(payload.items)) return payload.items;
+    if (payload?.data && Array.isArray(payload.data)) return payload.data;
+    return [];
+  }, []);
+
+  const isOptionMarkedCorrect = (option) => {
+    if (!option) return false;
+    const rawValue = option.isCorrect ?? option.IsCorrect ?? option.correct ?? option.is_correct ?? option.correctOption ?? option.answer ?? option.CorrectOption ?? option.Answer ?? null;
+
+    if (typeof rawValue === 'boolean') return rawValue;
+    if (typeof rawValue === 'number') return rawValue === 1;
+    if (typeof rawValue === 'string') {
+      const normalized = rawValue.trim().toLowerCase();
+      if (!normalized) return false;
+      if (['true', 't', 'yes', 'y'].includes(normalized)) return true;
+      if (['false', 'f', 'no', 'n'].includes(normalized)) return false;
+    }
+    return false;
+  };
+
+  const getCorrectAnswerLetter = (question) => {
+    const optionList = question?.options || question?.Options || question?.choices || [];
+    const normalizedOptions = Array.isArray(optionList) ? optionList : [];
+    const correctIndex = normalizedOptions.findIndex(isOptionMarkedCorrect);
+    if (correctIndex >= 0) {
+      return String.fromCharCode(65 + correctIndex);
+    }
+
+    const fallback = question?.correctAnswer || question?.correctAnswerLetter || question?.answerKey || question?.CorrectAnswer || question?.CorrectAnswerLetter || question?.AnswerKey;
+    if (typeof fallback === 'string' && fallback.trim()) {
+      return fallback.trim().toUpperCase();
+    }
+    return '-';
+  };
+
   // Helper function to determine semester based on current date
   const getAutoSemester = () => {
     const month = new Date().getMonth() + 1;
@@ -85,10 +138,7 @@ const TestGeneration = () => {
   const [insufficientItemsWarning, setInsufficientItemsWarning] = useState('');
   const [excessItemsWarning, setExcessItemsWarning] = useState('');
   const [generationWarnings, setGenerationWarnings] = useState([]);
-  const [topicRows, setTopicRows] = useState([
-    { id: 1, topicId: '', topicName: '', topic: '', hours: '', lowCount: '', middleCount: '', highCount: '', lowPlacements: '', middlePlacements: '', highPlacements: '' },
-    { id: 2, topicId: '', topicName: '', topic: '', hours: '', lowCount: '', middleCount: '', highCount: '', lowPlacements: '', middlePlacements: '', highPlacements: '' }
-  ]);
+  const [topicRows, setTopicRows] = useState(() => getInitialTopicRows());
   const [generatedSpec, setGeneratedSpec] = useState(null);
   const [sampleExam, setSampleExam] = useState(null);
   const [activeExamMeta, setActiveExamMeta] = useState(null);
@@ -106,11 +156,29 @@ const TestGeneration = () => {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState({ show: false, rowId: null });
   const [showPrintModal, setShowPrintModal] = useState(false);
+  const [showPrintRequestModal, setShowPrintRequestModal] = useState(false);
   const [printOption, setPrintOption] = useState('specification');
   const [savedExamSets, setSavedExamSets] = useState([]);
   const [isLoadingSavedSets, setIsLoadingSavedSets] = useState(false);
   const [lastSavedSignature, setLastSavedSignature] = useState('');
   const [saveConfirmation, setSaveConfirmation] = useState(null);
+
+  // Print Requests (Admin)
+  const [viewMode, setViewMode] = useState('generation'); // 'generation' or 'printrequests'
+  const [printRequests, setPrintRequests] = useState([]);
+  const [isLoadingPrintRequests, setIsLoadingPrintRequests] = useState(false);
+  const [activePrintRequest, setActivePrintRequest] = useState(null); // Currently loaded request for review
+  const [isHydratingRequest, setIsHydratingRequest] = useState(false);
+  const requestSyncRef = useRef(false);
+  const skipSpecRecalcRef = useRef(false);
+  const autoReadyRef = useRef({ requestId: null, marked: false });
+  const [myPrintRequests, setMyPrintRequests] = useState([]);
+  const [isLoadingMyRequests, setIsLoadingMyRequests] = useState(false);
+  const [myRequestsError, setMyRequestsError] = useState('');
+  const coursesCacheRef = useRef(new Map());
+  const subjectsCacheRef = useRef(new Map());
+  const topicsCacheRef = useRef(new Map());
+  const subjectQuestionCacheRef = useRef(new Map());
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -143,6 +211,77 @@ const TestGeneration = () => {
     void loadDepartments();
   }, []);
 
+  const applySubjectQuestionsFromCache = React.useCallback((subjectId, topicList) => {
+    if (!subjectId || !Array.isArray(topicList)) return false;
+    const cached = subjectQuestionCacheRef.current.get(String(subjectId));
+    if (!cached) return false;
+
+    if (topicList.length === 0) {
+      setQuestionsByTopic({});
+      return true;
+    }
+
+    const questionMap = {};
+    topicList.forEach((topic) => {
+      const topicKey = String(topic.id);
+      const cachedQuestions = cached[topicKey];
+      questionMap[topic.id] = Array.isArray(cachedQuestions) ? [...cachedQuestions] : [];
+    });
+    setQuestionsByTopic(questionMap);
+    return true;
+  }, []);
+
+  const ensureSubjectQuestionPools = React.useCallback(async (subjectId, topicList, options = {}) => {
+    const { forceRefresh = false } = options;
+    if (!subjectId || !Array.isArray(topicList)) {
+      setQuestionsByTopic({});
+      return;
+    }
+
+    const subjectKey = String(subjectId);
+    if (!forceRefresh) {
+      const applied = applySubjectQuestionsFromCache(subjectKey, topicList);
+      if (applied) {
+        return;
+      }
+    }
+
+    try {
+      const response = await apiService.getQuestions({ subjectId: parseInt(subjectId, 10), pageSize: 5000 });
+      const normalized = normalizeApiArray(response);
+      const grouped = {};
+      topicList.forEach((topic) => {
+        grouped[String(topic.id)] = [];
+      });
+
+      normalized.forEach((question) => {
+        const rawTopicId = question.topicId ?? question.TopicId ?? question.topic?.id ?? question.Topic?.Id ?? question.topic ?? question.Topic;
+        if (!rawTopicId) return;
+        const topicKey = String(rawTopicId);
+        if (!grouped[topicKey]) {
+          grouped[topicKey] = [];
+        }
+        grouped[topicKey].push(question);
+      });
+
+      subjectQuestionCacheRef.current.set(subjectKey, grouped);
+      const questionMap = {};
+      topicList.forEach((topic) => {
+        const topicKey = String(topic.id);
+        questionMap[topic.id] = Array.isArray(grouped[topicKey]) ? grouped[topicKey] : [];
+      });
+      setQuestionsByTopic(questionMap);
+    } catch (err) {
+      console.error('Failed to load questions for subject:', err);
+      setError('Failed to load questions for this subject.');
+      const emptyMap = {};
+      topicList.forEach((topic) => {
+        emptyMap[topic.id] = [];
+      });
+      setQuestionsByTopic(emptyMap);
+    }
+  }, [applySubjectQuestionsFromCache, normalizeApiArray]);
+
   useEffect(() => {
     if (!departments.length) return;
 
@@ -169,13 +308,32 @@ const TestGeneration = () => {
         setCourses([]);
         setSubjects([]);
         setTopics([]);
+        setQuestionsByTopic({});
+        return;
+      }
+
+      if (requestSyncRef.current) {
+        return;
+      }
+
+      const departmentId = parseInt(selectedDepartment, 10);
+      if (!Number.isFinite(departmentId)) {
+        setCourses([]);
+        return;
+      }
+
+      const cachedCourses = coursesCacheRef.current.get(departmentId);
+      if (cachedCourses) {
+        setCourses(cachedCourses);
+        setSelectedCourse('');
+        setSelectedSubject('');
         return;
       }
 
       try {
         setIsLoadingCourses(true);
-        console.log('Loading courses for departmentId:', selectedDepartment);
-        const dept = departments.find(d => d.id === parseInt(selectedDepartment));
+        console.log('Loading courses for departmentId:', departmentId);
+        const dept = departments.find(d => d.id === departmentId);
         if (!dept) {
           console.warn('Department not found:', selectedDepartment);
           setCourses([]);
@@ -185,9 +343,10 @@ const TestGeneration = () => {
         const data = await apiService.getCourses(dept.id);
         console.log('Courses loaded for dept', dept.id, ':', data);
         const list = Array.isArray(data) ? data : [];
+        coursesCacheRef.current.set(dept.id, list);
         setCourses(list);
-        setSelectedCourse(''); // Reset course selection
-        setSelectedSubject(''); // Reset subject selection
+        setSelectedCourse('');
+        setSelectedSubject('');
       } catch (err) {
         console.error('Failed to load courses:', err);
         setError(`Failed to load programs: ${err.message || 'Unknown error'}`);
@@ -210,18 +369,36 @@ const TestGeneration = () => {
         return;
       }
 
+      if (requestSyncRef.current) {
+        return;
+      }
+
+      const courseId = parseInt(selectedCourse, 10);
+      if (!Number.isFinite(courseId)) {
+        setSubjects([]);
+        return;
+      }
+
+      const cachedSubjects = subjectsCacheRef.current.get(courseId);
+      if (cachedSubjects) {
+        setSubjects(cachedSubjects);
+        setSelectedSubject('');
+        return;
+      }
+
       try {
         setIsLoadingSubjects(true);
-        console.log('Loading subjects for courseId:', selectedCourse);
-        const subjectsList = await apiService.getSubjects({ courseId: parseInt(selectedCourse), pageSize: 500 });
+        console.log('Loading subjects for courseId:', courseId);
+        const subjectsList = await apiService.getSubjects({ courseId, pageSize: 500 });
         console.log('Subjects loaded:', subjectsList);
         
         const list = Array.isArray(subjectsList) ? subjectsList : [];
+        subjectsCacheRef.current.set(courseId, list);
         setSubjects(list);
-        setSelectedSubject(''); // Reset subject selection
+        setSelectedSubject('');
         
         if (list.length === 0) {
-          console.warn('No subjects found for courseId:', selectedCourse);
+          console.warn('No subjects found for courseId:', courseId);
           setError('No subjects found for this program.');
         }
       } catch (err) {
@@ -237,7 +414,7 @@ const TestGeneration = () => {
   }, [selectedCourse]);
 
 
-// Load topics for selected subject
+  // Load topics for selected subject
   useEffect(() => {
     const loadTopics = async () => {
       if (!selectedSubject) {
@@ -246,9 +423,26 @@ const TestGeneration = () => {
         return;
       }
 
+      if (requestSyncRef.current) {
+        return;
+      }
+
+      const subjectId = parseInt(selectedSubject, 10);
+      if (!Number.isFinite(subjectId)) {
+        setTopics([]);
+        setQuestionsByTopic({});
+        return;
+      }
+
+      const cachedTopics = topicsCacheRef.current.get(subjectId);
+      if (cachedTopics) {
+        setTopics(cachedTopics);
+        await ensureSubjectQuestionPools(subjectId, cachedTopics);
+        return;
+      }
+
       try {
         setIsLoadingTopics(true);
-        const subjectId = parseInt(selectedSubject);
         console.log('Loading topics for subjectId:', subjectId);
         
         const topicsList = await apiService.getTopics(subjectId);
@@ -257,28 +451,17 @@ const TestGeneration = () => {
         
         const list = Array.isArray(topicsList) ? topicsList : [];
         console.log('Processed topics list:', list);
+        topicsCacheRef.current.set(subjectId, list);
         setTopics(list);
 
         if (list.length === 0) {
           console.warn('No topics found for subjectId:', subjectId);
           setError('No topics found for this subject. Please check that topics have been created and linked to this subject.');
+          setQuestionsByTopic({});
         } else {
           console.log('Found', list.length, 'topics');
+          await ensureSubjectQuestionPools(subjectId, list);
         }
-
-        // Fetch questions for each topic
-        const questionsMap = {};
-        for (const topic of list) {
-          try {
-            const questions = await apiService.getQuestionsByTopic(topic.id);
-            console.log(`Questions for topic ${topic.id}:`, questions ? questions.length : 0, 'questions');
-            questionsMap[topic.id] = questions || [];
-          } catch (err) {
-            console.error(`Failed to load questions for topic ${topic.id}:`, err);
-            questionsMap[topic.id] = [];
-          }
-        }
-        setQuestionsByTopic(questionsMap);
       } catch (error) {
         console.error('Error loading topics:', error);
         setError('Failed to load topics. Please try again.');
@@ -288,7 +471,7 @@ const TestGeneration = () => {
     };
 
     void loadTopics();
-  }, [selectedSubject]);
+  }, [selectedSubject, ensureSubjectQuestionPools]);
 
   const handleUserAction = (action) => {
     setIsUserMenuOpen(false);
@@ -590,6 +773,11 @@ const TestGeneration = () => {
 
   // Compute and cache the generated specification so placements remain stable
   React.useEffect(() => {
+    if (skipSpecRecalcRef.current) {
+      skipSpecRecalcRef.current = false;
+      return;
+    }
+
     console.log('=== SPEC GENERATION EFFECT ===');
     console.log('topicRows:', topicRows);
     console.log('totalExamItems:', totalExamItems);
@@ -723,6 +911,16 @@ const TestGeneration = () => {
     if (!selectedCourse) return null;
     return courses.find(c => c.id === parseInt(selectedCourse, 10)) || null;
   }, [courses, selectedCourse]);
+  const handledRequestStatuses = ['ReadyForPickup', 'Completed', 'Rejected'];
+  const activeRequestStatus = activePrintRequest?.status || 'Pending';
+  const isActiveRequestHandled = activePrintRequest ? handledRequestStatuses.includes(activeRequestStatus) : false;
+  const isViewSwitchLocked = Boolean(activePrintRequest && !isActiveRequestHandled);
+  const statusColorMap = {
+    Pending: '#f59e0b',
+    ReadyForPickup: '#16a34a',
+    Completed: '#0f172a',
+    Rejected: '#dc2626'
+  };
   const selectedSubjectDetails = React.useMemo(() => {
     if (!selectedSubject) return null;
     return subjects.find(s => s.id === parseInt(selectedSubject, 10)) || null;
@@ -848,15 +1046,14 @@ const TestGeneration = () => {
       const applyAlloc = distributeEvenly(applyTotal);
       const evaluateAlloc = distributeEvenly(evaluateTotal);
 
-      // STEP 3: For each topic, fetch questions by topic and pick per-level counts
-      const perTopicFetched = [];
-
-      // Preload all topic question pools in parallel
+      // STEP 3: For each topic, pick per-level counts using cached pools when available
       const topicPools = await Promise.all(selectedTopicIds.map(async (topicId) => {
         try {
-          const data = await apiService.getQuestionsByTopic(topicId);
-          const list = Array.isArray(data) ? data : (data?.items && Array.isArray(data.items) ? data.items : (data?.data && Array.isArray(data.data) ? data.data : []));
-          // categorize
+          let list = Array.isArray(questionsByTopic[topicId]) ? questionsByTopic[topicId] : null;
+          if (!list || list.length === 0) {
+            const data = await apiService.getQuestionsByTopic(topicId);
+            list = normalizeApiArray(data);
+          }
           const pools = { remembering: [], applying: [], evaluating: [] };
           list.forEach(q => {
             const cat = bloomCategoryFromQuestion(q);
@@ -905,7 +1102,6 @@ const TestGeneration = () => {
         if (pickApply.length < needApply) deficits[t].applying = needApply - pickApply.length;
         if (pickEvaluate.length < needEvaluate) deficits[t].evaluating = needEvaluate - pickEvaluate.length;
 
-        perTopicFetched.push({ topicId, picked: { remembering: pickRemember, applying: pickApply, evaluating: pickEvaluate } });
         finalQuestions.push(...pickRemember, ...pickApply, ...pickEvaluate);
       }
 
@@ -1031,14 +1227,6 @@ const TestGeneration = () => {
       // STEP 4: shuffle and set sample exam
       shuffleArray(finalQuestions);
 
-      // Attach topicName and level and correctAnswer where possible
-      const getCorrectAnswerLetter = (question) => {
-        if (!question.options || question.options.length === 0) return '-';
-        const correctIndex = question.options.findIndex(opt => opt.isCorrect || opt.IsCorrect || opt.is_correct);
-        if (correctIndex < 0) return '-';
-        return String.fromCharCode(65 + correctIndex);
-      };
-
       const enriched = finalQuestions.slice(0, total).map(q => ({
         ...q,
         topicName: topics.find(t => String(t.id) === String(q.topicId) || String(t.id) === String(q.topic))?.title || topics.find(t => String(t.id) === String(q.topicId))?.title || '',
@@ -1067,13 +1255,353 @@ const TestGeneration = () => {
     }
   };
 
+  // Print request handling (Admin)
+  const loadPrintRequests = React.useCallback(async () => {
+    if (!user?.isAdmin) return;
+    
+    try {
+      setIsLoadingPrintRequests(true);
+      const requests = await apiService.getPendingPrintRequests();
+      setPrintRequests(requests);
+    } catch (err) {
+      console.error('Failed to load print requests:', err);
+      setError('Failed to load print requests');
+    } finally {
+      setIsLoadingPrintRequests(false);
+    }
+  }, [user?.isAdmin]);
+
+  const loadMyPrintRequests = React.useCallback(async () => {
+    if (user?.isAdmin) return;
+
+    try {
+      setMyRequestsError('');
+      setIsLoadingMyRequests(true);
+      const response = await apiService.getMyPrintRequests();
+      const normalized = normalizeApiArray(response);
+      setMyPrintRequests(Array.isArray(normalized) ? normalized : []);
+    } catch (err) {
+      console.error('Failed to load my print requests:', err);
+      setMyRequestsError('Failed to load your print requests. Please try again.');
+    } finally {
+      setIsLoadingMyRequests(false);
+    }
+  }, [user?.isAdmin, normalizeApiArray]);
+
+  React.useEffect(() => {
+    if (!user || user.isAdmin) return;
+    void loadMyPrintRequests();
+  }, [user, loadMyPrintRequests]);
+
+  const loadPrintRequestExam = async (request) => {
+    if (!user?.isAdmin || !request) return;
+    if (isHydratingRequest) return;
+
+    try {
+      setError('');
+      setShowAnswerSheet(false);
+      setIsHydratingRequest(true);
+      setIsLoadingPrintRequests(true);
+      requestSyncRef.current = true;
+
+      const exam = await apiService.getExam(request.testId);
+      if (!exam) {
+        throw new Error('Exam not found for this request.');
+      }
+
+      const departmentId = exam.departmentId || request.departmentId;
+      const courseId = exam.courseId;
+      const subjectId = exam.subjectId;
+
+      if (departmentId) {
+        setSelectedDepartment(String(departmentId));
+      }
+      if (courseId) {
+        setSelectedCourse(String(courseId));
+      }
+      if (subjectId) {
+        setSelectedSubject(String(subjectId));
+      }
+
+      if (departmentId) setIsLoadingCourses(true);
+      if (courseId) setIsLoadingSubjects(true);
+      if (subjectId) setIsLoadingTopics(true);
+
+      const [coursesListRaw, subjectsListRaw, topicsListRaw] = await Promise.all([
+        departmentId ? apiService.getCourses(departmentId).catch(err => {
+          console.error('Failed to load courses for print request:', err);
+          return [];
+        }) : Promise.resolve([]),
+        courseId ? apiService.getSubjects({ courseId, pageSize: 500 }).catch(err => {
+          console.error('Failed to load subjects for print request:', err);
+          return [];
+        }) : Promise.resolve([]),
+        subjectId ? apiService.getTopics(subjectId).catch(err => {
+          console.error('Failed to load topics for print request:', err);
+          return [];
+        }) : Promise.resolve([])
+      ]);
+
+      const normalizedCourses = Array.isArray(coursesListRaw) ? coursesListRaw : normalizeApiArray(coursesListRaw);
+      coursesCacheRef.current.set(departmentId, normalizedCourses);
+      setCourses(normalizedCourses);
+
+      const normalizedSubjects = Array.isArray(subjectsListRaw) ? subjectsListRaw : normalizeApiArray(subjectsListRaw);
+      subjectsCacheRef.current.set(courseId, normalizedSubjects);
+      setSubjects(normalizedSubjects);
+
+      const topicsList = Array.isArray(topicsListRaw) ? topicsListRaw : normalizeApiArray(topicsListRaw);
+      topicsCacheRef.current.set(subjectId, topicsList);
+      setTopics(topicsList);
+
+      if (topicsList.length > 0 && subjectId) {
+        await ensureSubjectQuestionPools(subjectId, topicsList, { forceRefresh: true });
+      } else {
+        setQuestionsByTopic({});
+      }
+
+      setExamType(exam.examType || 'Midterm');
+      setSemester(exam.semester || '1st');
+      
+      if (exam.specificationSnapshot) {
+        try {
+          const spec = JSON.parse(exam.specificationSnapshot);
+          skipSpecRecalcRef.current = true;
+          setGeneratedSpec(spec);
+          if (spec.specs && spec.specs.length > 0) {
+            const reconstructedRows = spec.specs.map((s, idx) => ({
+              id: idx + 1,
+              topicId: s.topicId || '',
+              topicName: s.topicName || '',
+              topic: s.topicName || '',
+              hours: s.hours || '',
+              lowCount: s.cognitive?.low?.count || '',
+              middleCount: s.cognitive?.middle?.count || '',
+              highCount: s.cognitive?.high?.count || '',
+              lowPlacements: (s.cognitive?.low?.placements || []).join(', '),
+              middlePlacements: (s.cognitive?.middle?.placements || []).join(', '),
+              highPlacements: (s.cognitive?.high?.placements || []).join(', ')
+            }));
+            setTopicRows(reconstructedRows);
+          }
+          setTotalExamItems(spec.totals?.grand?.toString() || '');
+        } catch (parseErr) {
+          console.error('Failed to parse specification:', parseErr);
+        }
+      }
+      
+      if (exam.questions && exam.questions.length > 0) {
+        const normalizedQuestions = exam.questions
+          .map((q, idx) => {
+            const rawOrder = Number(q.displayOrder ?? q.DisplayOrder ?? idx);
+            const displayOrder = Number.isFinite(rawOrder) ? rawOrder : idx;
+            return {
+              ...q,
+              displayOrder,
+              correctAnswer: getCorrectAnswerLetter(q),
+              bloomLevel: q.bloomLevel || q.BloomLevel || bloomCategoryFromQuestion(q)
+            };
+          })
+          .sort((a, b) => {
+            const orderA = Number.isFinite(a.displayOrder) ? a.displayOrder : 0;
+            const orderB = Number.isFinite(b.displayOrder) ? b.displayOrder : 0;
+            return orderA - orderB;
+          });
+        setSampleExam({
+          questions: normalizedQuestions,
+          date: new Date(exam.createdAt || Date.now()).toLocaleDateString(),
+          totalQuestions: exam.questions.length,
+          metadata: {
+            examType: exam.examType,
+            semester: exam.semester,
+            schoolYear: exam.schoolYear,
+            setLabel: exam.setLabel
+          }
+        });
+        setActiveExamMeta({
+          id: exam.id,
+          setLabel: exam.setLabel,
+          signature: exam.questionSignature
+        });
+        setLastSavedSignature(exam.questionSignature || '');
+        setIsSampleExamVisible(true);
+      } else {
+        setSampleExam(null);
+      }
+      
+      setActivePrintRequest(request);
+      setViewMode('generation');
+      
+      alert(`Loaded exam "${exam.setLabel}" from print request by ${request.requestedBy}. You can now review, edit if needed, and print.`);
+    } catch (err) {
+      console.error('Failed to load print request exam:', err);
+      setError('Failed to load exam from print request');
+    } finally {
+      setIsLoadingPrintRequests(false);
+      requestSyncRef.current = false;
+      setIsHydratingRequest(false);
+      setIsLoadingCourses(false);
+      setIsLoadingSubjects(false);
+      setIsLoadingTopics(false);
+    }
+  };
+
+  const handleClearGeneration = () => {
+    setGeneratedSpec(null);
+    setSampleExam(null);
+    setActiveExamMeta(null);
+    setIsSampleExamVisible(false);
+    setShowAnswerSheet(false);
+    setTopicRows(getInitialTopicRows());
+    setTotalExamItems('');
+    setManualTotalItems(false);
+    setSpecOverrides({});
+    setInsufficientItemsWarning('');
+    setExcessItemsWarning('');
+    setGenerationWarnings([]);
+    setQuestionsByTopic({});
+    setSaveConfirmation(null);
+    setLastSavedSignature('');
+    setError('');
+    setIsHydratingRequest(false);
+    requestSyncRef.current = false;
+  };
+
+  const handleApprovePrintRequest = async () => {
+    if (!activePrintRequest) return;
+    
+    try {
+      await apiService.updatePrintRequestStatus(activePrintRequest.printRequestId, 'ReadyForPickup', 'Exam approved and printed');
+      alert('Print request marked as Ready for Pickup. The teacher will be notified.');
+      setActivePrintRequest(null);
+      await loadPrintRequests();
+      // Clear the exam
+      handleClearGeneration();
+    } catch (err) {
+      console.error('Failed to approve print request:', err);
+      setError('Failed to approve print request');
+    }
+  };
+
+  const handleRejectPrintRequest = async () => {
+    if (!activePrintRequest) return;
+    
+    const notes = window.prompt('Enter rejection reason (will be visible to the teacher):');
+    if (!notes) return;
+    
+    try {
+      await apiService.updatePrintRequestStatus(activePrintRequest.printRequestId, 'Rejected', notes);
+      alert('Print request rejected. The teacher will be notified.');
+      setActivePrintRequest(null);
+      await loadPrintRequests();
+      // Clear the exam
+      handleClearGeneration();
+    } catch (err) {
+      console.error('Failed to reject print request:', err);
+      setError('Failed to reject print request');
+    }
+  };
+
+  const handleCancelPrintRequestReview = () => {
+    if (window.confirm('Cancel reviewing this print request? Any unsaved changes will be lost.')) {
+      setActivePrintRequest(null);
+      handleClearGeneration();
+      setViewMode('printrequests');
+    }
+  };
+
+  const autoMarkRequestReady = async (contextNote = 'Exam printed and ready for pickup') => {
+    if (!user?.isAdmin || !activePrintRequest) return;
+    const currentId = activePrintRequest.printRequestId;
+    if (!currentId) return;
+    if (autoReadyRef.current.requestId !== currentId || autoReadyRef.current.marked) return;
+    try {
+      await apiService.updatePrintRequestStatus(currentId, 'ReadyForPickup', contextNote);
+      autoReadyRef.current.marked = true;
+      setActivePrintRequest(prev => prev ? { ...prev, status: 'ReadyForPickup' } : prev);
+      await loadPrintRequests();
+      alert('Printed copy logged. Request marked as Ready for Pickup.');
+    } catch (err) {
+      console.error('Failed to auto-mark request ready:', err);
+      setError('Printed successfully but failed to update the print request status. Please mark it ready manually.');
+    }
+  };
+
+  const finalizePrintFlow = (contextNote) => {
+    if (user?.isAdmin && activePrintRequest) {
+      void autoMarkRequestReady(contextNote || 'Exam printed and ready for pickup');
+    }
+    setShowPrintModal(false);
+  };
+
+  // Load print requests when admin views the page
+  useEffect(() => {
+    if (user?.isAdmin && viewMode === 'printrequests') {
+      loadPrintRequests();
+    }
+  }, [user, viewMode, loadPrintRequests]);
+
+  useEffect(() => {
+    autoReadyRef.current = {
+      requestId: activePrintRequest?.printRequestId || null,
+      marked: false
+    };
+  }, [activePrintRequest?.printRequestId]);
+
   // Handle print
   const handlePrint = () => {
     if (!generatedSpec && !sampleExam) {
       setError('Generate or load an exam set before printing.');
       return;
     }
-    setShowPrintModal(true);
+    
+    // Check if exam has been saved (required for print requests)
+    if (!user?.isAdmin && !activeExamMeta?.id) {
+      setError('Please save the exam before requesting to print.');
+      return;
+    }
+    
+    if (user?.isAdmin) {
+      setShowPrintModal(true);
+    } else {
+      setShowPrintRequestModal(true);
+    }
+  };
+
+  // Handle print request submission (for non-admin users)
+  const handleSubmitPrintRequest = async (notes, copies) => {
+    try {
+      if (!activeExamMeta?.id) {
+        setError('Exam must be saved before requesting print');
+        return;
+      }
+      
+      await apiService.submitPrintRequest(activeExamMeta.id, notes, copies);
+      setShowPrintRequestModal(false);
+      setError('');
+      // Show success message (you can add a success state if needed)
+      alert('Print request submitted successfully! An admin will process your request.');
+      if (!user?.isAdmin) {
+        await loadMyPrintRequests();
+      }
+    } catch (err) {
+      console.error('Failed to submit print request:', err);
+      setError(err.response?.data?.error || 'Failed to submit print request');
+    }
+  };
+
+  const handleTeacherAcknowledgeRequest = async (request) => {
+    if (user?.isAdmin || !request?.printRequestId) return;
+
+    try {
+      setMyRequestsError('');
+      await apiService.updatePrintRequestStatus(request.printRequestId, 'Completed', 'Teacher confirmed receipt');
+      alert('Thank you! This request is now marked as completed.');
+      await loadMyPrintRequests();
+    } catch (err) {
+      console.error('Failed to mark request as received:', err);
+      setMyRequestsError('Unable to mark this request as received. Please try again.');
+    }
   };
 
   // Handle save exam
@@ -1235,8 +1763,7 @@ const TestGeneration = () => {
                 const code = resolveDepartmentCode();
                 if (item === 'Test Generation') {
                   navigate(`/test-generation/${code}`);
-                }
-                if (item === 'Saved Exam Sets') {
+                } else if (item === 'Saved Exam Sets') {
                   navigate(`/reports/saved-exams/${code}`);
                 }
               }}
@@ -1273,8 +1800,156 @@ const TestGeneration = () => {
 
         {/* Test Generation Container */}
         <div className="main-card">
-          <h2>Test Generation</h2>
-          <p className="subtitle">Create a table of specifications and generate exams based on topics and cognitive levels</p>
+          {/* Mode Switcher for Admins */}
+          {user?.isAdmin && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px', borderBottom: '2px solid var(--border-color)', paddingBottom: '10px' }}>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  className={`btn ${viewMode === 'generation' ? 'btn-primary' : 'btn-secondary'}`}
+                  disabled={isViewSwitchLocked}
+                  onClick={() => {
+                    if (isViewSwitchLocked) return;
+                    setViewMode('generation');
+                    setActivePrintRequest(null);
+                  }}
+                  style={{ flex: '1' }}
+                  title={isViewSwitchLocked ? 'Finish or cancel the current review before switching modes.' : undefined}
+                >
+                  📝 Test Generation
+                </button>
+                <button
+                  className={`btn ${viewMode === 'printrequests' ? 'btn-primary' : 'btn-secondary'}`}
+                  disabled={isViewSwitchLocked}
+                  onClick={() => {
+                    if (isViewSwitchLocked) return;
+                    setViewMode('printrequests');
+                  }}
+                  style={{ flex: '1', position: 'relative' }}
+                  title={isViewSwitchLocked ? 'Finish or cancel the current review before switching modes.' : undefined}
+                >
+                  🖨️ Print Requests {printRequests.length > 0 && <span style={{ background: 'red', color: 'white', borderRadius: '50%', padding: '2px 6px', fontSize: '12px', marginLeft: '5px' }}>{printRequests.length}</span>}
+                </button>
+              </div>
+              {isViewSwitchLocked && (
+                <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+                  Review lock is active. Cancel or finish the current request to switch views.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Print Request Review Banner */}
+          {activePrintRequest && (
+            <div style={{ background: 'var(--primary-color)', color: 'white', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <strong>📋 Reviewing Print Request</strong>
+                  <p style={{ margin: '5px 0 0 0', opacity: 0.9 }}>
+                    Requested by: {activePrintRequest.requestedBy} | Department: {activePrintRequest.departmentName} | Copies: {activePrintRequest.copiesRequested}
+                    {activePrintRequest.notes && ` | Notes: "${activePrintRequest.notes}"`}
+                  </p>
+                  <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                    <span style={{ background: statusColorMap[activeRequestStatus] || '#1d4ed8', padding: '4px 10px', borderRadius: '999px', fontWeight: 600 }}>
+                      Status: {activeRequestStatus.replace(/([A-Z])/g, ' $1').trim()}
+                    </span>
+                    {isHydratingRequest && <span style={{ fontSize: '0.9rem', opacity: 0.85 }}>Syncing program/subject/topic data...</span>}
+                    {!isActiveRequestHandled && (
+                      <span style={{ fontSize: '0.9rem', opacity: 0.85 }}>Finish printing or update the status before leaving this review.</span>
+                    )}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    className="btn btn-success"
+                    onClick={handleApprovePrintRequest}
+                    disabled={isActiveRequestHandled || isHydratingRequest}
+                    style={{ whiteSpace: 'nowrap' }}
+                    title={isActiveRequestHandled ? 'This request has already been marked ready.' : undefined}
+                  >
+                    ✓ Approve & Mark Ready
+                  </button>
+                  <button
+                    className="btn btn-danger"
+                    onClick={handleRejectPrintRequest}
+                    disabled={isHydratingRequest}
+                    style={{ whiteSpace: 'nowrap' }}
+                  >
+                    ✗ Reject
+                  </button>
+                  <button className="btn btn-secondary" onClick={handleCancelPrintRequestReview} style={{ whiteSpace: 'nowrap' }}>
+                    Cancel Review
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Conditional Rendering based on View Mode */}
+          {viewMode === 'printrequests' && user?.isAdmin ? (
+            <>
+              <h2>Print Requests Queue</h2>
+              <p className="subtitle">Review and process print requests from teachers</p>
+
+              {isLoadingPrintRequests ? (
+                <div style={{ textAlign: 'center', padding: '40px' }}>Loading print requests...</div>
+              ) : printRequests.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                  <p>No pending print requests</p>
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px' }}>
+                    <thead>
+                      <tr style={{ background: 'var(--table-header-bg)', borderBottom: '2px solid var(--border-color)' }}>
+                        <th style={{ padding: '12px', textAlign: 'left' }}>Requested By</th>
+                        <th style={{ padding: '12px', textAlign: 'left' }}>Exam Title</th>
+                        <th style={{ padding: '12px', textAlign: 'left' }}>Department</th>
+                        <th style={{ padding: '12px', textAlign: 'center' }}>Copies</th>
+                        <th style={{ padding: '12px', textAlign: 'left' }}>Date</th>
+                        <th style={{ padding: '12px', textAlign: 'left' }}>Notes</th>
+                        <th style={{ padding: '12px', textAlign: 'center' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {printRequests.map((request) => {
+                        const isRowActive = activePrintRequest?.printRequestId === request.printRequestId;
+                        return (
+                          <tr
+                            key={request.printRequestId}
+                            style={{
+                              borderBottom: '1px solid var(--border-color)',
+                              background: isRowActive ? 'rgba(13, 104, 50, 0.08)' : 'transparent'
+                            }}
+                          >
+                            <td style={{ padding: '12px' }}>{request.requestedBy}</td>
+                            <td style={{ padding: '12px' }}>{request.testTitle}</td>
+                            <td style={{ padding: '12px' }}>{request.departmentName}</td>
+                            <td style={{ padding: '12px', textAlign: 'center' }}>{request.copiesRequested}</td>
+                            <td style={{ padding: '12px' }}>{new Date(request.createdAt).toLocaleString()}</td>
+                            <td style={{ padding: '12px', fontSize: '0.9em', color: 'var(--text-muted)' }}>{request.notes || '—'}</td>
+                            <td style={{ padding: '12px', textAlign: 'center' }}>
+                              <button
+                                className="btn btn-sm btn-primary"
+                                onClick={() => loadPrintRequestExam(request)}
+                                style={{ whiteSpace: 'nowrap' }}
+                                disabled={isViewSwitchLocked && !isRowActive}
+                                title={isViewSwitchLocked && !isRowActive ? 'Finish the current review before opening another request.' : undefined}
+                              >
+                                {isRowActive ? 'In Review' : 'Review & Edit'}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <h2>Test Generation</h2>
+              <p className="subtitle">Create a table of specifications and generate exams based on topics and cognitive levels</p>
 
           {/* Error Message */}
           {error && (
@@ -1844,16 +2519,96 @@ const TestGeneration = () => {
               onClick={handlePrint}
               disabled={!generatedSpec}
             >
-              <Printer size={16} /> Print Options
+              <Printer size={16} /> {user?.isAdmin ? 'Print Options' : 'Request Print'}
             </button>
-            <button 
-              className="btn btn-success"
-              onClick={handleSaveExam}
-              disabled={!generatedSpec}
-            >
-              <Save size={16} /> Save Exam
-            </button>
+            {!(user?.isAdmin && activePrintRequest) && (
+              <button 
+                className="btn btn-success"
+                onClick={handleSaveExam}
+                disabled={!generatedSpec}
+              >
+                <Save size={16} /> Save Exam
+              </button>
+            )}
           </div>
+
+          {!user?.isAdmin && (
+            <div style={{ marginTop: '30px', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '20px', background: 'var(--card-bg, #fff)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                <div>
+                  <h3 style={{ marginBottom: '4px' }}>My Print Requests</h3>
+                  <p className="subtitle" style={{ marginBottom: 0 }}>Track the status of your submitted master set requests.</p>
+                </div>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => loadMyPrintRequests()}
+                  disabled={isLoadingMyRequests}
+                >
+                  Refresh
+                </button>
+              </div>
+              {myRequestsError && (
+                <div className="error-message" style={{ marginTop: '15px' }}>{myRequestsError}</div>
+              )}
+              {isLoadingMyRequests ? (
+                <div style={{ textAlign: 'center', padding: '30px' }}>Loading your requests...</div>
+              ) : myPrintRequests.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                  <p>No print requests yet. Save and request a master set to see it here.</p>
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto', marginTop: '15px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '2px solid var(--border-color)' }}>
+                        <th style={{ textAlign: 'left', padding: '10px' }}>Exam Set</th>
+                        <th style={{ textAlign: 'left', padding: '10px' }}>Status</th>
+                        <th style={{ textAlign: 'center', padding: '10px' }}>Copies</th>
+                        <th style={{ textAlign: 'left', padding: '10px' }}>Submitted</th>
+                        <th style={{ textAlign: 'left', padding: '10px' }}>Updated</th>
+                        <th style={{ textAlign: 'left', padding: '10px' }}>Notes</th>
+                        <th style={{ textAlign: 'center', padding: '10px' }}>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {myPrintRequests.map((req) => {
+                        const statusLabel = req.status || 'Pending';
+                        const badgeColor = statusColorMap[statusLabel] || '#4b5563';
+                        return (
+                          <tr key={req.printRequestId} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                            <td style={{ padding: '10px' }}>{req.testTitle || `Set #${req.testId}`}</td>
+                            <td style={{ padding: '10px' }}>
+                              <span style={{ background: badgeColor, color: '#fff', padding: '4px 10px', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 600 }}>
+                                {statusLabel.replace(/([A-Z])/g, ' $1').trim()}
+                              </span>
+                            </td>
+                            <td style={{ padding: '10px', textAlign: 'center' }}>{req.copiesRequested}</td>
+                            <td style={{ padding: '10px' }}>{req.createdAt ? new Date(req.createdAt).toLocaleString() : '—'}</td>
+                            <td style={{ padding: '10px' }}>{req.updatedAt ? new Date(req.updatedAt).toLocaleString() : '—'}</td>
+                            <td style={{ padding: '10px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>{req.notes || '—'}</td>
+                            <td style={{ padding: '10px', textAlign: 'center' }}>
+                              {statusLabel === 'ReadyForPickup' ? (
+                                <button
+                                  className="btn btn-sm btn-primary"
+                                  onClick={() => handleTeacherAcknowledgeRequest(req)}
+                                >
+                                  Mark as Received
+                                </button>
+                              ) : (
+                                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>—</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+            </>
+          )}
         </div>
       </div>
 
@@ -2073,6 +2828,8 @@ const TestGeneration = () => {
                   printWindow.document.write(tableHTML);
                   printWindow.document.close();
                   setTimeout(() => printWindow.print(), 250);
+                  finalizePrintFlow('Table of Specification printed');
+                  return;
                 } else if (printOption === 'exam') {
                   if (!generatedSpec) {
                     setError('Please generate the table of specification first');
@@ -2228,8 +2985,10 @@ const TestGeneration = () => {
                     printWindow.document.write(examHTML);
                     printWindow.document.close();
                     setTimeout(() => printWindow.print(), 250);
+                    finalizePrintFlow('Exam paper printed');
                   };
                   img.src = UPHSLLogo;
+                  return;
                 } else if (printOption === 'answer') {
                   if (!generatedSpec) {
                     setError('Please generate the table of specification first');
@@ -2389,13 +3148,87 @@ const TestGeneration = () => {
                     printWindow.document.write(answerHTML);
                     printWindow.document.close();
                     setTimeout(() => printWindow.print(), 250);
+                    finalizePrintFlow('Answer key printed');
                   };
                   img2.src = UPHSLLogo;
+                  return;
                 } else {
                   window.print();
+                  finalizePrintFlow('Browser print triggered');
+                  return;
                 }
-                setShowPrintModal(false);
               }}>Print</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Print Request Modal (Non-Admin) */}
+      {showPrintRequestModal && (
+        <div className="modal-overlay">
+          <div className={`modal ${isDarkMode ? 'dark' : ''}`}>
+            <h3>Request Master Set Print</h3>
+            <div className="modal-content">
+              <p>Request a Master Set of this exam to be printed by an administrator.</p>
+              <p><strong>Exam:</strong> {activeExamMeta?.setLabel || 'Current Exam'}</p>
+              <p><strong>Subject:</strong> {selectedSubjectDetails?.name || 'N/A'}</p>
+              
+              <div style={{ margin: '1rem 0' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                  Number of Copies:
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="5"
+                  defaultValue="1"
+                  id="copiesInput"
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem',
+                    border: '1px solid var(--border-color, #dee2e6)',
+                    borderRadius: '4px'
+                  }}
+                />
+              </div>
+              
+              <div style={{ margin: '1rem 0' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                  Additional Notes (Optional):
+                </label>
+                <textarea
+                  id="notesInput"
+                  rows="3"
+                  placeholder="Any special instructions or requests..."
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem',
+                    border: '1px solid var(--border-color, #dee2e6)',
+                    borderRadius: '4px',
+                    resize: 'vertical'
+                  }}
+                />
+              </div>
+              
+              <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary, #6c757d)', marginTop: '1rem' }}>
+                Note: The master set includes the Table of Specifications, Exam Paper, and Answer Key.
+                You will be notified when it's ready for pickup.
+              </p>
+            </div>
+            <div className="modal-buttons">
+              <button className="btn btn-secondary" onClick={() => setShowPrintRequestModal(false)}>
+                Cancel
+              </button>
+              <button 
+                className="btn btn-primary" 
+                onClick={() => {
+                  const notes = document.getElementById('notesInput').value;
+                  const copies = parseInt(document.getElementById('copiesInput').value) || 1;
+                  handleSubmitPrintRequest(notes, copies);
+                }}
+              >
+                Submit Request
+              </button>
             </div>
           </div>
         </div>

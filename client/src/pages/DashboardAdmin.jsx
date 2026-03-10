@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search, Grid, List, Users } from 'lucide-react';
+import { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search, Grid, List, Users, Printer } from 'lucide-react';
 import NavItem from '../components/NavItem';
 import DropdownNavItem from '../components/DropdownNavItem';
 import UserManagement from '../components/UserManagement';
@@ -72,6 +72,9 @@ const DashboardAdmin = () => {
 
   const dataEntryItems = ["Program - Topic", "Test Encoding", "Test Question Editing"];
   const isDataEntryActive = dataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
+  
+  const reportItems = ["Test Generation", "Saved Exam Sets"];
+  const isReportsActive = reportItems.includes(activeTab) || activeTab === 'Reports';
 
   return (
     <div className={`dashboard ${isDarkMode ? 'dark' : ''}`}>
@@ -125,15 +128,23 @@ const DashboardAdmin = () => {
                   }
               }}
             />
-            <NavItem 
-              icon={BookOpen} 
-              label="Reports" 
-              isActive={activeTab === 'Reports'} 
-              onClick={() => { 
-                setActiveTab('Reports'); 
-                setActiveView('home');
-                navigate('/test-generation'); 
-              }} 
+            <DropdownNavItem
+              icon={BookOpen}
+              label="Reports"
+              isActive={isReportsActive}
+              dropdownItems={reportItems}
+              onSelect={(item) => {
+                setActiveTab(item);
+                if (item === 'Test Generation') {
+                  setActiveView('home');
+                  navigate('/test-generation');
+                } else if (item === 'Saved Exam Sets') {
+                  setActiveView('home');
+                  const firstDept = departments?.find(d => d.code !== 'IT') || departments?.[0];
+                  const code = firstDept?.code || 'CCS';
+                  navigate(`/reports/saved-exams/${code}`);
+                }
+              }}
             />
           </div>
 

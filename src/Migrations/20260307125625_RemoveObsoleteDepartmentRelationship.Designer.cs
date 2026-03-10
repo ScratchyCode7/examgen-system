@@ -3,6 +3,7 @@ using System;
 using Databank.Database;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace src.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260307125625_RemoveObsoleteDepartmentRelationship")]
+    partial class RemoveObsoleteDepartmentRelationship
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -204,64 +207,6 @@ namespace src.Migrations
                     b.HasIndex("QuestionId");
 
                     b.ToTable("Options", (string)null);
-                });
-
-            modelBuilder.Entity("Databank.Entities.PrintRequest", b =>
-                {
-                    b.Property<Guid>("PrintRequestId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<int>("CopiesRequested")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(1);
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                    b.Property<int>("DepartmentId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<DateTime?>("ProcessedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("ProcessedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("RequestedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<int>("TestId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("PrintRequestId");
-
-                    b.HasIndex("CreatedAt");
-
-                    b.HasIndex("DepartmentId");
-
-                    b.HasIndex("ProcessedByUserId");
-
-                    b.HasIndex("RequestedByUserId");
-
-                    b.HasIndex("Status");
-
-                    b.HasIndex("TestId");
-
-                    b.ToTable("PrintRequests", (string)null);
                 });
 
             modelBuilder.Entity("Databank.Entities.Question", b =>
@@ -702,40 +647,6 @@ namespace src.Migrations
                         .IsRequired();
 
                     b.Navigation("Question");
-                });
-
-            modelBuilder.Entity("Databank.Entities.PrintRequest", b =>
-                {
-                    b.HasOne("Databank.Entities.Department", "Department")
-                        .WithMany()
-                        .HasForeignKey("DepartmentId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Databank.Entities.User", "ProcessedBy")
-                        .WithMany()
-                        .HasForeignKey("ProcessedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Databank.Entities.User", "RequestedBy")
-                        .WithMany()
-                        .HasForeignKey("RequestedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Databank.Entities.Test", "Test")
-                        .WithMany()
-                        .HasForeignKey("TestId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Department");
-
-                    b.Navigation("ProcessedBy");
-
-                    b.Navigation("RequestedBy");
-
-                    b.Navigation("Test");
                 });
 
             modelBuilder.Entity("Databank.Entities.Question", b =>
