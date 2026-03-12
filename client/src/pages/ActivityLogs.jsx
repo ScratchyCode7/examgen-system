@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Download, RefreshCw, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
 import NavItem from '../components/NavItem';
@@ -96,11 +96,7 @@ const ActivityLogs = () => {
     navigate('/login');
   };
 
-  useEffect(() => {
-    fetchLogs();
-  }, [page]);
-
-  const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -122,7 +118,11 @@ const ActivityLogs = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, pageSize, filters]);
+
+  useEffect(() => {
+    fetchLogs();
+  }, [fetchLogs]);
 
   const handleFilterChange = (key, value) => {
     setFilters(prev => ({ ...prev, [key]: value }));

@@ -1,11 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
-import { useTheme } from '../contexts/ThemeContext';
 import { apiService } from '../services/api';
 import '../styles/UserManagement.css';
 
 const UserManagement = () => {
-  const { isDarkMode } = useTheme();
   const [users, setUsers] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(false);

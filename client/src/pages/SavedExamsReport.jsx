@@ -418,7 +418,6 @@ const SavedExamsReport = () => {
 
     const totals = parsedSpecification.totals || { low: 0, middle: 0, high: 0, grand: 0 };
     const programName = getProgramName();
-    const subjectName = getSubjectName();
     const filename = buildFilename('TOS');
 
     const tableRows = parsedSpecification.specs.map((spec) => `
@@ -561,7 +560,6 @@ const SavedExamsReport = () => {
 
     const logoDataUrl = await loadImageAsDataUrl(UPHSLLogo);
     const programName = getProgramName();
-    const subjectName = getSubjectName();
     const filename = buildFilename('Exam');
 
     const questionHtml = orderedQuestions.map((question, index) => {
@@ -813,9 +811,6 @@ const SavedExamsReport = () => {
   const reportItems = ['Test Generation', 'Saved Exam Sets'];
   const isDataEntryActive = dataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
   const isReportsActive = reportItems.includes(activeTab) || activeTab === 'Reports';
-
-  const selectedCourseDetails = selectedCourse ? courses.find(c => c.id === parseInt(selectedCourse, 10)) : null;
-  const selectedSubjectDetails = selectedSubject ? subjects.find(s => s.id === parseInt(selectedSubject, 10)) : null;
 
   return (
     <div className={`dashboard ${isDarkMode ? 'dark' : ''}`}>
