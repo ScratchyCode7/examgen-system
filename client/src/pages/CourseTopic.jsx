@@ -159,9 +159,14 @@ const CourseTopic = () => {
 
   useEffect(() => {
     const loadDepartments = async () => {
+      if (!user?.userId) return;
+      
       try {
         setIsLoadingDepartments(true);
-        const data = await apiService.getDepartments();
+        // Admin sees all departments, non-admin sees only assigned departments
+        const data = isAdmin 
+          ? await apiService.getDepartments()
+          : await apiService.getUserDepartments(user.userId);
         const list = Array.isArray(data) ? data : [];
         console.log('CourseTopic: loaded departments', list);
         setDepartments(list);
@@ -173,7 +178,7 @@ const CourseTopic = () => {
     };
 
     void loadDepartments();
-  }, []);
+  }, [user, isAdmin]);
 
   useEffect(() => {
     const loadCourses = async () => {

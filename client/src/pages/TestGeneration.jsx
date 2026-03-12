@@ -210,9 +210,14 @@ const TestGeneration = () => {
   // Load departments
   useEffect(() => {
     const loadDepartments = async () => {
+      if (!user?.userId) return;
+      
       try {
         setIsLoadingDepartments(true);
-        const data = await apiService.getDepartments();
+        // Admin sees all departments, non-admin sees only assigned departments
+        const data = isAdmin 
+          ? await apiService.getDepartments()
+          : await apiService.getUserDepartments(user.userId);
         console.log('Departments loaded:', data);
         const list = Array.isArray(data) ? data : [];
         setDepartments(list);
@@ -226,7 +231,7 @@ const TestGeneration = () => {
     };
 
     void loadDepartments();
-  }, []);
+  }, [user, isAdmin]);
 
   const applySubjectQuestionsFromCache = React.useCallback((subjectId, topicList) => {
     if (!subjectId || !Array.isArray(topicList)) return false;

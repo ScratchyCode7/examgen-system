@@ -110,9 +110,14 @@ const SavedExamsReport = () => {
 
   useEffect(() => {
     const loadDepartments = async () => {
+      if (!user?.userId) return;
+      
       try {
         setIsLoadingDepartments(true);
-        const data = await apiService.getDepartments();
+        // Admin sees all departments, non-admin sees only assigned departments
+        const data = isAdmin 
+          ? await apiService.getDepartments()
+          : await apiService.getUserDepartments(user.userId);
         setDepartments(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error('Failed to load departments:', err);
@@ -123,7 +128,7 @@ const SavedExamsReport = () => {
     };
 
     void loadDepartments();
-  }, []);
+  }, [user, isAdmin]);
 
   useEffect(() => {
     if (!departments.length) return;
