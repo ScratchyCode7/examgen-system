@@ -77,7 +77,6 @@ const CourseTopic = () => {
     const loadExistingSubjects = async () => {
       try {
         setIsLoading(true);
-        setError('');
         // Call getSubjects with proper params object
         const result = await apiService.getSubjects({ pageNumber: 1, pageSize: 100 });
         const items = Array.isArray(result) ? result : (result?.items || result?.Items || []);
@@ -121,7 +120,6 @@ const CourseTopic = () => {
         setAllSubjects(mapped);
       } catch (err) {
         console.error('Failed to load subjects for CourseTopic history:', err);
-        setError('Failed to load existing program topics. You can still add new ones.');
       } finally {
         setIsLoading(false);
       }
@@ -225,7 +223,6 @@ const CourseTopic = () => {
     const saveAsync = async () => {
       try {
         setIsLoading(true);
-        setError('');
 
         // Pack the extra metadata into the Subject.Description field as JSON
         const description = JSON.stringify({
@@ -285,7 +282,7 @@ const CourseTopic = () => {
           err.response?.data?.message ||
           err.response?.data ||
           'Failed to save program topic. Make sure you are logged in as an admin.';
-        setError(typeof message === 'string' ? message : 'Failed to save program topic.');
+        console.error(message);
       } finally {
         setIsLoading(false);
       }
@@ -333,14 +330,13 @@ const CourseTopic = () => {
   // Create new topic for selected subject
   const handleAddTopic = () => {
     if (!selectedSubjectForTopic || !topicFormData.title || !topicFormData.allocatedHours) {
-      setError('Please fill in Topic Title and Hours');
+      alert('Please fill in Topic Title and Hours');
       return;
     }
 
     const createTopicAsync = async () => {
       try {
         setTopicCreating(true);
-        setError('');
 
         const topicPayload = {
           subjectId: selectedSubjectForTopic,
@@ -370,7 +366,7 @@ const CourseTopic = () => {
           err.response?.data?.message ||
           err.response?.data ||
           'Failed to create topic.';
-        setError(typeof message === 'string' ? message : 'Failed to create topic.');
+        console.error(message);
       } finally {
         setTopicCreating(false);
       }
