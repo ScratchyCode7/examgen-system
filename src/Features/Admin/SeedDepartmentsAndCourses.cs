@@ -1,9 +1,9 @@
 using FastEndpoints;
 using Microsoft.EntityFrameworkCore;
-using src.Database;
-using src.Entities;
+using Databank.Database;
+using Databank.Entities;
 
-namespace src.Features.Admin;
+namespace Databank.Features.Admin;
 
 public class SeedDepartmentsAndCoursesEndpoint : EndpointWithoutRequest<SeedDepartmentsAndCoursesResponse>
 {
