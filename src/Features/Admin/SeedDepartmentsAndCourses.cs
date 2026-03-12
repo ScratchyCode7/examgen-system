@@ -1,34 +1,25 @@
-using FastEndpoints;
-using Microsoft.EntityFrameworkCore;
+using Databank.Abstract;
 using Databank.Database;
 using Databank.Entities;
+using Microsoft.EntityFrameworkCore;
 
 namespace Databank.Features.Admin;
 
-public class SeedDepartmentsAndCoursesEndpoint : EndpointWithoutRequest<SeedDepartmentsAndCoursesResponse>
+public sealed class SeedDepartmentsAndCoursesEndpoint : IEndpoint
 {
-    private readonly AppDbContext _context;
-
-    public SeedDepartmentsAndCoursesEndpoint(AppDbContext context)
+    public void Endpoint(IEndpointRouteBuilder app)
     {
-        _context = context;
-    }
-
-    public override void Configure()
-    {
-        Post("/api/admin/seed-departments-courses");
-        Policies("AdminOnly");
-    }
-
-    public override async Task HandleAsync(CancellationToken ct)
-    {
-        var response = new SeedDepartmentsAndCoursesResponse
+        app.MapPost("/api/admin/seed-departments-courses", async Task<IResult> (
+                AppDbContext dbContext,
+                CancellationToken ct) =>
         {
-            DepartmentsCreated = new List<string>(),
-            DepartmentsSkipped = new List<string>(),
-            CoursesCreated = new Dictionary<string, List<string>>(),
-            CoursesSkipped = new Dictionary<string, List<string>>()
-        };
+            var response = new SeedDepartmentsAndCoursesResponse
+            {
+                DepartmentsCreated = new List<string>(),
+                DepartmentsSkipped = new List<string>(),
+                CoursesCreated = new Dictionary<string, List<string>>(),
+                CoursesSkipped = new Dictionary<string, List<string>>()
+            };
 
         // Department definitions with their courses
         var departmentDefinitions = new Dictionary<string, (string Name, string Description, List<string> Courses)>
@@ -102,82 +93,83 @@ public class SeedDepartmentsAndCoursesEndpoint : EndpointWithoutRequest<SeedDepa
             })
         };
 
-        foreach (var (code, (name, description, courseNames)) in departmentDefinitions)
-        {
-            // Check if department exists
-            var department = await _context.Departments
-                .Include(d => d.Courses)
-                .FirstOrDefaultAsync(d => d.Code == code, ct);
-
-            if (department == null)
+            foreach (var (code, (name, description, courseNames)) in departmentDefinitions)
             {
-                // Create new department
-                department = new Department
+                // Check if department exists
+                var department = await dbContext.Departments
+                    .Include(d => d.Courses)
+                    .FirstOrDefaultAsync(d => d.Code == code, ct);
+
+                if (department == null)
                 {
-                    Code = code,
-                    Name = name,
-                    Description = description,
-                    IsActive = true,
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
-                };
-                _context.Departments.Add(department);
-                await _context.SaveChangesAsync(ct);
-                
-                response.DepartmentsCreated.Add($"{code} - {name}");
-            }
-            else
-            {
-                response.DepartmentsSkipped.Add($"{code} - {name} (already exists)");
-            }
-
-            // Initialize dictionaries
-            if (!response.CoursesCreated.ContainsKey(code))
-                response.CoursesCreated[code] = new List<string>();
-            if (!response.CoursesSkipped.ContainsKey(code))
-                response.CoursesSkipped[code] = new List<string>();
-
-            // Seed courses for this department
-            foreach (var courseName in courseNames)
-            {
-                // Check if course already exists in this department
-                var existingCourse = await _context.Courses
-                    .FirstOrDefaultAsync(c => c.Name == courseName && c.DepartmentId == department.Id, ct);
-
-                if (existingCourse == null)
-                {
-                    // Create new course
-                    var course = new Course
+                    // Create new department
+                    department = new Department
                     {
-                        Name = courseName,
-                        Code = GenerateCourseCode(courseName),
-                        Description = courseName,
-                        DepartmentId = department.Id,
+                        Code = code,
+                        Name = name,
+                        Description = description,
                         IsActive = true,
                         CreatedAt = DateTime.UtcNow,
                         UpdatedAt = DateTime.UtcNow
                     };
-                    _context.Courses.Add(course);
-                    await _context.SaveChangesAsync(ct);
+                    dbContext.Departments.Add(department);
+                    await dbContext.SaveChangesAsync(ct);
                     
-                    response.CoursesCreated[code].Add(courseName);
+                    response.DepartmentsCreated.Add($"{code} - {name}");
                 }
                 else
                 {
-                    response.CoursesSkipped[code].Add(courseName);
+                    response.DepartmentsSkipped.Add($"{code} - {name} (already exists)");
+                }
+
+                // Initialize dictionaries
+                if (!response.CoursesCreated.ContainsKey(code))
+                    response.CoursesCreated[code] = new List<string>();
+                if (!response.CoursesSkipped.ContainsKey(code))
+                    response.CoursesSkipped[code] = new List<string>();
+
+                // Seed courses for this department
+                foreach (var courseName in courseNames)
+                {
+                    // Check if course already exists in this department
+                    var existingCourse = await dbContext.Courses
+                        .FirstOrDefaultAsync(c => c.Name == courseName && c.DepartmentId == department.Id, ct);
+
+                    if (existingCourse == null)
+                    {
+                        // Create new course
+                        var course = new Course
+                        {
+                            Name = courseName,
+                            Code = GenerateCourseCode(courseName),
+                            Description = courseName,
+                            DepartmentId = department.Id,
+                            IsActive = true,
+                            CreatedAt = DateTime.UtcNow,
+                            UpdatedAt = DateTime.UtcNow
+                        };
+                        dbContext.Courses.Add(course);
+                        await dbContext.SaveChangesAsync(ct);
+                        
+                        response.CoursesCreated[code].Add(courseName);
+                    }
+                    else
+                    {
+                        response.CoursesSkipped[code].Add(courseName);
+                    }
                 }
             }
-        }
 
-        response.Summary = $"Departments Created: {response.DepartmentsCreated.Count}, " +
-                          $"Departments Skipped: {response.DepartmentsSkipped.Count}, " +
-                          $"Total Courses Created: {response.CoursesCreated.Values.Sum(list => list.Count)}, " +
-                          $"Total Courses Skipped: {response.CoursesSkipped.Values.Sum(list => list.Count)}";
+            response.Summary = $"Departments Created: {response.DepartmentsCreated.Count}, " +
+                              $"Departments Skipped: {response.DepartmentsSkipped.Count}, " +
+                              $"Total Courses Created: {response.CoursesCreated.Values.Sum(list => list.Count)}, " +
+                              $"Total Courses Skipped: {response.CoursesSkipped.Values.Sum(list => list.Count)}";
 
-        await SendOkAsync(response, ct);
+            return TypedResults.Ok(response);
+        }).RequireAuthorization("AdminOnly");
     }
 
-    private string GenerateCourseCode(string courseName)
+    private static string GenerateCourseCode(string courseName)
     {
         // Simple course code generation: Take first letters of major words
         var words = courseName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
