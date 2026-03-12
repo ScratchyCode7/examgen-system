@@ -2,6 +2,48 @@
 
 Full-stack application for managing exam/test databank with C# ASP.NET Core backend and React frontend.
 
+## ✨ Latest Updates (v2.8 - Question Image Support)
+
+**Released March 11, 2026 - Add image support to questions with resize/alignment controls and print-ready base64 conversion.**
+
+### New Changes (v2.8):
+- ✅ **Question Image Upload & Management:**
+  - Upload images to questions (max 5MB, images only: JPG, PNG, GIF, BMP, WebP)
+  - **Simultaneous encoding** - select image while encoding question, both save together
+  - Client-side preview appears immediately (no server upload until question saved)
+  - One-to-one relationship: each question can have one optional image
+  - Images stored in `wwwroot/uploads/questions/` with GUID filenames
+  - New `QuestionImages` table with cascade delete on parent question removal
+- ✅ **Image Controls (Real-time Preview):**
+  - Width slider: 10% - 100% of container (default 50%)
+  - Alignment buttons: Left, Center, Right
+  - Live preview updates as you adjust settings
+  - Delete button with confirmation modal
+- ✅ **Image Display in Exam Generation:**
+  - Images automatically included in generated exams from question pool
+  - Preview shows images with saved width and alignment settings
+  - Images positioned between question text and answer choices
+- ✅ **Print-Ready Implementation:**
+  - Base64 conversion before printing to avoid browser CORS restrictions
+  - Fetch API + FileReader approach bypasses canvas security errors
+  - Images embedded directly in print HTML as data URLs
+  - Mirrors successful Answer Key logo embedding technique
+  - Reliable printing across all modern browsers
+- ✅ **API Endpoints:**
+  - `POST /api/questions/{questionId}/image` - Upload/replace image with metadata
+  - `GET /api/questions/{questionId}/image` - Retrieve image metadata
+  - `DELETE /api/questions/{questionId}/image` - Remove image and delete file
+- ✅ **Backend Services:**
+  - `FileStorageService` handles uploads, validation, and deletion
+  - Validates file type and size before storage
+  - Returns relative paths for database storage
+- ✅ **Backward Compatibility:**
+  - All image fields are nullable - no breaking changes
+  - Existing text-only questions work exactly as before
+  - Print layout unchanged for questions without images
+
+📖 **[View Full Image Support Documentation](docs/question-image-support.md)**
+
 ## ✨ Latest Updates (v2.7 - Multi-Department Access System)
 
 **Released March 7, 2026 - Enable users to access multiple departments with granular permission control.**
@@ -301,7 +343,12 @@ SELECT s.*, t.* FROM "Subjects" s LEFT JOIN "Topics" t ON s."Id" = t."SubjectId"
 - **Course** – degree program (e.g., BSc Computer Science, BSc Data Science) belonging to a department with navigation to subjects.
 - **Subject** – academic subject within a course (e.g., Discrete Structures 1) with navigation to topics and tests.
 - **Topic** – syllabus unit within a subject (e.g., Arrays & Lists, Daily-Lessons) with allocated teaching hours.
-- **Question** – exam item linked to a topic with type, points, Bloom's level (cognitive classification), and option collection.
+- **Question** – exam item linked to a topic with type, points, Bloom's level (cognitive classification), option collection, and optional image.
+- **QuestionImage** – optional image attachment for questions with properties:
+  - `ImagePath` (relative path to file in wwwroot/uploads/questions/)
+  - `WidthPercentage` (10-100, default 50)
+  - `Alignment` (Left/Center/Right, default Center)
+  - One-to-one relationship with Question (nullable, cascade delete)
 - **Option** – answer choices per question with correctness flag and display order.
 - **Test (Exam)** – belongs to a subject, tracks who created it, duration, publish flags, availability window, and compositions via TestQuestion.
 - **TestQuestion** – junction table relating Tests to Questions with display order.
@@ -396,13 +443,23 @@ SELECT s.*, t.* FROM "Subjects" s LEFT JOIN "Topics" t ON s."Id" = t."SubjectId"
 - `DELETE /api/tests/{id}` - Delete test (Admin only)
 
 ### Questions (`/api/questions`)
-- `POST /api/questions` - Create question (Admin only)
+- `POST /api/questions` - Create question (Requires auth - teachers and admins)
 - `POST /api/questions/bulk` - Bulk import questions with options (Admin only)
 - `GET /api/questions` - List all questions with pagination and filters (Requires auth)
   - Query params: `pageNumber`, `pageSize`, `testId?`, `subjectId?`, `search?`, `difficulty?`, `category?`
 - `GET /api/questions/{id}` - Get question by ID (Requires auth)
-- `PUT /api/questions/{id}` - Update question (Admin only)
+- `PUT /api/questions/{id}` - Update question (Requires auth - teachers and admins)
 - `DELETE /api/questions/{id}` - Delete question (Admin only)
+
+### Question Images (`/api/questions/{questionId}/image`)
+- `POST /api/questions/{questionId}/image` - Upload/replace image for a question (Requires auth)
+  - Body: FormData with `file`, `widthPercentage` (10-100), `alignment` (Left/Center/Right)
+  - Accepts: JPG, PNG, GIF, BMP, WebP (max 5MB)
+  - Replaces existing image if present (old file deleted automatically)
+- `GET /api/questions/{questionId}/image` - Get image metadata for a question (Requires auth)
+  - Returns: `{ imagePath, widthPercentage, alignment, createdAt, updatedAt }`
+- `DELETE /api/questions/{questionId}/image` - Delete image from question (Requires auth)
+  - Removes database entry and deletes file from disk
 
 ### Test Results (`/api/test-results`)
 - `POST /api/test-results` - Create test result (Requires auth)
@@ -526,6 +583,15 @@ The frontend will be available at `http://localhost:3000`.
     - Multiple-choice A–D answer entry with rich-text
     - Answer key explanation editor
     - Cognitive level selection (Remembering & Understanding / Applying & Analyzing / Evaluation & Creating) → Maps to BloomLevel for exam generation
+    - **[NEW] Image Upload Component:**
+      - Click upload area to select image file (max 5MB, images only)
+      - **Works before saving** - preview appears immediately using FileReader
+      - Real-time preview with adjustable width (10-100% slider)
+      - Alignment controls (Left/Center/Right buttons)
+      - **Simultaneous save** - image uploads automatically when question is saved
+      - Delete button with confirmation (for existing images)
+      - Helpful UI hints guide the workflow
+      - Supports JPG, PNG, GIF, BMP, WebP formats
   - **BloomLevel Classification** for exam distribution rule (30-30-40):
     - "Remembering & Understanding" → BloomLevel 1
     - "Applying & Analyzing" → BloomLevel 3
@@ -548,7 +614,10 @@ The frontend will be available at `http://localhost:3000`.
         ]
       }
       ```
-    - Questions loaded from backend via `GET /api/questions?topicId={id}&pageSize=500` (replaces mock data)
+    - Images uploaded via `POST /api/questions/{questionId}/image` with FormData:
+      - Sends file, widthPercentage, and alignment
+      - Returns imagePath for storage
+    - Questions loaded from backend via `GET /api/questions?topicId={id}&pageSize=500` (includes image data)
     - In-page history shows questions loaded from the selected Topic with their BloomLevel classification
 - Global:
   - Dark mode toggle
@@ -629,14 +698,201 @@ The collection includes:
 - ✅ User & Admin dashboards with dark mode and navigation
 - ✅ Course & Topic management page wired to backend `Subject` table
 - ✅ Test Encoding & Editing UI with rich-text question editor and local history
+- ✅ **Question Image Upload** - Component with preview, width slider, alignment controls
+- ✅ **Exam Preview with Images** - Images display in generated exam preview
+- ✅ **Print-Ready Images** - Base64 conversion ensures images appear in printed exams
 - ✅ API service integration using Axios + interceptors
 - 🚧 Questions/Test integration with backend endpoints
 - 🚧 Advanced reporting and analytics views
 
+## 📖 System Overview
+
+### What is Databank?
+
+**Databank** is a comprehensive Test Management and Automated Exam Generation System designed for academic institutions. It enables faculty to encode questions into a centralized databank and automatically generate exam papers based on Bloom's Taxonomy distribution rules, subject hierarchies, and cognitive level requirements.
+
+### Core Capabilities
+
+#### 1. **Hierarchical Organization** 
+```
+Department (e.g., College of Computer Studies)
+  └── Course (e.g., BS Computer Science)
+      └── Subject (e.g., Data Structures)
+          └── Topic (e.g., Arrays & Linked Lists)
+              └── Question (e.g., Multiple Choice with Image)
+```
+
+#### 2. **Question Encoding & Management**
+- **Rich-Text Editor**: Format questions with bold, italic, lists, headings, links, math symbols
+- **Multiple-Choice Questions**: A–D answer entry with rich-text support
+- **Image Support** (v2.8):
+  - Upload images simultaneously while encoding questions
+  - Client-side preview before saving (no server upload needed)
+  - Adjust width (10-100%) and alignment (Left/Center/Right)
+  - Image and question save together with single click
+  - Max 5MB: JPG, PNG, GIF, BMP, WebP
+  - Print-ready base64 conversion
+- **Bloom's Taxonomy Classification**:
+  - Level 1: Remembering & Understanding
+  - Level 3: Applying & Analyzing  
+  - Level 5: Evaluation & Creating
+- **Topic-Scoped Questions**: Questions belong to specific topics for precise exam generation
+
+#### 3. **Automated Exam Generation**
+- **Table of Specification (TOS)**:
+  - Define topics, allocated hours, and question distribution
+  - Automatically calculates 30-30-40 distribution (Low-Middle-High cognitive levels)
+  - Enforces Bloom's Taxonomy requirements
+- **Smart Question Selection**:
+  - Randomly selects questions from databank matching criteria
+  - Ensures no duplicate questions across exam sets
+  - Validates sufficient question pool before generation
+- **Set Management**:
+  - Auto-assigns Set A, B, C, D... labels for each term
+  - Detects duplicate exams using question signature matching
+  - Saves complete exam snapshots for reprinting
+
+#### 4. **Print-Ready Output**
+- **Three Print Formats**:
+  - **Table of Specification** - Complete TOS with topics, hours, distribution
+  - **Exam Paper** - Student-facing question paper with header, form fields, questions with images
+  - **Answer Key** - Multi-column layout with correct answers
+- **Print Features**:
+  - Embedded university logo and branding
+  - Filename generation: `{ExamType}_{Semester}_{Year}_{CourseCode}_{DateTime}`
+  - Page break control to prevent question splitting
+  - Base64 image embedding ensures images print correctly
+- **Browser Compatibility**: Works across Chrome, Firefox, Safari, Edge
+
+#### 5. **Multi-Department Access System** (v2.7)
+- **User-Department Assignment**:
+  - Users can access multiple departments (many-to-many relationship)
+  - JWT tokens include multiple `departmentId` claims
+  - DepartmentAccessService validates access rights
+- **Admin Controls**:
+  - Create/edit users with multi-select department assignment
+  - Password visibility toggle, full dark mode support
+  - Admins automatically get access to all departments
+- **Department Switching**:
+  - URL-based navigation: `/:departmentCode`
+  - Department context preserved across pages
+  - Protected routes validate access before rendering
+
+#### 6. **Saved Exam Sets & Reports** (v2.6)
+- **Persistent Exam Storage**:
+  - Save generated exams with complete metadata
+  - Stores exact question order and specification snapshot
+  - Computes deterministic question signature for duplicate detection
+- **Reports Interface**:
+  - Filter saved sets by department, course, subject, exam type, semester, year
+  - View stored exams with toggleable answer key
+  - Reprint exams long after original generation
+
+#### 7. **Security & Authentication**
+- **JWT Authentication**:
+  - Secure login with username/email + password
+  - Token-based authorization for all API requests
+  - Role-based access control (Admin vs User)
+- **Activity Logging**:
+  - Comprehensive audit trail for all system actions
+  - Severity levels: Info, Warning, Error
+  - Entity tracking for traceability
+
+### Technical Stack
+
+**Backend**:
+- **Framework**: ASP.NET Core 9.0 (C#)
+- **Database**: PostgreSQL with Entity Framework Core
+- **Architecture**: FastEndpoints pattern with CQRS separation
+- **Authentication**: JWT with role-based claims
+- **Storage**: Local file storage (wwwroot/uploads/)
+
+**Frontend**:
+- **Framework**: React 18 with Create React App
+- **Routing**: React Router v6
+- **State Management**: Context API (Auth, Theme)
+- **HTTP Client**: Axios with interceptors
+- **Styling**: CSS Modules with dark mode support
+
+**Key Libraries**:
+- Lucide React (icons)
+- FileReader API (image conversion)
+- Canvas API (base64 encoding)
+
+### Development Workflow
+
+1. **Login**: Faculty authenticate via JWT
+2. **Select Context**: Choose Department → Course → Subject → Topic
+3. **Encode Questions**: 
+   - Enter question text, choices, correct answer
+   - Upload optional image with width/alignment settings (preview shows immediately)
+   - Select Bloom's cognitive level
+   - Click "Add Question" → Question and image save together automatically
+4. **Generate Exam**:
+   - Define Table of Specification with topics and hours
+   - System validates question availability
+   - Auto-generates exam with proper distribution
+   - Save exam set (auto-assigned Set A/B/C...)
+5. **Preview & Print**:
+   - View generated exam with images
+   - Print TOS, Exam Paper, or Answer Key
+   - Images embedded as base64 for reliable printing
+
+### Database Schema (Current)
+
+**Core Tables**:
+- `Departments` - Academic units (CCS, CBA, etc.)
+- `Courses` - Degree programs (BSCS, BSIT, etc.)
+- `Subjects` - Course subjects (Data Structures, Algorithms, etc.)
+- `Topics` - Subject topics with allocated hours
+- `Questions` - Exam items with Bloom level
+- `QuestionImages` - Optional image attachments (one-to-one)
+- `Options` - Answer choices with correctness flag
+- `Tests` - Generated exams with metadata
+- `TestQuestions` - Junction table (Test ↔ Question)
+- `Users` - Faculty accounts
+- `UserDepartments` - User ↔ Department many-to-many
+- `ActivityLog` - System audit trail
+
+### Recent Troubleshooting (v2.8)
+
+**Issue #1**: Images not loading in preview  
+**Solution**: Exported `API_BASE_URL` from api.js, fixed URL construction
+
+**Issue #2**: Images missing in print dialog  
+**Solution**: Implemented base64 conversion using Fetch API + FileReader to avoid CORS restrictions
+
+### System Status (March 2026)
+
+✅ **Production-Ready Features**:
+- Department/Course/Subject/Topic hierarchy
+- Question encoding with images
+- Bloom's Taxonomy classification
+- Automated exam generation
+- Multi-department access
+- Saved exam sets with duplicate detection
+- Print-ready output (TOS, Exam, Answer Key)
+- Dark mode throughout UI
+- Activity logging and audit trail
+
+🚧 **Planned Enhancements**:
+- Advanced analytics dashboard
+- Question usage statistics
+- Bulk question import from CSV/Excel
+- Question review workflow with approval
+- Student test-taking interface
+- Automatic grading and result tracking
+
+---
+
+**Current Version**: v2.8 (Question Image Support)  
+**Last Updated**: March 11, 2026  
+**License**: Proprietary (Academic Use)  
+**Maintained By**: [University/Institution Name]
+
 ## � Documentation
 
-### System Documentation
-- **[Multi-Department Access System](docs/multi-department-access-system.md)** - Complete guide to multi-department user access, JWT claims, admin UI, and migration strategy
+### System Documentation- **[Question Image Support](docs/question-image-support.md)** - Complete guide to image upload, controls, print implementation, and troubleshooting- **[Multi-Department Access System](docs/multi-department-access-system.md)** - Complete guide to multi-department user access, JWT claims, admin UI, and migration strategy
 - **[Generated Exam Save Flow](docs/generated-exam-save-flow.md)** - Exam persistence workflow, signature detection, and retrieval mechanics
 - **[Refactoring Guide](REFACTORING_GUIDE.md)** - Database schema evolution and architectural decisions
 - **[Refactoring Summary](REFACTORING_SUMMARY.md)** - Quick reference for schema changes
@@ -644,8 +900,21 @@ The collection includes:
 ### API Documentation
 - **[Postman Commands](POSTMANCMD.MD)** - API endpoint reference and testing guide
 - **Postman Collection**: `postman/Databank.postman_collection.json`
+### Deployment Documentation
+- **[Deployment Guide](DEPLOYMENT.md)** - Complete production deployment guide for Vercel + Render + Neon
+- **[Quick Start Deployment](QUICKSTART_DEPLOYMENT.md)** - Condensed 25-minute deployment guide
+- **[Render Backend Guide](src/RENDER_DEPLOYMENT.md)** - Backend-specific deployment instructions
 
-## �🔄 Recent Changes (Dec 8-9, 2025)
+**Deployment Scripts:**
+- `./deploy-setup.sh` - Pre-deployment checker and JWT key generator
+- `./generate-jwt-key.sh` - Generate secure JWT signing key
+- `./verify-deployment.sh` - Test deployed backend and frontend endpoints
+
+**Deployment Stack:**
+- Frontend: **Vercel** (React app hosting)
+- Backend: **Render** (ASP.NET Core API)
+- Database: **Neon** (PostgreSQL serverless)
+## �� Recent Changes (Dec 8-9, 2025)
 
 - Migrated the working Create-React-App frontend into `client/` and updated `client/package.json` to use `react-scripts` so the `client/` folder now hosts the active frontend (backup copy kept in `tdb-frontend/`).
 - Implemented a global `ThemeContext` to persist dark-mode preference across pages (`client/src/contexts/ThemeContext.js`).

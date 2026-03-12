@@ -7,6 +7,17 @@ public static class QuestionMappings
 {
     public static QuestionResponse ToResponse(this Question question)
     {
+        QuestionImageDto? imageDto = null;
+        if (question.QuestionImage != null)
+        {
+            imageDto = new QuestionImageDto(
+                question.QuestionImage.Id,
+                question.QuestionImage.ImagePath,
+                question.QuestionImage.WidthPercentage,
+                question.QuestionImage.Alignment
+            );
+        }
+
         return new QuestionResponse(
             question.Id,
             question.TopicId,
@@ -16,7 +27,8 @@ public static class QuestionMappings
             question.Points,
             question.DisplayOrder,
             question.IsActive,
-            question.Options?.Select(o => o.ToResponse()).ToList()
+            question.Options?.Select(o => o.ToResponse()).ToList(),
+            imageDto
         );
     }
 }

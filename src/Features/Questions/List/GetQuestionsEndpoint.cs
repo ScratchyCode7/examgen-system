@@ -24,7 +24,8 @@ public sealed class GetQuestionsEndpoint : IEndpoint
             
             IQueryable<Question> query = dbContext.Questions
                 .AsNoTracking()
-                .Include(q => q.Options);
+                .Include(q => q.Options)
+                .Include(q => q.QuestionImage);
 
             if (topicId.HasValue)
             {

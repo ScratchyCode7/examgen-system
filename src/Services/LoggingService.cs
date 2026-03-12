@@ -15,25 +15,30 @@ public sealed class LoggingService : ILoggingService
 
     public async Task LogInfoAsync(string? userId, string category, string action, string? details = null)
     {
-        await LogAsync(userId, category, action, details, "Info");
+        await LogAsync(userId, category, action, null, null, details, "Info");
     }
 
     public async Task LogWarningAsync(string? userId, string category, string action, string? details = null)
     {
-        await LogAsync(userId, category, action, details, "Warning");
+        await LogAsync(userId, category, action, null, null, details, "Warning");
     }
 
     public async Task LogErrorAsync(string? userId, string category, string action, string? details = null, string severity = "Error")
     {
-        await LogAsync(userId, category, action, details, severity);
+        await LogAsync(userId, category, action, null, null, details, severity);
     }
 
     public async Task LogActivityAsync(string? userId, string category, string action, string? details = null)
     {
-        await LogAsync(userId, category, action, details, "Info");
+        await LogAsync(userId, category, action, null, null, details, "Info");
     }
 
-    private async Task LogAsync(string? userId, string category, string action, string? details, string severity)
+    public async Task LogActivityAsync(string? userId, string category, string action, string entityType, int? entityId, string? details = null)
+    {
+        await LogAsync(userId, category, action, entityType, entityId, details, "Info");
+    }
+
+    private async Task LogAsync(string? userId, string category, string action, string? entityType, int? entityId, string? details, string severity)
     {
         var userGuid = userId != null && Guid.TryParse(userId, out var guid) ? guid : (Guid?)null;
         var departmentId = await ResolveDepartmentIdAsync(userGuid);
@@ -50,6 +55,8 @@ public sealed class LoggingService : ILoggingService
             UserId = userGuid,
             Category = category,
             Action = action,
+            EntityType = entityType ?? string.Empty,
+            EntityId = entityId,
             Details = details,
             Severity = severity,
             CreatedAt = DateTime.UtcNow

@@ -22,4 +22,5 @@ public sealed class Question
     public Topic Topic { get; set; } = null!;
     public ICollection<Option> Options { get; set; } = new List<Option>();
     public ICollection<TestQuestion> TestQuestions { get; set; } = new List<TestQuestion>();
+    public QuestionImage? QuestionImage { get; set; }
 }

@@ -22,6 +22,7 @@ builder.Services.AddScoped<ITokenService, JwtTokenService>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<ILoggingService, LoggingService>();
 builder.Services.AddScoped<IDepartmentAccessService, DepartmentAccessService>();
+builder.Services.AddScoped<IFileStorageService, FileStorageService>();
 builder.Services.AddEndpoints(typeof(Program).Assembly);
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -61,7 +62,22 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("ReactFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:3000", "http://localhost:5173", "http://localhost:5174")
+        var allowedOrigins = new List<string> 
+        { 
+            "http://localhost:3000", 
+            "http://localhost:5173", 
+            "http://localhost:5174" 
+        };
+        
+        // Add production frontend URL from environment variable
+        var productionUrl = builder.Configuration["FRONTEND_URL"];
+        if (!string.IsNullOrEmpty(productionUrl))
+        {
+            allowedOrigins.Add(productionUrl);
+            Console.WriteLine($"✓ CORS: Added production frontend URL: {productionUrl}");
+        }
+        
+        policy.WithOrigins(allowedOrigins.ToArray())
               .AllowAnyMethod()
               .AllowAnyHeader()
               .AllowCredentials();
@@ -78,6 +94,9 @@ if (app.Environment.IsDevelopment())
 
 // Enable CORS for local frontends before other middleware short-circuits
 app.UseCors("ReactFrontend");
+
+// Serve static files (uploaded images)
+app.UseStaticFiles();
 
 // Apply migrations at startup so schema stays current
 using (var scope = app.Services.CreateScope())

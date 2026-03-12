@@ -1,0 +1,34 @@
+# Render.com deployment configuration for Databank Backend
+# Place this in the root of your repository
+
+services:
+  - type: web
+    name: databank-backend
+    runtime: dotnet
+    rootDir: src
+    buildCommand: dotnet publish -c Release -o out
+    startCommand: ./out/src
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: ASPNETCORE_URLS
+        value: http://0.0.0.0:10000
+      - key: ConnectionStrings__PostgresConnection
+        sync: false # Set this in Render dashboard (contains sensitive data)
+      - key: Jwt__SigningKey
+        generateValue: true # Render will auto-generate a secure key
+      - key: Jwt__Issuer
+        sync: false # Set in dashboard
+      - key: Jwt__Audience
+        sync: false # Set in dashboard
+      - key: FRONTEND_URL
+        sync: false # Set in dashboard
+    healthCheckPath: /
+    autoDeploy: true
+    disk:
+      name: uploads
+      mountPath: /app/wwwroot/uploads
+      sizeGB: 1
+
+# Note: This configuration is optional. You can also configure everything
+# through the Render dashboard web interface.

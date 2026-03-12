@@ -6,5 +6,6 @@ public interface ILoggingService
     Task LogWarningAsync(string? userId, string category, string action, string? details = null);
     Task LogErrorAsync(string? userId, string category, string action, string? details = null, string severity = "Error");
     Task LogActivityAsync(string? userId, string category, string action, string? details = null);
+    Task LogActivityAsync(string? userId, string category, string action, string entityType, int? entityId, string? details = null);
 }
 

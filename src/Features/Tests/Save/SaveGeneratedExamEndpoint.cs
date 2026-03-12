@@ -3,6 +3,7 @@ using System.Text.Json;
 using Databank.Abstract;
 using Databank.Database;
 using Databank.Entities;
+using Databank.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace Databank.Features.Tests.Save;
@@ -14,6 +15,8 @@ public sealed class SaveGeneratedExamEndpoint : IEndpoint
         app.MapPost("/api/tests/save-generated", async Task<IResult> (
                 SaveGeneratedExamRequest request,
                 AppDbContext dbContext,
+                ILoggingService loggingService,
+                HttpContext httpContext,
                 CancellationToken ct) =>
         {
             if (request.Questions is null || request.Questions.Count == 0)
@@ -140,6 +143,11 @@ public sealed class SaveGeneratedExamEndpoint : IEndpoint
 
             await dbContext.TestQuestions.AddRangeAsync(testQuestions, ct);
             await dbContext.SaveChangesAsync(ct);
+
+            // Log activity
+            var userId = httpContext.User.FindFirst("sub")?.Value ?? httpContext.User.FindFirst("userId")?.Value;
+            await loggingService.LogActivityAsync(userId, "Tests", "Saved", "Test", test.Id,
+                $"Saved generated exam: {test.Title} ({request.Questions.Count} questions, {request.ExamType} {request.Semester} {request.SchoolYear})");
 
             return TypedResults.Created($"/api/tests/{test.Id}", test.ToResponse());
         }).RequireAuthorization("AdminOnly");

@@ -6,7 +6,7 @@ import DropdownNavItem from '../components/DropdownNavItem';
 import LogoutModal from '../components/LogoutModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { apiService } from '../services/api';
+import { apiService, API_BASE_URL } from '../services/api';
 import '../styles/Dashboard.css';
 import '../styles/TestGeneration.css';
 
@@ -14,7 +14,7 @@ import TDBLogo from '../assets/TDB logo.png';
 import UPHSL from '../assets/uphsl.png';
 import UPHSLLogo from '../assets/UPHSL Logo.png';
 
-const { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search, Printer, Save, Eye, Trash2, PlayCircle, CheckCircle, AlertTriangle } = Icons;
+const { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search, Printer, Save, Eye, Trash2, PlayCircle, CheckCircle, AlertTriangle, FileText } = Icons;
 
 const TestGeneration = () => {
   const { user, logout } = useAuth();
@@ -79,6 +79,23 @@ const TestGeneration = () => {
       return fallback.trim().toUpperCase();
     }
     return '-';
+  };
+
+  // Helper function to convert image URL to base64 data URL - using fetch to avoid CORS
+  const convertImageToDataURL = async (imageUrl) => {
+    try {
+      const response = await fetch(imageUrl);
+      const blob = await response.blob();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (error) {
+      console.error('Failed to fetch image:', error);
+      throw error;
+    }
   };
 
   // Helper function to determine semester based on current date
@@ -475,8 +492,13 @@ const TestGeneration = () => {
 
   const handleUserAction = (action) => {
     setIsUserMenuOpen(false);
-    if (action === 'Logout') setIsLogoutModalOpen(true);
-    else console.log('Navigate to', action);
+    if (action === 'Logout') {
+      setIsLogoutModalOpen(true);
+    } else if (action === 'Activity Logs') {
+      navigate('/activity-logs');
+    } else {
+      console.log('Navigate to', action);
+    }
   };
 
   const handleConfirmLogout = () => {
@@ -1782,7 +1804,12 @@ const TestGeneration = () => {
 
             {isUserMenuOpen && (
               <div className="user-dropdown show">
-                <button onClick={() => handleUserAction('User Management')}><Settings /> User Management</button>
+                {user?.isAdmin && (
+                  <>
+                    <button onClick={() => handleUserAction('User Management')}><Settings /> User Management</button>
+                    <button onClick={() => handleUserAction('Activity Logs')}><FileText /> Activity Logs</button>
+                  </>
+                )}
                 <button onClick={() => handleUserAction('Edit Account')}><User /> Edit Account</button>
                 <button className="logout-btn" onClick={() => handleUserAction('Logout')}><LogOut /> Logout</button>
               </div>
@@ -2400,12 +2427,31 @@ const TestGeneration = () => {
                     sampleExam.questions.map((q, idx) => {
                       const questionText = q.content || q.Content || q.question || 'Question text not available';
                       const options = q.options || q.Options || q.choices || [];
+                      const image = q.image || q.Image || null;
                       // preview debug logs removed for production
                       return (
                         <div key={idx} className="exam-question-item">
                           <div style={{ marginBottom: '8px', fontSize: '15px' }}>
                             <strong>{idx + 1}.) {questionText}</strong>
                           </div>
+                          {image && (
+                            <div className="question-image-wrapper" style={{ 
+                              textAlign: image.alignment?.toLowerCase() || 'center', 
+                              margin: '10px 0'
+                            }}>
+                              <img 
+                                src={`${API_BASE_URL}/${image.imagePath}`}
+                                alt={`Question ${idx + 1}`}
+                                className="question-image-print"
+                                style={{ 
+                                  width: `${image.widthPercentage || 50}%`,
+                                  maxHeight: '400px',
+                                  objectFit: 'contain',
+                                  display: 'inline-block'
+                                }}
+                              />
+                            </div>
+                          )}
                           <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', marginLeft: '10px', fontSize: '14px' }}>
                             {options.map((option, optIdx) => {
                               const letter = String.fromCharCode(65 + optIdx);
@@ -2871,15 +2917,38 @@ const TestGeneration = () => {
                     };
                   }
                   
-                  // Convert image to data URL
+                  // Convert UPHSL logo to data URL
                   const img = new Image();
-                  img.onload = function() {
+                  img.onload = async function() {
                     const canvas = document.createElement('canvas');
                     canvas.width = img.width;
                     canvas.height = img.height;
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0);
-                    const dataUrl = canvas.toDataURL('image/png');
+                    const logoDataUrl = canvas.toDataURL('image/png');
+                    
+                    // Convert all question images to base64
+                    const questionsWithImages = examToPrint.questions.map(async (q, idx) => {
+                      const image = q.image || q.Image;
+                      if (image && image.imagePath) {
+                        try {
+                          const imageUrl = `${API_BASE_URL}/${image.imagePath}`;
+                          const imageDataUrl = await convertImageToDataURL(imageUrl);
+                          return {
+                            ...q,
+                            imageDataUrl: imageDataUrl,
+                            imageWidth: image.widthPercentage || 50,
+                            imageAlignment: image.alignment?.toLowerCase() || 'center'
+                          };
+                        } catch (error) {
+                          console.error(`Failed to convert image for question ${idx + 1}:`, error);
+                          return q; // Return question without image if conversion fails
+                        }
+                      }
+                      return q;
+                    });
+                    
+                    const processedQuestions = await Promise.all(questionsWithImages);
                     
                     const printWindow = window.open('', '', 'width=1200,height=800');
                     const now = new Date();
@@ -2917,19 +2986,26 @@ const TestGeneration = () => {
                             .questions-section { margin: 20px 0; }
                             .question-item { margin-bottom: 15px; color: #000; }
                             .question-text { font-weight: normal; margin-bottom: 5px; font-size: 14px; }
+                            .question-image-wrapper { margin: 10px 0; page-break-inside: avoid; }
+                            .question-image-wrapper.text-left { text-align: left; }
+                            .question-image-wrapper.text-center { text-align: center; }
+                            .question-image-wrapper.text-right { text-align: right; }
+                            .question-image-wrapper img { max-height: 400px; object-fit: contain; display: inline-block; }
                             .choices { display: flex; flex-wrap: wrap; gap: 15px; margin-left: 20px; }
                             .choice-item { font-size: 14px; flex: 1 1 calc(25% - 15px); min-width: 120px; word-wrap: break-word; white-space: normal; }
                             .choice-letter { font-weight: normal; }
                             @media print {
                               body { margin: 0; padding: 10px; }
                               .question-item { page-break-inside: avoid; }
+                              .question-image-wrapper { page-break-inside: avoid; display: block !important; }
+                              .question-image-wrapper img { display: inline-block !important; }
                             }
                           </style>
                         </head>
                         <body>
                           <div class="exam-header">
                             <div class="logo-section">
-                              <img src="${dataUrl}" alt="UPHSL Logo" />
+                              <img src="${logoDataUrl}" alt="UPHSL Logo" />
                             </div>
                             <div class="header-text">
                               <h2>University of Perpetual Help System</h2>
@@ -2965,9 +3041,13 @@ const TestGeneration = () => {
                           </div>
 
                           <div class="questions-section">
-                            ${examToPrint.questions.map((q, idx) => {
+                            ${processedQuestions.map((q, idx) => {
                               const questionText = q.content || q.Content || q.question || 'Question text not available';
                               const options = q.options || q.Options || q.choices || [];
+                              let imageHTML = '';
+                              if (q.imageDataUrl) {
+                                imageHTML = '<div class="question-image-wrapper text-' + q.imageAlignment + '"><img src="' + q.imageDataUrl + '" alt="Question ' + (idx + 1) + '" style="width: ' + q.imageWidth + '%;" /></div>';
+                              }
                               let choicesHTML = '';
                               if (options && options.length > 0) {
                                 choicesHTML = options.map((option, optIdx) => {
@@ -2976,7 +3056,7 @@ const TestGeneration = () => {
                                   return '<div class="choice-item"><span class="choice-letter">' + letter + '.</span> ' + optText + '</div>';
                                 }).join('');
                               }
-                              return '<div class="question-item"><div class="question-text">' + (idx + 1) + '.) ' + questionText + '</div><div class="choices">' + choicesHTML + '</div></div>';
+                              return '<div class="question-item"><div class="question-text">' + (idx + 1) + '.) ' + questionText + '</div>' + imageHTML + '<div class="choices">' + choicesHTML + '</div></div>';
                             }).join('')}
                           </div>
                         </body>

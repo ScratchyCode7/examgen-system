@@ -4,7 +4,7 @@
 // See README for full details.
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search } from 'lucide-react';
+import { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search, FileText } from 'lucide-react';
 import NavItem from '../components/NavItem';
 import DropdownNavItem from '../components/DropdownNavItem';
 import LogoutModal from '../components/LogoutModal';
@@ -204,8 +204,13 @@ const CourseTopic = () => {
 
   const handleUserAction = (action) => {
     setIsUserMenuOpen(false);
-    if (action === 'Logout') setIsLogoutModalOpen(true);
-    else console.log('Navigate to', action);
+    if (action === 'Logout') {
+      setIsLogoutModalOpen(true);
+    } else if (action === 'Activity Logs') {
+      navigate('/activity-logs');
+    } else {
+      console.log('Navigate to', action);
+    }
   };
 
   const handleConfirmLogout = () => {
@@ -435,7 +440,12 @@ const CourseTopic = () => {
 
             {isUserMenuOpen && (
               <div className="user-dropdown show">
-                <button onClick={() => handleUserAction('User Management')}><Settings /> User Management</button>
+                {user?.isAdmin && (
+                  <>
+                    <button onClick={() => handleUserAction('User Management')}><Settings /> User Management</button>
+                    <button onClick={() => handleUserAction('Activity Logs')}><FileText /> Activity Logs</button>
+                  </>
+                )}
                 <button onClick={() => handleUserAction('Edit Account')}><User /> Edit Account</button>
                 <button className="logout-btn" onClick={() => handleUserAction('Logout')}><LogOut /> Logout</button>
               </div>

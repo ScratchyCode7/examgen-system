@@ -321,6 +321,52 @@ namespace src.Migrations
                     b.ToTable("Questions", (string)null);
                 });
 
+            modelBuilder.Entity("Databank.Entities.QuestionImage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Alignment")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Center");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<string>("ImagePath")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("QuestionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<int>("WidthPercentage")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(50);
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("QuestionId")
+                        .IsUnique();
+
+                    b.ToTable("QuestionImages", (string)null);
+                });
+
             modelBuilder.Entity("Databank.Entities.Subject", b =>
                 {
                     b.Property<int>("Id")
@@ -749,6 +795,17 @@ namespace src.Migrations
                     b.Navigation("Topic");
                 });
 
+            modelBuilder.Entity("Databank.Entities.QuestionImage", b =>
+                {
+                    b.HasOne("Databank.Entities.Question", "Question")
+                        .WithOne("QuestionImage")
+                        .HasForeignKey("Databank.Entities.QuestionImage", "QuestionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Question");
+                });
+
             modelBuilder.Entity("Databank.Entities.Subject", b =>
                 {
                     b.HasOne("Databank.Entities.Course", "Course")
@@ -867,6 +924,8 @@ namespace src.Migrations
             modelBuilder.Entity("Databank.Entities.Question", b =>
                 {
                     b.Navigation("Options");
+
+                    b.Navigation("QuestionImage");
 
                     b.Navigation("TestQuestions");
                 });

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search, Grid, List, Users, Printer } from 'lucide-react';
+import { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search, Grid, List, Users, Printer, FileText } from 'lucide-react';
 import NavItem from '../components/NavItem';
 import DropdownNavItem from '../components/DropdownNavItem';
 import UserManagement from '../components/UserManagement';
@@ -61,6 +61,8 @@ const DashboardAdmin = () => {
     } else if (action === 'User Management') {
       setActiveView('users');
       setActiveTab('User Management');
+    } else if (action === 'Activity Logs') {
+      navigate('/activity-logs');
     }
   };
 
@@ -161,6 +163,7 @@ const DashboardAdmin = () => {
             {isUserMenuOpen && (
               <div className="user-dropdown show">
                 <button onClick={() => handleUserAction('User Management')}><Settings /> User Management</button>
+                <button onClick={() => handleUserAction('Activity Logs')}><FileText /> Activity Logs</button>
                 <button onClick={() => handleUserAction('Edit Account')}><User /> Edit Account</button>
                 <button className="logout-btn" onClick={() => handleUserAction('Logout')}><LogOut /> Logout</button>
               </div>

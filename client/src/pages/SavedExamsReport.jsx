@@ -14,7 +14,7 @@ import TDBLogo from '../assets/TDB logo.png';
 import UPHSL from '../assets/uphsl.png';
 import UPHSLLogo from '../assets/UPHSL Logo.png';
 
-const { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search, Printer, Eye, Trash2, RefreshCcw } = Icons;
+const { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search, Printer, Eye, Trash2, RefreshCcw, FileText } = Icons;
 
 const getAutoSemester = () => {
   const month = new Date().getMonth() + 1;
@@ -248,8 +248,13 @@ const SavedExamsReport = () => {
 
   const handleUserAction = (action) => {
     setIsUserMenuOpen(false);
-    if (action === 'Logout') setIsLogoutModalOpen(true);
-    else console.log('Navigate to', action);
+    if (action === 'Logout') {
+      setIsLogoutModalOpen(true);
+    } else if (action === 'Activity Logs') {
+      navigate('/activity-logs');
+    } else {
+      console.log('Navigate to', action);
+    }
   };
 
   const handleConfirmLogout = () => {
@@ -868,7 +873,12 @@ const SavedExamsReport = () => {
 
             {isUserMenuOpen && (
               <div className="user-dropdown show">
-                <button onClick={() => handleUserAction('User Management')}><Settings /> User Management</button>
+                {user?.isAdmin && (
+                  <>
+                    <button onClick={() => handleUserAction('User Management')}><Settings /> User Management</button>
+                    <button onClick={() => handleUserAction('Activity Logs')}><FileText /> Activity Logs</button>
+                  </>
+                )}
                 <button onClick={() => handleUserAction('Edit Account')}><User /> Edit Account</button>
                 <button className="logout-btn" onClick={() => handleUserAction('Logout')}><LogOut /> Logout</button>
               </div>

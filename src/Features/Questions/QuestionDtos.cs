@@ -13,6 +13,13 @@ public sealed record QuestionRequest(
     List<OptionRequest>? Options = null
 );
 
+public sealed record QuestionImageDto(
+    int Id,
+    string ImagePath,
+    int WidthPercentage,
+    string Alignment
+);
+
 public sealed record QuestionResponse(
     int Id,
     int TopicId,
@@ -22,6 +29,7 @@ public sealed record QuestionResponse(
     int Points,
     int DisplayOrder,
     bool IsActive,
-    List<OptionResponse>? Options = null
+    List<OptionResponse>? Options = null,
+    QuestionImageDto? Image = null
 );
 

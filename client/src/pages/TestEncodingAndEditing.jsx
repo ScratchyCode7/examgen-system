@@ -14,6 +14,7 @@ import {
 import NavItem from '../components/NavItem';
 import DropdownNavItem from '../components/DropdownNavItem';
 import LogoutModal from '../components/LogoutModal';
+import QuestionImageUpload from '../components/QuestionImageUpload';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { apiService } from '../services/api';
@@ -283,8 +284,12 @@ const TestEncodingAndEditing = () => {
     const [choiceD, setChoiceD] = useState('');
     const [explanation, setExplanation] = useState('');
     const [correctAnswer, setCorrectAnswer] = useState(''); 
+    const [questionImage, setQuestionImage] = useState(null);
 
     const [editingQuestion, setEditingQuestion] = useState(null); 
+    
+    // Ref for QuestionImageUpload to access pending image upload method
+    const imageUploadRef = useRef(null); 
     
 
     // --- Effects & Handlers ---
@@ -413,6 +418,7 @@ const TestEncodingAndEditing = () => {
         setCorrectAnswer(''); 
         setBloomLevel('');
         setEditingQuestion(null);
+        setQuestionImage(null);
         
         // Clear contentEditable divs visually
         document.querySelectorAll('.content-editable-area').forEach(el => el.innerHTML = '');
@@ -626,8 +632,13 @@ const TestEncodingAndEditing = () => {
 
     const handleUserAction = (action) => {
         setIsUserMenuOpen(false);
-        if (action === 'Logout') setIsLogoutModalOpen(true);
-        else console.log('Navigate to', action);
+        if (action === 'Logout') {
+            setIsLogoutModalOpen(true);
+        } else if (action === 'Activity Logs') {
+            navigate('/activity-logs');
+        } else {
+            console.log('Navigate to', action);
+        }
     };
 
     const handleConfirmLogout = () => {
@@ -710,7 +721,8 @@ const TestEncodingAndEditing = () => {
         setBloomLevel(groupedBloom ? groupedBloom.value : ''); 
         
         // Populate the content fields with the question data
-        setQuestionText(question.content || ''); 
+        setQuestionText(question.content || '');
+        setQuestionImage(question.image || null); 
         
         // Extract options (A, B, C, D) from question.options array
         if (question.options && Array.isArray(question.options)) {
@@ -802,6 +814,20 @@ const TestEncodingAndEditing = () => {
                 // Create new question
                 console.log('➕ Creating new question...');
                 savedQuestion = await apiService.createQuestion(questionData);
+                
+                // Upload pending image if user selected one before saving question
+                if (imageUploadRef.current?.hasPendingImage()) {
+                    try {
+                        console.log('📸 Uploading pending image for new question ID:', savedQuestion.id);
+                        await imageUploadRef.current.uploadPendingImage(savedQuestion.id);
+                        console.log('✅ Image uploaded successfully');
+                    } catch (imgError) {
+                        console.error('⚠️ Failed to upload image:', imgError);
+                        // Don't fail the entire operation, just warn the user
+                        alert('Question saved, but image upload failed. You can try uploading again by editing the question.');
+                    }
+                }
+                
                 setQuestions([...questions, savedQuestion]);
                 alert('Question added successfully!');
             }
@@ -955,7 +981,12 @@ const TestEncodingAndEditing = () => {
                         </button>
                         {isUserMenuOpen && (
                             <div className="user-dropdown show">
-                                <button onClick={()=>handleUserAction('User Management')}><Settings size={18}/> User Management</button>
+                                {user?.isAdmin && (
+                                    <>
+                                        <button onClick={()=>handleUserAction('User Management')}><Settings size={18}/> User Management</button>
+                                        <button onClick={()=>handleUserAction('Activity Logs')}><FileText size={18}/> Activity Logs</button>
+                                    </>
+                                )}
                                 <button onClick={()=>handleUserAction('Edit Account')}><User size={18}/> Edit Account</button>
                                 <button className="logout-btn" onClick={()=>handleUserAction('Logout')}><LogOut size={18}/> Logout</button>
                             </div>
@@ -1114,6 +1145,15 @@ const TestEncodingAndEditing = () => {
                                     );
                                 })}
                             </div>
+
+                            {/* Question Image Upload */}
+                            <QuestionImageUpload 
+                                ref={imageUploadRef}
+                                questionId={editingQuestion?.id}
+                                existingImage={questionImage}
+                                onImageUpdate={setQuestionImage}
+                                isDarkMode={isDarkMode}
+                            />
 
                             {/* Answer Key */}
                             <div className="answer-key-section">

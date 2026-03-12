@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
+export const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -145,6 +145,25 @@ export const apiService = {
 
   deleteQuestion: async (id) => {
     const response = await apiClient.delete(`/api/questions/${id}`);
+    return response.data;
+  },
+
+  uploadQuestionImage: async (questionId, file, widthPercentage, alignment) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('widthPercentage', widthPercentage);
+    formData.append('alignment', alignment);
+    
+    const response = await apiClient.post(`/api/questions/${questionId}/image`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  deleteQuestionImage: async (questionId) => {
+    const response = await apiClient.delete(`/api/questions/${questionId}/image`);
     return response.data;
   },
 
@@ -367,6 +386,41 @@ export const apiService = {
 
   getMasterSet: async (printRequestId) => {
     const response = await apiClient.get(`/api/printrequests/${printRequestId}/masterset`);
+    return response.data;
+  },
+
+  // Activity Logs
+  getActivityLogs: async (params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.page) queryParams.append('page', params.page);
+    if (params.pageSize) queryParams.append('pageSize', params.pageSize);
+    if (params.userId) queryParams.append('userId', params.userId);
+    if (params.departmentId) queryParams.append('departmentId', params.departmentId);
+    if (params.category) queryParams.append('category', params.category);
+    if (params.action) queryParams.append('action', params.action);
+    if (params.entityType) queryParams.append('entityType', params.entityType);
+    if (params.severity) queryParams.append('severity', params.severity);
+    if (params.startDate) queryParams.append('startDate', params.startDate);
+    if (params.endDate) queryParams.append('endDate', params.endDate);
+
+    const response = await apiClient.get(`/api/activity-logs?${queryParams.toString()}`);
+    return response.data;
+  },
+
+  exportActivityLogs: async (params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.userId) queryParams.append('userId', params.userId);
+    if (params.departmentId) queryParams.append('departmentId', params.departmentId);
+    if (params.category) queryParams.append('category', params.category);
+    if (params.action) queryParams.append('action', params.action);
+    if (params.entityType) queryParams.append('entityType', params.entityType);
+    if (params.severity) queryParams.append('severity', params.severity);
+    if (params.startDate) queryParams.append('startDate', params.startDate);
+    if (params.endDate) queryParams.append('endDate', params.endDate);
+
+    const response = await apiClient.get(`/api/activity-logs/export?${queryParams.toString()}`, {
+      responseType: 'blob'
+    });
     return response.data;
   },
 };

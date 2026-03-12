@@ -1,6 +1,7 @@
 using Databank.Abstract;
 using Databank.Database;
 using Databank.Entities;
+using Databank.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace Databank.Features.Tests.Generate;
@@ -12,6 +13,8 @@ public sealed class GenerateTestEndpoint : IEndpoint
         app.MapPost("/api/tests/generate", async Task<IResult> (
                 GenerateTestRequest request,
                 AppDbContext dbContext,
+                ILoggingService loggingService,
+                HttpContext httpContext,
                 CancellationToken ct) =>
         {
             var subject = await dbContext.Subjects
@@ -99,6 +102,11 @@ public sealed class GenerateTestEndpoint : IEndpoint
 
             await dbContext.TestQuestions.AddRangeAsync(testQuestions, ct);
             await dbContext.SaveChangesAsync(ct);
+
+            // Log activity
+            var userId = httpContext.User.FindFirst("sub")?.Value ?? httpContext.User.FindFirst("userId")?.Value;
+            await loggingService.LogActivityAsync(userId, "Tests", "Generated", "Test", test.Id,
+                $"Generated test: {test.Title} ({request.QuestionCount} questions, BloomLevel: {request.BloomLevel?.ToString() ?? "Any"})");
 
             var response = test.ToResponse();
             return TypedResults.Created($"/api/tests/{test.Id}", response);

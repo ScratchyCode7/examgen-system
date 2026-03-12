@@ -1004,6 +1004,18 @@
   page-break-inside: avoid;
 }
 
+.question-image-wrapper {
+  display: block;
+  margin: 10px 0;
+  page-break-inside: avoid;
+}
+
+.question-image-print {
+  display: inline-block;
+  max-width: 100%;
+  height: auto;
+}
+
 .question-number-text {
   font-size: 0.95rem;
   margin-bottom: 0.5rem;
@@ -1054,6 +1066,26 @@
 
   .exam-question-item {
     page-break-inside: avoid;
+  }
+
+  .question-image-wrapper {
+    page-break-inside: avoid;
+    page-break-before: auto;
+    page-break-after: auto;
+    display: block !important;
+    margin: 10px 0 !important;
+  }
+
+  .question-image-print,
+  .exam-question-item img {
+    page-break-inside: avoid;
+    page-break-before: auto;
+    page-break-after: auto;
+    max-height: 600px !important;
+    display: inline-block !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    color-adjust: exact;
   }
 
   .sample-exam h3 {

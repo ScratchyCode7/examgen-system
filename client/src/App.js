@@ -13,6 +13,7 @@ import CourseTopic from './pages/CourseTopic';
 import TestEncodingAndEditing from './pages/TestEncodingAndEditing';
 import TestGeneration from './pages/TestGeneration';
 import SavedExamsReport from './pages/SavedExamsReport';
+import ActivityLogs from './pages/ActivityLogs';
 
 function App() {
   return (
@@ -67,6 +68,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <SavedExamsReport />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/activity-logs"
+            element={
+              <ProtectedRoute requireAdmin={true}>
+                <ActivityLogs />
               </ProtectedRoute>
             }
           />

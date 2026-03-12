@@ -18,6 +18,7 @@ public sealed class AppDbContext(DbContextOptions options) : DbContext(options)
     public required DbSet<Subject> Subjects { get; init; }
     public required DbSet<Topic> Topics { get; init; }
     public required DbSet<Question> Questions { get; init; }
+    public required DbSet<QuestionImage> QuestionImages { get; init; }
     public required DbSet<Option> Options { get; init; }
     public required DbSet<Test> Tests { get; init; }
     public required DbSet<TestQuestion> TestQuestions { get; init; }

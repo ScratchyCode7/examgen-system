@@ -13,6 +13,7 @@ public sealed class GetQuestionEndpoint : IEndpoint
             var question = await dbContext.Questions
                 .AsNoTracking()
                 .Include(q => q.Options)
+                .Include(q => q.QuestionImage)
                 .FirstOrDefaultAsync(q => q.Id == id, ct);
 
             return question is null

@@ -1,6 +1,7 @@
 using Databank.Abstract;
 using Databank.Database;
 using Databank.Entities;
+using Databank.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace Databank.Features.Questions.Create;
@@ -13,6 +14,8 @@ public sealed class CreateQuestionEndpoint : IEndpoint
                 QuestionRequest request,
                 AppDbContext dbContext,
                 ILogger<CreateQuestionEndpoint> logger,
+                ILoggingService loggingService,
+                HttpContext httpContext,
                 CancellationToken ct) =>
         {
             logger.LogInformation("Creating question for TopicId: {TopicId}, BloomLevel: {BloomLevel}, Type: {QuestionType}", 
@@ -82,8 +85,13 @@ public sealed class CreateQuestionEndpoint : IEndpoint
                 .Include(q => q.Options)
                 .FirstAsync(q => q.Id == question.Id, ct);
 
+            // Log activity
+            var userId = httpContext.User.FindFirst("sub")?.Value ?? httpContext.User.FindFirst("userId")?.Value;
+            await loggingService.LogActivityAsync(userId, "Questions", "Created", "Question", question.Id, 
+                $"Created question: {questionContent.Substring(0, Math.Min(50, questionContent.Length))}...");
+
             return TypedResults.Created($"/api/questions/{question.Id}", createdQuestion.ToResponse());
-        }).RequireAuthorization("AdminOnly");
+        }).RequireAuthorization(); // Allow all authenticated users (teachers and admins)
     }
 }
 
