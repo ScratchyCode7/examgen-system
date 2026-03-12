@@ -17,7 +17,7 @@ import UPHSLLogo from '../assets/UPHSL Logo.png';
 const { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search, Printer, Save, Eye, Trash2, PlayCircle, CheckCircle, AlertTriangle, FileText } = Icons;
 
 const TestGeneration = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
   const { isDarkMode, toggleDarkMode } = useTheme();
   const navigate = useNavigate();
   const { departmentCode } = useParams();

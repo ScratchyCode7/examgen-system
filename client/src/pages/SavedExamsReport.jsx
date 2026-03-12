@@ -58,7 +58,7 @@ const loadImageAsDataUrl = (src) => new Promise((resolve, reject) => {
 });
 
 const SavedExamsReport = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
   const { isDarkMode, toggleDarkMode } = useTheme();
   const navigate = useNavigate();
   const { departmentCode } = useParams();

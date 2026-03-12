@@ -19,7 +19,7 @@ import DEPARTMENT_LOGOS from '../constants/departmentLogos';
 const dataEntryItems = ["Program - Topic", "Test Encoding", "Test Question Editing"];
 
 const CourseTopic = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
   const { isDarkMode, toggleDarkMode } = useTheme();
   const navigate = useNavigate();
   const { departmentCode } = useParams();
