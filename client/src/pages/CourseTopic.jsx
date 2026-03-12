@@ -45,7 +45,6 @@ const CourseTopic = () => {
   const [isLoadingDepartments, setIsLoadingDepartments] = useState(false);
   const [history, setHistory] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
 
   // Topic Management states
   const [expandedSubjectsMap, setExpandedSubjectsMap] = useState({});
