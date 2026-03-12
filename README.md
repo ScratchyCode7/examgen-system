@@ -262,7 +262,46 @@ Full-stack application for managing exam/test databank with C# ASP.NET Core back
 - ✅ Reduced complexity (single form instead of nested)
 - ✅ Better for exam generation (Question → Topic → Subject → Course → Department chain complete)
 
-## 📋 Core Refactoring (v2.0+)
+## � Production Deployment
+
+**Deployed March 12, 2026 - System is LIVE and operational! ✅**
+
+### Live URLs
+- **Frontend**: https://test-databank-system.vercel.app
+- **Backend API**: https://examgen-system.onrender.com
+- **Status**: Fully operational with all services running
+
+### Deployment Stack
+- **Frontend**: Vercel (React 18 CRA) - Washington D.C. region
+- **Backend**: Render (ASP.NET Core 9.0 via Docker) - Oregon region
+- **Database**: Neon PostgreSQL 17 (Serverless) - Singapore region
+
+### What's Live
+✅ User authentication (JWT-based login/logout)  
+✅ Admin dashboard with full navigation  
+✅ Department management (CCS, CBA, CAS created)  
+✅ Course and topic CRUD operations  
+✅ Dark mode theme with persistence  
+✅ CORS configured and working  
+✅ All 13 database migrations applied  
+✅ Production environment variables configured  
+
+### Initial Setup Complete
+- Admin user created: `admin` / `Admin123!`
+- Three departments added:
+  - **CCS** - College of Computer Studies
+  - **CBA** - College of Business Administration
+  - **CAS** - College of Arts and Sciences
+
+### Quick Test
+1. Visit https://test-databank-system.vercel.app
+2. Login with admin credentials
+3. Navigate to **Data Entry → Program - Topic**
+4. See all 3 departments in the dropdown!
+
+**📖 For complete deployment details, see [Production Deployment Documentation](docs/production-deployment.md)**
+
+## �📋 Core Refactoring (v2.0+)
 
 **The project has been comprehensively refactored to align with the Test Databank and Automated Exam Generation System specification.**
 
@@ -901,6 +940,7 @@ Department (e.g., College of Computer Studies)
 - **[Postman Commands](POSTMANCMD.MD)** - API endpoint reference and testing guide
 - **Postman Collection**: `postman/Databank.postman_collection.json`
 ### Deployment Documentation
+- **[Production Deployment](docs/production-deployment.md)** - ✅ **LIVE SYSTEM** - Complete deployment timeline, issues resolved, and current status
 - **[Deployment Guide](DEPLOYMENT.md)** - Complete production deployment guide for Vercel + Render + Neon
 - **[Quick Start Deployment](QUICKSTART_DEPLOYMENT.md)** - Condensed 25-minute deployment guide
 - **[Render Backend Guide](src/RENDER_DEPLOYMENT.md)** - Backend-specific deployment instructions
