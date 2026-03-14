@@ -251,6 +251,11 @@ const SavedExamsReport = () => {
     setSubjects([]);
     setSavedExamSets([]);
     setSelectedExam(null);
+
+    const dept = departments.find(d => d.id === Number(deptId));
+    if (dept?.code) {
+      navigate(`/reports/saved-exams/${dept.code}`);
+    }
   };
 
   const handleUserAction = (action) => {
