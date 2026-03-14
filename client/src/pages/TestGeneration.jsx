@@ -174,6 +174,8 @@ const TestGeneration = () => {
   const [deleteConfirmation, setDeleteConfirmation] = useState({ show: false, rowId: null });
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [showPrintRequestModal, setShowPrintRequestModal] = useState(false);
+  const [printRequestCopies, setPrintRequestCopies] = useState(1);
+  const [printRequestNotes, setPrintRequestNotes] = useState('');
   const [printOption, setPrintOption] = useState('specification');
   const [savedExamSets, setSavedExamSets] = useState([]);
   const [isLoadingSavedSets, setIsLoadingSavedSets] = useState(false);
@@ -1591,6 +1593,8 @@ const TestGeneration = () => {
     if (user?.isAdmin) {
       setShowPrintModal(true);
     } else {
+      setPrintRequestCopies(1);
+      setPrintRequestNotes('');
       setShowPrintRequestModal(true);
     }
   };
@@ -2666,26 +2670,26 @@ const TestGeneration = () => {
       {/* Save Modal */}
       {showSaveModal && (
         <div className="modal-overlay">
-          <div className={`modal ${isDarkMode ? 'dark' : ''}`}>
-            <h3>Save Exam</h3>
-            <div className="modal-content">
+          <div className="modal-dialog exam-modal">
+            <h3 className="exam-modal-title">Save Exam</h3>
+            <div className="exam-modal-body">
               {isLoadingSavedSets ? (
                 <p>Checking existing exam sets...</p>
               ) : (
-                <p style={{ marginBottom: '12px' }}>
+                <p className="exam-modal-lead">
                   This exam will be saved as <strong>{nextSetLabel}</strong>.
                 </p>
               )}
-              <ul style={{ listStyle: 'disc', marginLeft: '20px', lineHeight: 1.6 }}>
+              <ul className="exam-modal-list">
                 <li>Program: {selectedCourseDetails?.name || 'N/A'}</li>
                 <li>Subject: {selectedSubjectDetails?.name || 'N/A'}</li>
                 <li>{examType} · {semester} Semester · SY {schoolYear}</li>
                 <li>{questionsPayload.ordered.length} total questions</li>
               </ul>
             </div>
-            <div className="modal-buttons">
-              <button className="btn btn-secondary" onClick={() => setShowSaveModal(false)}>Cancel</button>
-              <button className="btn btn-success" onClick={confirmSaveExam}>Save</button>
+            <div className="exam-modal-actions">
+              <button className="modal-btn modal-btn-secondary" onClick={() => setShowSaveModal(false)}>Cancel</button>
+              <button className="modal-btn modal-btn-primary" onClick={confirmSaveExam}>Save Exam</button>
             </div>
           </div>
         </div>
@@ -3251,66 +3255,54 @@ const TestGeneration = () => {
       {/* Print Request Modal (Non-Admin) */}
       {showPrintRequestModal && (
         <div className="modal-overlay">
-          <div className={`modal ${isDarkMode ? 'dark' : ''}`}>
-            <h3>Request Master Set Print</h3>
-            <div className="modal-content">
+          <div className="modal-dialog exam-modal print-request-modal">
+            <h3 className="exam-modal-title">Request Master Set Print</h3>
+            <div className="exam-modal-body">
               <p>Request a Master Set of this exam to be printed by an administrator.</p>
-              <p><strong>Exam:</strong> {activeExamMeta?.setLabel || 'Current Exam'}</p>
-              <p><strong>Subject:</strong> {selectedSubjectDetails?.name || 'N/A'}</p>
+              <div className="exam-modal-meta">
+                <p><strong>Exam:</strong> {activeExamMeta?.setLabel || 'Current Exam'}</p>
+                <p><strong>Subject:</strong> {selectedSubjectDetails?.name || 'N/A'}</p>
+              </div>
               
-              <div style={{ margin: '1rem 0' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+              <div className="exam-modal-field">
+                <label>
                   Number of Copies:
                 </label>
                 <input
                   type="number"
                   min="1"
                   max="5"
-                  defaultValue="1"
-                  id="copiesInput"
-                  style={{
-                    width: '100%',
-                    padding: '0.5rem',
-                    border: '1px solid var(--border-color, #dee2e6)',
-                    borderRadius: '4px'
-                  }}
+                  value={printRequestCopies}
+                  onChange={(e) => setPrintRequestCopies(Math.max(1, Math.min(5, parseInt(e.target.value, 10) || 1)))}
+                  className="exam-modal-input"
                 />
               </div>
               
-              <div style={{ margin: '1rem 0' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+              <div className="exam-modal-field">
+                <label>
                   Additional Notes (Optional):
                 </label>
                 <textarea
-                  id="notesInput"
                   rows="3"
                   placeholder="Any special instructions or requests..."
-                  style={{
-                    width: '100%',
-                    padding: '0.5rem',
-                    border: '1px solid var(--border-color, #dee2e6)',
-                    borderRadius: '4px',
-                    resize: 'vertical'
-                  }}
+                  value={printRequestNotes}
+                  onChange={(e) => setPrintRequestNotes(e.target.value)}
+                  className="exam-modal-input exam-modal-textarea"
                 />
               </div>
               
-              <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary, #6c757d)', marginTop: '1rem' }}>
+              <p className="exam-modal-note">
                 Note: The master set includes the Table of Specifications, Exam Paper, and Answer Key.
                 You will be notified when it's ready for pickup.
               </p>
             </div>
-            <div className="modal-buttons">
-              <button className="btn btn-secondary" onClick={() => setShowPrintRequestModal(false)}>
+            <div className="exam-modal-actions">
+              <button className="modal-btn modal-btn-secondary" onClick={() => setShowPrintRequestModal(false)}>
                 Cancel
               </button>
               <button 
-                className="btn btn-primary" 
-                onClick={() => {
-                  const notes = document.getElementById('notesInput').value;
-                  const copies = parseInt(document.getElementById('copiesInput').value) || 1;
-                  handleSubmitPrintRequest(notes, copies);
-                }}
+                className="modal-btn modal-btn-primary"
+                onClick={() => handleSubmitPrintRequest(printRequestNotes, printRequestCopies)}
               >
                 Submit Request
               </button>
