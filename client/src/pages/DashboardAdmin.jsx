@@ -21,6 +21,10 @@ const DashboardAdmin = () => {
   const [activeView, setActiveView] = useState('home'); // 'home' or 'users'
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+  const [showSecurityModal, setShowSecurityModal] = useState(false);
+  const [adminPassword, setAdminPassword] = useState('');
+  const [securityError, setSecurityError] = useState('');
+  const [isVerifyingPassword, setIsVerifyingPassword] = useState(false);
   const [programView, setProgramView] = useState('grid');
   const userMenuRef = useRef(null);
 
@@ -59,10 +63,66 @@ const DashboardAdmin = () => {
     if (action === 'Logout') {
       setIsLogoutModalOpen(true);
     } else if (action === 'User Management') {
-      setActiveView('users');
-      setActiveTab('User Management');
+      handleOpenUserManagement();
     } else if (action === 'Activity Logs') {
       navigate('/activity-logs');
+    }
+  };
+
+  const openUserManagementView = () => {
+    setActiveView('users');
+    setActiveTab('User Management');
+  };
+
+  const handleOpenUserManagement = () => {
+    if (activeView === 'users') {
+      return;
+    }
+    setAdminPassword('');
+    setSecurityError('');
+    setShowSecurityModal(true);
+  };
+
+  const handleCloseSecurityModal = () => {
+    if (isVerifyingPassword) return;
+    setShowSecurityModal(false);
+    setAdminPassword('');
+    setSecurityError('');
+  };
+
+  const handleVerifyAdminPassword = async (e) => {
+    e.preventDefault();
+    if (!adminPassword.trim()) {
+      setSecurityError('Please enter your password.');
+      return;
+    }
+
+    try {
+      setIsVerifyingPassword(true);
+      setSecurityError('');
+
+      const usernameOrEmail = user?.username || user?.email;
+      if (!usernameOrEmail) {
+        setSecurityError('Unable to verify your account. Please log in again.');
+        return;
+      }
+
+      await apiService.login({
+        username: usernameOrEmail,
+        password: adminPassword
+      });
+
+      setShowSecurityModal(false);
+      setAdminPassword('');
+      openUserManagementView();
+    } catch (err) {
+      const message =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        'Password verification failed. Please try again.';
+      setSecurityError(message);
+    } finally {
+      setIsVerifyingPassword(false);
     }
   };
 
@@ -106,8 +166,7 @@ const DashboardAdmin = () => {
               label="Users" 
               isActive={activeTab === 'User Management'} 
               onClick={() => { 
-                setActiveTab('User Management'); 
-                setActiveView('users');
+                handleOpenUserManagement();
               }} 
             />
             <DropdownNavItem
@@ -262,6 +321,50 @@ const DashboardAdmin = () => {
               <button className="btn-cancel" onClick={() => setIsLogoutModalOpen(false)}>No</button>
               <button className="btn-confirm" onClick={handleConfirmLogout}>Yes, logout</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showSecurityModal && (
+        <div className="logout-overlay">
+          <div className={`logout-modal ${isDarkMode ? 'dark' : ''}`}>
+            <h2>Security Check</h2>
+            <p>Re-enter your admin password to open User Management.</p>
+
+            <form onSubmit={handleVerifyAdminPassword} style={{ marginTop: '16px' }}>
+              <input
+                type="password"
+                value={adminPassword}
+                onChange={(event) => {
+                  setAdminPassword(event.target.value);
+                  if (securityError) setSecurityError('');
+                }}
+                placeholder="Enter your password"
+                autoFocus
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border-color)',
+                  background: 'var(--bg-card)',
+                  color: 'var(--text-primary)',
+                  marginBottom: '8px'
+                }}
+              />
+
+              {securityError && (
+                <p style={{ color: '#dc2626', fontSize: '0.9rem', margin: '0 0 8px 0' }}>{securityError}</p>
+              )}
+
+              <div className="logout-actions">
+                <button type="button" className="btn-cancel" onClick={handleCloseSecurityModal} disabled={isVerifyingPassword}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn-confirm" disabled={isVerifyingPassword}>
+                  {isVerifyingPassword ? 'Verifying...' : 'Verify'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
