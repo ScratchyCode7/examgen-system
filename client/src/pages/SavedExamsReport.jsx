@@ -94,6 +94,8 @@ const SavedExamsReport = () => {
   const [selectedExam, setSelectedExam] = useState(null);
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [showPrintRequestModal, setShowPrintRequestModal] = useState(false);
+  const [printRequestCopies, setPrintRequestCopies] = useState(1);
+  const [printRequestNotes, setPrintRequestNotes] = useState('');
   const [printOption, setPrintOption] = useState('specification');
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [examPendingDelete, setExamPendingDelete] = useState(null);
@@ -762,6 +764,8 @@ const SavedExamsReport = () => {
     if (user?.isAdmin) {
       setShowPrintModal(true);
     } else {
+      setPrintRequestCopies(1);
+      setPrintRequestNotes('');
       setShowPrintRequestModal(true);
     }
   };
@@ -1164,66 +1168,54 @@ const SavedExamsReport = () => {
       {/* Print Request Modal (Non-Admin) */}
       {showPrintRequestModal && (
         <div className="modal-overlay">
-          <div className={`modal ${isDarkMode ? 'dark' : ''}`}>
-            <h3>Request Master Set Print</h3>
-            <div className="modal-content">
+          <div className="modal-dialog exam-modal print-request-modal">
+            <h3 className="exam-modal-title">Request Master Set Print</h3>
+            <div className="exam-modal-body">
               <p>Request a Master Set of this saved exam to be printed by an administrator.</p>
-              <p><strong>Exam:</strong> {selectedExam?.setLabel || 'N/A'}</p>
-              <p><strong>Type:</strong> {selectedExam?.examType} · {selectedExam?.semester} Semester · SY {selectedExam?.schoolYear}</p>
+              <div className="exam-modal-meta">
+                <p><strong>Exam:</strong> {selectedExam?.setLabel || 'N/A'}</p>
+                <p><strong>Type:</strong> {selectedExam?.examType} · {selectedExam?.semester} Semester · SY {selectedExam?.schoolYear}</p>
+              </div>
               
-              <div style={{ margin: '1rem 0' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+              <div className="exam-modal-field">
+                <label>
                   Number of Copies:
                 </label>
                 <input
                   type="number"
                   min="1"
                   max="5"
-                  defaultValue="1"
-                  id="copiesInput"
-                  style={{
-                    width: '100%',
-                    padding: '0.5rem',
-                    border: '1px solid var(--border-color, #dee2e6)',
-                    borderRadius: '4px'
-                  }}
+                  value={printRequestCopies}
+                  onChange={(e) => setPrintRequestCopies(Math.max(1, Math.min(5, parseInt(e.target.value, 10) || 1)))}
+                  className="exam-modal-input"
                 />
               </div>
               
-              <div style={{ margin: '1rem 0' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+              <div className="exam-modal-field">
+                <label>
                   Additional Notes (Optional):
                 </label>
                 <textarea
-                  id="notesInput"
                   rows="3"
                   placeholder="Any special instructions or requests..."
-                  style={{
-                    width: '100%',
-                    padding: '0.5rem',
-                    border: '1px solid var(--border-color, #dee2e6)',
-                    borderRadius: '4px',
-                    resize: 'vertical'
-                  }}
+                  value={printRequestNotes}
+                  onChange={(e) => setPrintRequestNotes(e.target.value)}
+                  className="exam-modal-input exam-modal-textarea"
                 />
               </div>
               
-              <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary, #6c757d)', marginTop: '1rem' }}>
+              <p className="exam-modal-note">
                 Note: The master set includes the Table of Specifications, Exam Paper, and Answer Key.
                 You will be notified when it's ready for pickup.
               </p>
             </div>
-            <div className="modal-buttons">
-              <button className="btn btn-secondary" onClick={() => setShowPrintRequestModal(false)}>
+            <div className="exam-modal-actions">
+              <button className="modal-btn modal-btn-secondary" onClick={() => setShowPrintRequestModal(false)}>
                 Cancel
               </button>
               <button 
-                className="btn btn-primary" 
-                onClick={() => {
-                  const notes = document.getElementById('notesInput').value;
-                  const copies = parseInt(document.getElementById('copiesInput').value) || 1;
-                  handleSubmitPrintRequest(notes, copies);
-                }}
+                className="modal-btn modal-btn-primary"
+                onClick={() => handleSubmitPrintRequest(printRequestNotes, printRequestCopies)}
               >
                 Submit Request
               </button>
