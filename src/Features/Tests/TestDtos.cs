@@ -65,11 +65,19 @@ public sealed record OptionResponse(
     int DisplayOrder
 );
 
+public sealed record QuestionImageResponse(
+    int Id,
+    string ImagePath,
+    int WidthPercentage,
+    string Alignment
+);
+
 public sealed record QuestionResponse(
     int Id,
     string Content,
     int BloomLevel,
     int DisplayOrder,
-    List<OptionResponse> Options
+    List<OptionResponse> Options,
+    QuestionImageResponse? Image = null
 );
 

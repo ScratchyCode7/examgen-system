@@ -57,6 +57,15 @@ const loadImageAsDataUrl = (src) => new Promise((resolve, reject) => {
   img.src = src;
 });
 
+const resolveQuestionImageUrl = (imagePath, baseUrl) => {
+  if (!imagePath) return '';
+  const normalizedBase = (baseUrl || '').replace(/\/$/, '');
+  const normalizedPath = String(imagePath).replace(/\\/g, '/');
+  if (/^https?:\/\//i.test(normalizedPath)) return normalizedPath;
+  if (normalizedPath.startsWith('/')) return `${normalizedBase}${normalizedPath}`;
+  return `${normalizedBase}/${normalizedPath}`;
+};
+
 const SavedExamsReport = () => {
   const { user, logout, isAdmin } = useAuth();
   const { isDarkMode, toggleDarkMode } = useTheme();
@@ -574,16 +583,43 @@ const SavedExamsReport = () => {
     const programName = getProgramName();
     const filename = buildFilename('Exam');
 
-    const questionHtml = orderedQuestions.map((question, index) => {
+    const processedQuestions = await Promise.all(
+      orderedQuestions.map(async (question) => {
+        const image = question?.image || question?.Image || null;
+        if (!image?.imagePath && !image?.ImagePath) {
+          return { ...question, imageSrc: '' };
+        }
+
+        const path = image.imagePath || image.ImagePath;
+        const resolvedUrl = resolveQuestionImageUrl(path, window.location.origin);
+
+        try {
+          const dataUrl = await loadImageAsDataUrl(resolvedUrl);
+          return { ...question, imageSrc: dataUrl };
+        } catch {
+          return { ...question, imageSrc: resolvedUrl };
+        }
+      })
+    );
+
+    const questionHtml = processedQuestions.map((question, index) => {
       const options = getOrderedOptions(question.options || []);
+      const image = question?.image || question?.Image || null;
+      const width = image?.widthPercentage || image?.WidthPercentage || 50;
+      const alignment = (image?.alignment || image?.Alignment || 'center').toLowerCase();
       const choices = options.map((option, idx) => `
         <div class="choice-item">
           <span class="choice-letter">${String.fromCharCode(65 + idx)}.</span> ${option.content}
         </div>
       `).join('');
+      const imageHtml = question.imageSrc
+        ? `<div class="question-image-wrapper text-${alignment}"><img src="${question.imageSrc}" alt="Question ${index + 1}" style="width: ${width}%;" /></div>`
+        : '';
+
       return `
         <div class="question-item">
           <div class="question-text">${index + 1}.) ${question.content}</div>
+          ${imageHtml}
           <div class="choices">${choices}</div>
         </div>
       `;
@@ -617,12 +653,19 @@ const SavedExamsReport = () => {
             .questions-section { margin: 20px 0; }
             .question-item { margin-bottom: 15px; color: #000; }
             .question-text { font-weight: normal; margin-bottom: 5px; font-size: 14px; }
+            .question-image-wrapper { margin: 10px 0; page-break-inside: avoid; }
+            .question-image-wrapper.text-left { text-align: left; }
+            .question-image-wrapper.text-center { text-align: center; }
+            .question-image-wrapper.text-right { text-align: right; }
+            .question-image-wrapper img { max-height: 400px; object-fit: contain; display: inline-block; }
             .choices { display: flex; flex-wrap: wrap; gap: 15px; margin-left: 20px; }
             .choice-item { font-size: 14px; flex: 1 1 calc(25% - 15px); min-width: 120px; word-wrap: break-word; white-space: normal; }
             .choice-letter { font-weight: normal; }
             @media print {
               body { margin: 0; padding: 10px; }
               .question-item { page-break-inside: avoid; }
+              .question-image-wrapper { page-break-inside: avoid; display: block !important; }
+              .question-image-wrapper img { display: inline-block !important; }
             }
           </style>
         </head>
@@ -1107,11 +1150,26 @@ const SavedExamsReport = () => {
                         {orderedQuestions.map((question, index) => {
                           // Sort options by displayOrder to ensure A, B, C, D order
                           const options = getOrderedOptions(question.options || []);
+                          const image = question.image || question.Image || null;
+                          const imagePath = image?.imagePath || image?.ImagePath;
+                          const imageUrl = imagePath ? resolveQuestionImageUrl(imagePath, window.location.origin) : '';
+                          const imageWidth = image?.widthPercentage || image?.WidthPercentage || 50;
+                          const imageAlignment = (image?.alignment || image?.Alignment || 'center').toLowerCase();
                           return (
                             <div key={question.id || index} className="exam-question-item">
                               <div className="question-number-text">
                                 <strong>{index + 1}.) {question.content}</strong>
                               </div>
+                              {imageUrl && (
+                                <div className="question-image-wrapper" style={{ textAlign: imageAlignment }}>
+                                  <img
+                                    src={imageUrl}
+                                    alt={`Question ${index + 1}`}
+                                    className="question-image-print"
+                                    style={{ width: `${imageWidth}%`, maxHeight: '400px', objectFit: 'contain', display: 'inline-block' }}
+                                  />
+                                </div>
+                              )}
                               <div className="question-options">
                                 {options.map((option, idx) => (
                                   <div key={option.id || option.Id || idx} className="option-line">

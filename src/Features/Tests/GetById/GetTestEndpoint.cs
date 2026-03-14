@@ -18,6 +18,9 @@ public sealed class GetTestEndpoint : IEndpoint
                 .Include(t => t.TestQuestions)
                     .ThenInclude(tq => tq.Question)
                         .ThenInclude(q => q.Options)
+                .Include(t => t.TestQuestions)
+                    .ThenInclude(tq => tq.Question)
+                        .ThenInclude(q => q.QuestionImage)
                 .Include(t => t.Subject)
                 .FirstOrDefaultAsync(t => t.Id == id, ct);
 
@@ -29,6 +32,16 @@ public sealed class GetTestEndpoint : IEndpoint
                 .Select(tq =>
                 {
                     var orderedOptions = OrderOptionsBySnapshot(tq);
+                    QuestionImageResponse? image = null;
+                    if (tq.Question.QuestionImage != null)
+                    {
+                        image = new QuestionImageResponse(
+                            tq.Question.QuestionImage.Id,
+                            tq.Question.QuestionImage.ImagePath,
+                            tq.Question.QuestionImage.WidthPercentage,
+                            tq.Question.QuestionImage.Alignment);
+                    }
+
                     return new QuestionResponse(
                         tq.Question.Id,
                         tq.Question.Content,
@@ -36,7 +49,8 @@ public sealed class GetTestEndpoint : IEndpoint
                         tq.DisplayOrder,
                         orderedOptions
                             .Select((o, idx) => new OptionResponse(o.Id, o.Content, o.IsCorrect, idx))
-                            .ToList());
+                            .ToList(),
+                        image);
                 })
                 .ToList();
 

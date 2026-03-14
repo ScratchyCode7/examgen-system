@@ -98,6 +98,15 @@ const TestGeneration = () => {
     }
   };
 
+  const resolveQuestionImageUrl = React.useCallback((imagePath) => {
+    if (!imagePath) return '';
+    const normalizedBase = API_BASE_URL.replace(/\/$/, '');
+    const normalizedPath = String(imagePath).replace(/\\/g, '/');
+    if (/^https?:\/\//i.test(normalizedPath)) return normalizedPath;
+    if (normalizedPath.startsWith('/')) return `${normalizedBase}${normalizedPath}`;
+    return `${normalizedBase}/${normalizedPath}`;
+  }, []);
+
   // Helper function to determine semester based on current date
   const getAutoSemester = () => {
     const month = new Date().getMonth() + 1;
@@ -2931,19 +2940,25 @@ const TestGeneration = () => {
                     // Convert all question images to base64
                     const questionsWithImages = examToPrint.questions.map(async (q, idx) => {
                       const image = q.image || q.Image;
-                      if (image && image.imagePath) {
+                      const imagePath = image?.imagePath || image?.ImagePath;
+                      if (imagePath) {
                         try {
-                          const imageUrl = `${API_BASE_URL}/${image.imagePath}`;
+                          const imageUrl = resolveQuestionImageUrl(imagePath);
                           const imageDataUrl = await convertImageToDataURL(imageUrl);
                           return {
                             ...q,
                             imageDataUrl: imageDataUrl,
-                            imageWidth: image.widthPercentage || 50,
-                            imageAlignment: image.alignment?.toLowerCase() || 'center'
+                            imageWidth: image.widthPercentage || image.WidthPercentage || 50,
+                            imageAlignment: (image.alignment || image.Alignment || 'center').toLowerCase()
                           };
                         } catch (error) {
                           console.error(`Failed to convert image for question ${idx + 1}:`, error);
-                          return q; // Return question without image if conversion fails
+                          return {
+                            ...q,
+                            imageDataUrl: resolveQuestionImageUrl(imagePath),
+                            imageWidth: image.widthPercentage || image.WidthPercentage || 50,
+                            imageAlignment: (image.alignment || image.Alignment || 'center').toLowerCase()
+                          };
                         }
                       }
                       return q;
