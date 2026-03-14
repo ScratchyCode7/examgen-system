@@ -129,7 +129,9 @@ const Dashboard = () => {
 
             {isUserMenuOpen && (
               <div className="user-dropdown show">
-                <button onClick={() => handleUserAction('User Management')}><Settings /> User Management</button>
+                {isAdmin && (
+                  <button onClick={() => handleUserAction('User Management')}><Settings /> User Management</button>
+                )}
                 <button onClick={() => handleUserAction('Edit Account')}><User /> Edit Account</button>
                 <button className="logout-btn" onClick={() => handleUserAction('Logout')}><LogOut /> Logout</button>
               </div>

@@ -1813,7 +1813,7 @@ const TestGeneration = () => {
 
             {isUserMenuOpen && (
               <div className="user-dropdown show">
-                {user?.isAdmin && (
+                {isAdmin && (
                   <>
                     <button onClick={() => handleUserAction('User Management')}><Settings /> User Management</button>
                     <button onClick={() => handleUserAction('Activity Logs')}><FileText /> Activity Logs</button>
@@ -2390,7 +2390,7 @@ const TestGeneration = () => {
                   <img src={UPHSLLogo} alt="UPHSL Logo" className="exam-logo" />
                   <div className="university-header">
                     <h2>University of Perpetual Help System</h2>
-                    <p>Test Data Back System</p>
+                    <p>Test Data Bank System</p>
                     <p>Biñan Campus</p>
                     <p className="exam-filename">{(() => {
                       const now = new Date();
@@ -2400,33 +2400,26 @@ const TestGeneration = () => {
                       return `${examType}_${semester}_${schoolYear}_${courseCode}_${date}_${time}`;
                     })()}</p>
                     <p className="program-info">{(selectedCourse && (() => { const course = courses.find(c => c.id === parseInt(selectedCourse)); return course ? `${course.name} (${course.code})` : 'Program Name'; })()) || 'Program Name'}</p>
+                    <p>{selectedSubjectDetails?.name || 'Subject Name'}</p>
                   </div>
                 </div>
 
                 {/* Form Fields */}
                 <div className="exam-form-fields">
                   <div className="form-row">
-                    <div className="form-field">
-                      <label style={{ color: 'black' }}>Name: ________________________</label>
-                    </div>
-                    <div className="form-field">
-                      <label style={{ color: 'black' }}>Date: ________________________</label>
-                    </div>
+                    <div className="form-field"><label>Name:</label><span className="form-line"></span></div>
+                    <div className="form-field"><label>Date:</label><span className="form-line"></span></div>
                   </div>
                   <div className="form-row">
-                    <div className="form-field">
-                      <label style={{ color: 'black' }}>Professor: ________________________</label>
-                    </div>
-                    <div className="form-field">
-                      <label style={{ color: 'black' }}>Permit #: ________________________</label>
-                    </div>
+                    <div className="form-field"><label>Professor:</label><span className="form-line"></span></div>
+                    <div className="form-field"><label>Permit #:</label><span className="form-line"></span></div>
                   </div>
                 </div>
 
                 {/* Instructions/Reminders */}
-                <div style={{ marginTop: '20px', marginBottom: '20px' }}>
-                  <p><strong>REMINDER: CHEATING during examinations, BORROWING and LENDING of examination permit fall under Major offenses and are punishable under the existing University Policy</strong></p>
-                  <p><strong>Direction:</strong> Multiple Choice: Choose the letter of the correct answer.</p>
+                <div className="exam-instructions">
+                  <p><strong>REMINDER:</strong> Cheating, borrowing, or lending examination permits are punishable under university policy.</p>
+                  <p><strong>Direction:</strong> Multiple Choice - Choose the letter of the correct answer.</p>
                 </div>
 
                 {/* Exam Questions */}
@@ -2440,9 +2433,7 @@ const TestGeneration = () => {
                       // preview debug logs removed for production
                       return (
                         <div key={idx} className="exam-question-item">
-                          <div style={{ marginBottom: '8px', fontSize: '15px' }}>
-                            <strong>{idx + 1}.) {questionText}</strong>
-                          </div>
+                          <div className="question-number-text"><strong>{idx + 1}.) {questionText}</strong></div>
                           {image && (
                             <div className="question-image-wrapper" style={{ 
                               textAlign: image.alignment?.toLowerCase() || 'center', 
@@ -2461,14 +2452,15 @@ const TestGeneration = () => {
                               />
                             </div>
                           )}
-                          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', marginLeft: '10px', fontSize: '14px' }}>
+                          <div className="question-options">
                             {options.map((option, optIdx) => {
                               const letter = String.fromCharCode(65 + optIdx);
                               const optionText = option.content || option.Content || option.optionText || option.text || option || '';
                               return (
-                                <span key={optIdx}>
-                                  <strong>{letter}.</strong> {optionText}
-                                </span>
+                                <div key={optIdx} className="option-line">
+                                  <span className="option-letter">{letter}.</span>
+                                  <span className="option-text">{optionText}</span>
+                                </div>
                               );
                             })}
                           </div>
