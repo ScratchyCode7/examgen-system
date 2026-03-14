@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Download, RefreshCw, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
 import NavItem from '../components/NavItem';
 import DropdownNavItem from '../components/DropdownNavItem';
+import LogoutModal from '../components/LogoutModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { apiService } from '../services/api';
@@ -418,18 +419,12 @@ const ActivityLogs = () => {
         </div>
       </div>
 
-      {isLogoutModalOpen && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <h3>Confirm Logout</h3>
-            <p>Are you sure you want to logout?</p>
-            <div className="modal-actions">
-              <button onClick={() => setIsLogoutModalOpen(false)} className="btn-secondary">Cancel</button>
-              <button onClick={handleConfirmLogout} className="btn-primary">Logout</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <LogoutModal
+        isOpen={isLogoutModalOpen}
+        onClose={() => setIsLogoutModalOpen(false)}
+        onConfirm={handleConfirmLogout}
+        isDarkMode={isDarkMode}
+      />
     </div>
   );
 };
