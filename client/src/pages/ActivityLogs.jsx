@@ -25,6 +25,7 @@ const ActivityLogs = () => {
   const displayName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username : 'Admin User';
 
   const [logs, setLogs] = useState([]);
+  const [expandedDetails, setExpandedDetails] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [exporting, setExporting] = useState(false);
@@ -179,6 +180,13 @@ const ActivityLogs = () => {
       case 'Warning': return 'severity-warning';
       default: return 'severity-info';
     }
+  };
+
+  const toggleDetails = (logId) => {
+    setExpandedDetails((prev) => ({
+      ...prev,
+      [logId]: !prev[logId]
+    }));
   };
 
   return (
@@ -369,7 +377,12 @@ const ActivityLogs = () => {
                           <td colSpan="8" className="no-results">No activity logs found</td>
                         </tr>
                       ) : (
-                        logs.map(log => (
+                        logs.map(log => {
+                          const details = log.details || '-';
+                          const isExpanded = Boolean(expandedDetails[log.id]);
+                          const canExpand = details.length > 120;
+
+                          return (
                           <tr key={log.id}>
                             <td>{formatDate(log.createdAt)}</td>
                             <td>{log.userName || 'System'}</td>
@@ -379,14 +392,28 @@ const ActivityLogs = () => {
                             <td>
                               {log.entityType && log.entityId ? `${log.entityType} #${log.entityId}` : '-'}
                             </td>
-                            <td className="details-cell">{log.details || '-'}</td>
+                            <td className="details-cell">
+                              <div className={`details-text ${isExpanded ? 'expanded' : 'collapsed'}`} title={details}>
+                                {details}
+                              </div>
+                              {canExpand && (
+                                <button
+                                  type="button"
+                                  className="details-toggle"
+                                  onClick={() => toggleDetails(log.id)}
+                                >
+                                  {isExpanded ? 'Show less' : 'Show more'}
+                                </button>
+                              )}
+                            </td>
                             <td>
                               <span className={`severity-badge ${getSeverityClass(log.severity)}`}>
                                 {log.severity}
                               </span>
                             </td>
                           </tr>
-                        ))
+                        );
+                        })
                       )}
                     </tbody>
                   </table>

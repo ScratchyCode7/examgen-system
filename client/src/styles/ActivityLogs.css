@@ -107,9 +107,37 @@
 
 .details-cell {
   max-width: 300px;
+  min-width: 280px;
+}
+
+.details-text {
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.details-text.collapsed {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.details-text.expanded {
+  white-space: normal;
+}
+
+.details-toggle {
+  margin-top: 0.35rem;
+  background: none;
+  border: none;
+  color: var(--primary-color);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0;
+}
+
+.details-toggle:hover {
+  text-decoration: underline;
 }
 
 .severity-badge {
