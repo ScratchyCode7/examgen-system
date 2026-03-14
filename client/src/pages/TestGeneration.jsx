@@ -100,11 +100,18 @@ const TestGeneration = () => {
 
   const resolveQuestionImageUrl = React.useCallback((imagePath) => {
     if (!imagePath) return '';
-    const normalizedBase = API_BASE_URL.replace(/\/$/, '');
-    const normalizedPath = String(imagePath).replace(/\\/g, '/');
+    const normalizedPath = String(imagePath).replace(/\\/g, '/').replace(/^\/?api\//i, '/');
     if (/^https?:\/\//i.test(normalizedPath)) return normalizedPath;
-    if (normalizedPath.startsWith('/')) return `${normalizedBase}${normalizedPath}`;
-    return `${normalizedBase}/${normalizedPath}`;
+
+    const normalizedBase = API_BASE_URL.replace(/\/$/, '');
+    const mediaBase = normalizedBase.replace(/\/api$/i, '');
+    const relativePath = normalizedPath.startsWith('/') ? normalizedPath.slice(1) : normalizedPath;
+
+    try {
+      return new URL(relativePath, `${mediaBase}/`).toString();
+    } catch {
+      return `${mediaBase}/${relativePath}`;
+    }
   }, []);
 
   // Helper function to determine semester based on current date
@@ -2448,17 +2455,24 @@ const TestGeneration = () => {
                               textAlign: image.alignment?.toLowerCase() || 'center', 
                               margin: '10px 0'
                             }}>
+                              {(() => {
+                                const imagePath = image?.imagePath || image?.ImagePath;
+                                const imageUrl = resolveQuestionImageUrl(imagePath);
+                                if (!imageUrl) return null;
+                                return (
                               <img 
-                                src={`${API_BASE_URL}/${image.imagePath}`}
+                                src={imageUrl}
                                 alt={`Question ${idx + 1}`}
                                 className="question-image-print"
                                 style={{ 
-                                  width: `${image.widthPercentage || 50}%`,
+                                  width: `${image.widthPercentage || image.WidthPercentage || 50}%`,
                                   maxHeight: '400px',
                                   objectFit: 'contain',
                                   display: 'inline-block'
                                 }}
                               />
+                                );
+                              })()}
                             </div>
                           )}
                           <div className="question-options">

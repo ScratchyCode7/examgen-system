@@ -6,7 +6,7 @@ import DropdownNavItem from '../components/DropdownNavItem';
 import LogoutModal from '../components/LogoutModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { apiService } from '../services/api';
+import { apiService, API_BASE_URL } from '../services/api';
 import '../styles/Dashboard.css';
 import '../styles/TestGeneration.css';
 
@@ -57,13 +57,20 @@ const loadImageAsDataUrl = (src) => new Promise((resolve, reject) => {
   img.src = src;
 });
 
-const resolveQuestionImageUrl = (imagePath, baseUrl) => {
+const resolveQuestionImageUrl = (imagePath) => {
   if (!imagePath) return '';
-  const normalizedBase = (baseUrl || '').replace(/\/$/, '');
-  const normalizedPath = String(imagePath).replace(/\\/g, '/');
+  const normalizedPath = String(imagePath).replace(/\\/g, '/').replace(/^\/?api\//i, '/');
   if (/^https?:\/\//i.test(normalizedPath)) return normalizedPath;
-  if (normalizedPath.startsWith('/')) return `${normalizedBase}${normalizedPath}`;
-  return `${normalizedBase}/${normalizedPath}`;
+
+  const normalizedBase = API_BASE_URL.replace(/\/$/, '');
+  const mediaBase = normalizedBase.replace(/\/api$/i, '');
+  const relativePath = normalizedPath.startsWith('/') ? normalizedPath.slice(1) : normalizedPath;
+
+  try {
+    return new URL(relativePath, `${mediaBase}/`).toString();
+  } catch {
+    return `${mediaBase}/${relativePath}`;
+  }
 };
 
 const SavedExamsReport = () => {
@@ -591,7 +598,7 @@ const SavedExamsReport = () => {
         }
 
         const path = image.imagePath || image.ImagePath;
-        const resolvedUrl = resolveQuestionImageUrl(path, window.location.origin);
+        const resolvedUrl = resolveQuestionImageUrl(path);
 
         try {
           const dataUrl = await loadImageAsDataUrl(resolvedUrl);
@@ -1152,7 +1159,7 @@ const SavedExamsReport = () => {
                           const options = getOrderedOptions(question.options || []);
                           const image = question.image || question.Image || null;
                           const imagePath = image?.imagePath || image?.ImagePath;
-                          const imageUrl = imagePath ? resolveQuestionImageUrl(imagePath, window.location.origin) : '';
+                          const imageUrl = imagePath ? resolveQuestionImageUrl(imagePath) : '';
                           const imageWidth = image?.widthPercentage || image?.WidthPercentage || 50;
                           const imageAlignment = (image?.alignment || image?.Alignment || 'center').toLowerCase();
                           return (
