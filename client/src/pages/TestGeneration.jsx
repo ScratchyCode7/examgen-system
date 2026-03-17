@@ -138,7 +138,7 @@ const TestGeneration = () => {
   const [selectedDepartment, setSelectedDepartment] = useState(''); // Department ID
   const [selectedCourse, setSelectedCourse] = useState(''); // Program ID
   const [selectedSubject, setSelectedSubject] = useState(''); // Subject ID
-  const [examType, setExamType] = useState('Midterm'); // Midterm, Prelim, Finals
+  const [examType, setExamType] = useState('Prelim'); // Midterm, Prelim, Finals
   const [semester, setSemester] = useState(getAutoSemester()); // 1st, 2nd, Summer
   const [schoolYear] = useState(getAutoSchoolYear()); // YYYYYYYY format
   const [totalExamItems, setTotalExamItems] = useState(''); // Total exam items
@@ -187,6 +187,7 @@ const TestGeneration = () => {
   const [isLoadingSubjects, setIsLoadingSubjects] = useState(false);
   const [isLoadingTopics, setIsLoadingTopics] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
+  const [isSavingExam, setIsSavingExam] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState({ show: false, rowId: null });
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [showPrintRequestModal, setShowPrintRequestModal] = useState(false);
@@ -365,8 +366,17 @@ const TestGeneration = () => {
       const cachedCourses = coursesCacheRef.current.get(departmentId);
       if (cachedCourses) {
         setCourses(cachedCourses);
-        setSelectedCourse('');
-        setSelectedSubject('');
+        setSelectedCourse((prev) => {
+          if (!prev) return prev;
+          const exists = cachedCourses.some(course => String(course.id) === String(prev));
+          return exists ? prev : '';
+        });
+        setSelectedSubject((prev) => {
+          if (!prev) return prev;
+          // Subject cache is course-specific. Keep existing value only when course selection stays valid.
+          const hasValidCourse = selectedCourse && cachedCourses.some(course => String(course.id) === String(selectedCourse));
+          return hasValidCourse ? prev : '';
+        });
         return;
       }
 
@@ -385,8 +395,16 @@ const TestGeneration = () => {
         const list = Array.isArray(data) ? data : [];
         coursesCacheRef.current.set(dept.id, list);
         setCourses(list);
-        setSelectedCourse('');
-        setSelectedSubject('');
+        setSelectedCourse((prev) => {
+          if (!prev) return prev;
+          const exists = list.some(course => String(course.id) === String(prev));
+          return exists ? prev : '';
+        });
+        setSelectedSubject((prev) => {
+          if (!prev) return prev;
+          const hasValidCourse = selectedCourse && list.some(course => String(course.id) === String(selectedCourse));
+          return hasValidCourse ? prev : '';
+        });
       } catch (err) {
         console.error('Failed to load courses:', err);
         setError(`Failed to load programs: ${err.message || 'Unknown error'}`);
@@ -397,7 +415,7 @@ const TestGeneration = () => {
     };
 
     void loadCourses();
-  }, [selectedDepartment, departments]);
+  }, [selectedDepartment, departments, selectedCourse]);
 
   // Load subjects for selected program
   useEffect(() => {
@@ -422,7 +440,11 @@ const TestGeneration = () => {
       const cachedSubjects = subjectsCacheRef.current.get(courseId);
       if (cachedSubjects) {
         setSubjects(cachedSubjects);
-        setSelectedSubject('');
+        setSelectedSubject((prev) => {
+          if (!prev) return prev;
+          const exists = cachedSubjects.some(subject => String(subject.id) === String(prev));
+          return exists ? prev : '';
+        });
         return;
       }
 
@@ -435,7 +457,11 @@ const TestGeneration = () => {
         const list = Array.isArray(subjectsList) ? subjectsList : [];
         subjectsCacheRef.current.set(courseId, list);
         setSubjects(list);
-        setSelectedSubject('');
+        setSelectedSubject((prev) => {
+          if (!prev) return prev;
+          const exists = list.some(subject => String(subject.id) === String(prev));
+          return exists ? prev : '';
+        });
         
         if (list.length === 0) {
           console.warn('No subjects found for courseId:', courseId);
@@ -1405,7 +1431,7 @@ const TestGeneration = () => {
         setQuestionsByTopic({});
       }
 
-      setExamType(exam.examType || 'Midterm');
+      setExamType(exam.examType || 'Prelim');
       setSemester(exam.semester || '1st');
       
       if (exam.specificationSnapshot) {
@@ -1670,6 +1696,8 @@ const TestGeneration = () => {
 
   // Confirm save
   const confirmSaveExam = async () => {
+    if (isSavingExam) return;
+
     if (!generatedSpec || !generatedSpec.specs) {
       setError('No specification to save. Please generate a specification first.');
       return;
@@ -1691,6 +1719,7 @@ const TestGeneration = () => {
     }
 
     try {
+      setIsSavingExam(true);
       const payload = {
         departmentId,
         courseId,
@@ -1741,6 +1770,8 @@ const TestGeneration = () => {
       console.error('Failed to save exam:', err);
       const message = err?.response?.data?.detail || err?.message || 'Please try again.';
       setError(`Failed to save exam: ${message}`);
+    } finally {
+      setIsSavingExam(false);
     }
   };
 
@@ -2684,8 +2715,8 @@ const TestGeneration = () => {
 
       {/* Save Modal */}
       {showSaveModal && (
-        <div className="modal-overlay">
-          <div className="modal-dialog exam-modal">
+        <div className="modal-overlay" onClick={() => !isSavingExam && setShowSaveModal(false)}>
+          <div className="modal-dialog exam-modal" onClick={(e) => e.stopPropagation()}>
             <h3 className="exam-modal-title">Save Exam</h3>
             <div className="exam-modal-body">
               {isLoadingSavedSets ? (
@@ -2703,8 +2734,10 @@ const TestGeneration = () => {
               </ul>
             </div>
             <div className="exam-modal-actions">
-              <button className="modal-btn modal-btn-secondary" onClick={() => setShowSaveModal(false)}>Cancel</button>
-              <button className="modal-btn modal-btn-primary" onClick={confirmSaveExam}>Save Exam</button>
+              <button className="modal-btn modal-btn-secondary" onClick={() => setShowSaveModal(false)} disabled={isSavingExam}>Cancel</button>
+              <button className="modal-btn modal-btn-primary" onClick={confirmSaveExam} disabled={isSavingExam}>
+                {isSavingExam ? 'Saving...' : 'Save Exam'}
+              </button>
             </div>
           </div>
         </div>
