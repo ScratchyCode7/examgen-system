@@ -2,6 +2,7 @@ using Databank.Abstract;
 using Databank.Database;
 using Databank.Entities;
 using Databank.Services;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,6 +13,9 @@ public sealed record LoginResponse(string AccessToken, DateTime ExpiresAt);
 
 public sealed class LoginEndpoint : IEndpoint
 {
+    private const int MaxFailedAttempts = 5;
+    private const int LockoutDurationMinutes = 5;
+
     public void Endpoint(IEndpointRouteBuilder app)
     {
         app.MapPost("/api/auth/login", async Task<IResult> (
@@ -23,6 +27,8 @@ public sealed class LoginEndpoint : IEndpoint
                 HttpContext httpContext,
                 CancellationToken ct) =>
         {
+            var contextDetails = BuildLoginContextDetails(httpContext);
+
             // Support both username and email login
             var user = await dbContext.Users
                 .Include(u => u.UserDepartments)
@@ -34,29 +40,83 @@ public sealed class LoginEndpoint : IEndpoint
                     null,
                     "Auth",
                     "Login Failed",
-                    $"Invalid credentials. UsernameOrEmail={request.Username}. {BuildLoginContextDetails(httpContext)}");
+                    $"Invalid credentials. UsernameOrEmail={request.Username}. {contextDetails}");
                 return TypedResults.Unauthorized();
+            }
+
+            if (user.LockoutEnd.HasValue && user.LockoutEnd.Value > DateTime.UtcNow)
+            {
+                await loggingService.LogWarningAsync(
+                    user.UserId.ToString(),
+                    "Auth",
+                    "Login Locked",
+                    $"Account locked until {user.LockoutEnd:O}. {contextDetails}");
+
+                return TypedResults.Problem(
+                    detail: $"Too many failed attempts. Account locked until {user.LockoutEnd:O}.",
+                    statusCode: StatusCodes.Status423Locked);
             }
 
             var verification = passwordHasher.VerifyHashedPassword(user, user.Password, request.Password);
             if (verification == PasswordVerificationResult.Failed)
             {
+                user.FailedLoginAttempts += 1;
+
+                if (user.FailedLoginAttempts >= MaxFailedAttempts)
+                {
+                    user.LockoutEnd = DateTime.UtcNow.AddMinutes(LockoutDurationMinutes);
+                    await loggingService.LogWarningAsync(
+                        user.UserId.ToString(),
+                        "Auth",
+                        "Login Locked",
+                        $"Account locked after repeated failed logins. Locked until {user.LockoutEnd:O}. {contextDetails}");
+
+                    // Reset attempts so the counter starts fresh after lock expires
+                    user.FailedLoginAttempts = 0;
+                    await dbContext.SaveChangesAsync(ct);
+
+                    return TypedResults.Problem(
+                        detail: $"Too many failed attempts. Account locked until {user.LockoutEnd:O}.",
+                        statusCode: StatusCodes.Status423Locked);
+                }
+
+                var attemptsRemaining = MaxFailedAttempts - user.FailedLoginAttempts;
                 await loggingService.LogWarningAsync(
                     user.UserId.ToString(),
                     "Auth",
                     "Login Failed",
-                    $"Invalid credentials for user '{user.Username}'. {BuildLoginContextDetails(httpContext)}");
+                    $"Invalid credentials for user '{user.Username}'. Attempts remaining: {attemptsRemaining}. {contextDetails}");
+
+                await dbContext.SaveChangesAsync(ct);
                 return TypedResults.Unauthorized();
+            }
+
+            var stateChanged = false;
+            if (user.FailedLoginAttempts > 0)
+            {
+                user.FailedLoginAttempts = 0;
+                stateChanged = true;
+            }
+
+            if (user.LockoutEnd.HasValue)
+            {
+                user.LockoutEnd = null;
+                stateChanged = true;
             }
 
             var token = tokenService.CreateToken(user);
             var response = new LoginResponse(token.AccessToken, token.ExpiresAt);
 
+            if (stateChanged)
+            {
+                await dbContext.SaveChangesAsync(ct);
+            }
+
             await loggingService.LogActivityAsync(
                 user.UserId.ToString(),
                 "Auth",
                 "Login Success",
-                $"User '{user.Username}' logged in. {BuildLoginContextDetails(httpContext)}");
+                $"User '{user.Username}' logged in. {contextDetails}");
 
             return TypedResults.Ok(response);
         });

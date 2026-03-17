@@ -36,6 +36,20 @@ public sealed class UpdateUserEndpoint : IEndpoint
                 return TypedResults.NotFound();
             }
 
+            var normalizedEmail = request.Email?.Trim();
+            if (string.IsNullOrWhiteSpace(normalizedEmail))
+            {
+                return TypedResults.BadRequest("Email is required.");
+            }
+
+            var duplicateEmail = await dbContext.Users
+                .AnyAsync(u => u.UserId != userId && u.Email.ToLower() == normalizedEmail.ToLower(), ct);
+
+            if (duplicateEmail)
+            {
+                return TypedResults.Conflict($"Email '{normalizedEmail}' is already in use.");
+            }
+
             // Verify all departments exist
             if (request.DepartmentIds == null || request.DepartmentIds.Length == 0)
             {
@@ -52,7 +66,7 @@ public sealed class UpdateUserEndpoint : IEndpoint
 
             user.FirstName = request.FirstName;
             user.LastName = request.LastName;
-            user.Email = request.Email;
+            user.Email = normalizedEmail;
             
             // Update department assignments
             user.UserDepartments.Clear();

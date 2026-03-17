@@ -1,12 +1,15 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { apiService } from '../services/api';
 
 const AuthContext = createContext(null);
+const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+const ACTIVITY_EVENTS = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart'];
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const inactivityTimerRef = useRef(null);
 
   useEffect(() => {
     // Check if user is logged in on mount
@@ -92,13 +95,45 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem('activeDepartmentId');
     setUser(null);
     setIsAuthenticated(false);
-  };
+  }, []);
+
+  const clearInactivityTimer = useCallback(() => {
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current);
+      inactivityTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleInactivityLogout = useCallback(() => {
+    if (!isAuthenticated) return;
+    clearInactivityTimer();
+    inactivityTimerRef.current = setTimeout(() => {
+      alert('You were signed out after 10 minutes of inactivity. Please log in again to continue.');
+      logout();
+    }, INACTIVITY_TIMEOUT_MS);
+  }, [clearInactivityTimer, isAuthenticated, logout]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      clearInactivityTimer();
+      ACTIVITY_EVENTS.forEach(evt => window.removeEventListener(evt, scheduleInactivityLogout));
+      return undefined;
+    }
+
+    ACTIVITY_EVENTS.forEach(evt => window.addEventListener(evt, scheduleInactivityLogout));
+    scheduleInactivityLogout();
+
+    return () => {
+      ACTIVITY_EVENTS.forEach(evt => window.removeEventListener(evt, scheduleInactivityLogout));
+      clearInactivityTimer();
+    };
+  }, [clearInactivityTimer, isAuthenticated, scheduleInactivityLogout]);
 
   const hasAccessToDepartment = (departmentId) => {
     if (!user) return false;

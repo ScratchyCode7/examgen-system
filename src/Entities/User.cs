@@ -22,6 +22,8 @@ public sealed class User
     
     public bool IsAdmin { get; set; }
     public bool IsActive { get; set; } = true;
+    public int FailedLoginAttempts { get; set; }
+    public DateTime? LockoutEnd { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 

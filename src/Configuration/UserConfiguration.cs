@@ -52,6 +52,12 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(x => x.IsActive)
             .HasDefaultValue(true);
 
+        builder.Property(x => x.FailedLoginAttempts)
+            .HasDefaultValue(0);
+
+        builder.Property(x => x.LockoutEnd)
+            .IsRequired(false);
+
         builder.Property(x => x.CreatedAt)
             .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
