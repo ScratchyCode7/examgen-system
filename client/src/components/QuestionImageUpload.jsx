@@ -39,7 +39,11 @@ const QuestionImageUpload = forwardRef(({ questionId, existingImage, onImageUpda
         setIsUploading(false);
       }
     },
-    hasPendingImage: () => !!pendingFile
+    hasPendingImage: () => !!pendingFile,
+    openFilePicker: () => {
+      if (!fileInputRef.current) return;
+      fileInputRef.current.click();
+    }
   }));
 
   const handleFileSelect = async (event) => {

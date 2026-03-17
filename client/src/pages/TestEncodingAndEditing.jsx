@@ -99,7 +99,7 @@ const MathSymbolPicker = ({ position, onSelect, onClose }) => {
 
 
 // --- RichTextToolbar Component ---
-const RichTextToolbar = ({ onFormat, onSaveRange, activeCommands }) => {
+const RichTextToolbar = ({ onFormat, onSaveRange, activeCommands, onImageEdit }) => {
     
     // Helper function to check if a command is currently active
     const isCommandActive = (command) => {
@@ -117,6 +117,8 @@ const RichTextToolbar = ({ onFormat, onSaveRange, activeCommands }) => {
         if (formatType === 'openPicker' && command === 'math') {
             // Passing the event target (the button) for position calculation
             onFormat('openPicker', 'math', e.currentTarget); 
+        } else if (formatType === 'image' && command === 'editImage' && typeof onImageEdit === 'function') {
+            onImageEdit();
         } else {
             onFormat(formatType, command, value);
         }
@@ -290,6 +292,7 @@ const TestEncodingAndEditing = () => {
     
     // Ref for QuestionImageUpload to access pending image upload method
     const imageUploadRef = useRef(null); 
+    const questionImageSectionRef = useRef(null);
     
 
     // --- Effects & Handlers ---
@@ -706,6 +709,19 @@ const TestEncodingAndEditing = () => {
         }, 0); 
     };
 
+    const handleQuestionImageRequest = () => {
+        if (questionImageSectionRef.current) {
+            questionImageSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        if (imageUploadRef.current?.openFilePicker) {
+            imageUploadRef.current.openFilePicker();
+            return;
+        }
+
+        alert('Question image upload is currently unavailable. Please try again.');
+    };
+
 
     const handleContentChange = (e, setter) => { setter(e.target.innerHTML); };
     
@@ -1110,6 +1126,7 @@ const TestEncodingAndEditing = () => {
                                     onFormat={handleFormat} 
                                     onSaveRange={handleSaveRange} 
                                     activeCommands={getToolbarActiveCommands(setQuestionText)} 
+                                    onImageEdit={handleQuestionImageRequest}
                                 />
                                 <div 
                                     contentEditable="true" 
@@ -1121,6 +1138,15 @@ const TestEncodingAndEditing = () => {
                                     onMouseUp={handleSaveRange} 
                                     dangerouslySetInnerHTML={{__html:questionText}}
                                 />
+                                <div ref={questionImageSectionRef} className="question-image-inline">
+                                    <QuestionImageUpload 
+                                        ref={imageUploadRef}
+                                        questionId={editingQuestion?.id}
+                                        existingImage={questionImage}
+                                        onImageUpdate={setQuestionImage}
+                                        isDarkMode={isDarkMode}
+                                    />
+                                </div>
                             </div>
 
                             {/* Choices */}
@@ -1151,19 +1177,26 @@ const TestEncodingAndEditing = () => {
                                 })}
                             </div>
 
-                            {/* Question Image Upload */}
-                            <QuestionImageUpload 
-                                ref={imageUploadRef}
-                                questionId={editingQuestion?.id}
-                                existingImage={questionImage}
-                                onImageUpdate={setQuestionImage}
-                                isDarkMode={isDarkMode}
-                            />
-
                             {/* Answer Key */}
                             <div className="answer-key-section">
                                 <div className="correct-answer-field">
-                                    <input type="text" placeholder="Correct Answer (A, B, C, or D)" value={correctAnswer} onChange={e=>setCorrectAnswer(e.target.value.toUpperCase())} maxLength={1}/>
+                                    <span className="correct-answer-label">Select the correct answer</span>
+                                    <div className="correct-answer-buttons" role="group" aria-label="Correct answer choices">
+                                        {['A','B','C','D'].map(letter => {
+                                            const isSelected = correctAnswer === letter;
+                                            return (
+                                                <button
+                                                    key={letter}
+                                                    type="button"
+                                                    className={`correct-answer-button${isSelected ? ' selected' : ''}`}
+                                                    onClick={() => setCorrectAnswer(letter)}
+                                                    aria-pressed={isSelected}
+                                                >
+                                                    {letter}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
                                 <div className="answer-key-description">
                                     <RichTextToolbar 
