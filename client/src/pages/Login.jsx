@@ -5,6 +5,7 @@ import '../styles/Login.css';
 import logo from '../assets/TDB logo.png';
 import bgImage from '../assets/uphsl.png';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -13,6 +14,7 @@ const Login = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login, isAuthenticated, isAdmin } = useAuth();
+  const { showToast } = useToast();
   const navigate = useNavigate();
 
   // Redirect if already logged in
@@ -35,6 +37,7 @@ const Login = () => {
 
     try {
       await login({ username, password });
+      showToast({ message: 'Login successful. Redirecting you to your dashboard.', type: 'success' });
       // Navigate based on admin status
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       if (user.isAdmin) {
@@ -49,6 +52,7 @@ const Login = () => {
         err.message || 
         'Invalid username or password';
       setError(errorMessage);
+      showToast({ message: errorMessage, type: 'error' });
       console.error('Login failed:', err);
     } finally {
       setLoading(false);

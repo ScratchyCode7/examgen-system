@@ -17,6 +17,7 @@ import LogoutModal from '../components/LogoutModal';
 import QuestionImageUpload from '../components/QuestionImageUpload';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { useToast } from '../contexts/ToastContext';
 import { apiService } from '../services/api';
 import DEPARTMENT_LOGOS from '../constants/departmentLogos';
 import '../styles/TestEncodingAndEditing.css';
@@ -236,6 +237,7 @@ const TestEncodingAndEditing = () => {
     const { departmentCode } = useParams();
     const { user, logout, isAdmin } = useAuth();
     const { isDarkMode, toggleDarkMode } = useTheme();
+    const { showToast } = useToast();
     const [activeTab, setActiveTab] = useState('Test Question Encoding');
     const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
     const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
@@ -571,7 +573,7 @@ const TestEncodingAndEditing = () => {
         
         const currentRef = activeEditableRef.current;
         if (!currentRef) { 
-            alert("Click inside a content field first."); 
+            showToast({ message: 'Click inside a content field first.', type: 'info' }); 
             return; 
         }
 
@@ -609,7 +611,7 @@ const TestEncodingAndEditing = () => {
                     }
                 }
                 else if(command==='editImage'){ 
-                    alert("Image edit triggered."); 
+                    showToast({ message: 'Image editing tools are coming soon.', type: 'info' }); 
                 }
                 break;
             default: 
@@ -719,7 +721,7 @@ const TestEncodingAndEditing = () => {
             return;
         }
 
-        alert('Question image upload is currently unavailable. Please try again.');
+        showToast({ message: 'Question image upload is currently unavailable. Please try again.', type: 'error' });
     };
 
 
@@ -771,10 +773,10 @@ const TestEncodingAndEditing = () => {
         try {
             await apiService.deleteQuestion(questionId);
             setQuestions(questions.filter(q => q.id !== questionId));
-            alert('Question deleted successfully!');
+            showToast({ message: 'Question deleted successfully.', type: 'success' });
         } catch (err) {
             console.error('Failed to delete question:', err);
-            alert('Failed to delete question. Please try again.');
+            showToast({ message: 'Failed to delete question. Please try again.', type: 'error' });
         }
     };
     
@@ -782,15 +784,15 @@ const TestEncodingAndEditing = () => {
     const handleAction = async () => { 
         // 1. Validation 
         if (!topic || !bloomLevel || !questionText || !correctAnswer) { 
-            alert("Fill all required fields (Topic, Bloom Level, Question Text, Answer)."); 
+            showToast({ message: 'Fill all required fields (Topic, Bloom Level, Question Text, Answer).', type: 'error' }); 
             return; 
         }
         if (!choiceA || !choiceB || !choiceC || !choiceD) {
-            alert('All four choices (A, B, C, D) must be filled.');
+            showToast({ message: 'All four choices (A, B, C, D) must be filled.', type: 'error' });
             return;
         }
         if (!['A', 'B', 'C', 'D'].includes(correctAnswer.toUpperCase())) {
-            alert('Correct Answer must be A, B, C, or D');
+            showToast({ message: 'Correct Answer must be A, B, C, or D.', type: 'error' });
             return;
         }
 
@@ -830,7 +832,7 @@ const TestEncodingAndEditing = () => {
                 console.log('✏️ Updating question ID:', editingQuestion.id);
                 savedQuestion = await apiService.updateQuestion(editingQuestion.id, questionData);
                 setQuestions(questions.map(q => q.id === editingQuestion.id ? savedQuestion : q));
-                alert(`Question ID ${editingQuestion.id} updated successfully!`);
+                showToast({ message: `Question ID ${editingQuestion.id} updated successfully.`, type: 'success' });
             } else {
                 // Create new question
                 console.log('➕ Creating new question...');
@@ -844,13 +846,12 @@ const TestEncodingAndEditing = () => {
                         console.log('✅ Image uploaded successfully');
                     } catch (imgError) {
                         console.error('⚠️ Failed to upload image:', imgError);
-                        // Don't fail the entire operation, just warn the user
-                        alert('Question saved, but image upload failed. You can try uploading again by editing the question.');
+                        showToast({ message: 'Question saved, but the image upload failed. Try editing the question to upload again.', type: 'error' });
                     }
                 }
                 
                 setQuestions([...questions, savedQuestion]);
-                alert('Question added successfully!');
+                showToast({ message: 'Question added successfully.', type: 'success' });
             }
             
             console.log('✅ Saved question:', savedQuestion);
@@ -875,7 +876,7 @@ const TestEncodingAndEditing = () => {
                 ? `\n\nDetails:\n${errorData.details}` 
                 : '';
             
-            alert(`Failed to save question:\n${errorMessage}${errorDetails}\n\nCheck console for full details.`);
+            showToast({ message: `Failed to save question:\n${errorMessage}${errorDetails}\n\nCheck console for full details.`, type: 'error' });
         }
     };
     

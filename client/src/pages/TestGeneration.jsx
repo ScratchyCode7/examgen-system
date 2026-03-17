@@ -6,6 +6,7 @@ import DropdownNavItem from '../components/DropdownNavItem';
 import LogoutModal from '../components/LogoutModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { useToast } from '../contexts/ToastContext';
 import { apiService, API_BASE_URL } from '../services/api';
 import '../styles/Dashboard.css';
 import '../styles/TestGeneration.css';
@@ -19,6 +20,7 @@ const { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search
 const TestGeneration = () => {
   const { user, logout, isAdmin } = useAuth();
   const { isDarkMode, toggleDarkMode } = useTheme();
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const { departmentCode } = useParams();
   const [activeTab, setActiveTab] = useState('Reports');
@@ -1533,7 +1535,10 @@ const TestGeneration = () => {
       setActivePrintRequest(request);
       setViewMode('generation');
       
-      alert(`Loaded exam "${exam.setLabel}" from print request by ${request.requestedBy}. You can now review, edit if needed, and print.`);
+      showToast({
+        message: `Loaded exam "${exam.setLabel}" from print request by ${request.requestedBy}. You can now review, edit if needed, and print.`,
+        type: 'info',
+      });
     } catch (err) {
       console.error('Failed to load print request exam:', err);
       setError('Failed to load exam from print request');
@@ -1573,7 +1578,7 @@ const TestGeneration = () => {
     
     try {
       await apiService.updatePrintRequestStatus(activePrintRequest.printRequestId, 'ReadyForPickup', 'Exam approved and printed');
-      alert('Print request marked as Ready for Pickup. The teacher will be notified.');
+      showToast({ message: 'Print request marked as Ready for Pickup. The teacher will be notified.', type: 'success' });
       setActivePrintRequest(null);
       await loadPrintRequests();
       // Clear the exam
@@ -1592,7 +1597,7 @@ const TestGeneration = () => {
     
     try {
       await apiService.updatePrintRequestStatus(activePrintRequest.printRequestId, 'Rejected', notes);
-      alert('Print request rejected. The teacher will be notified.');
+      showToast({ message: 'Print request rejected. The teacher will be notified.', type: 'info' });
       setActivePrintRequest(null);
       await loadPrintRequests();
       // Clear the exam
@@ -1621,7 +1626,7 @@ const TestGeneration = () => {
       autoReadyRef.current.marked = true;
       setActivePrintRequest(prev => prev ? { ...prev, status: 'ReadyForPickup' } : prev);
       await loadPrintRequests();
-      alert('Printed copy logged. Request marked as Ready for Pickup.');
+      showToast({ message: 'Printed copy logged. Request marked as Ready for Pickup.', type: 'success' });
     } catch (err) {
       console.error('Failed to auto-mark request ready:', err);
       setError('Printed successfully but failed to update the print request status. Please mark it ready manually.');
@@ -1682,8 +1687,7 @@ const TestGeneration = () => {
       await apiService.submitPrintRequest(activeExamMeta.id, notes, copies);
       setShowPrintRequestModal(false);
       setError('');
-      // Show success message (you can add a success state if needed)
-      alert('Print request submitted successfully! An admin will process your request.');
+      showToast({ message: 'Print request submitted successfully. An admin will process your request.', type: 'success' });
       if (!user?.isAdmin) {
         await loadMyPrintRequests();
       }
@@ -1699,7 +1703,7 @@ const TestGeneration = () => {
     try {
       setMyRequestsError('');
       await apiService.updatePrintRequestStatus(request.printRequestId, 'Completed', 'Teacher confirmed receipt');
-      alert('Thank you! This request is now marked as completed.');
+      showToast({ message: 'Thank you! This request is now marked as completed.', type: 'success' });
       await loadMyPrintRequests();
     } catch (err) {
       console.error('Failed to mark request as received:', err);
@@ -1795,7 +1799,10 @@ const TestGeneration = () => {
       });
       await loadSavedExamSets();
 
-      alert(`Exam saved as ${response.setLabel}. The exam paper, Table of Specification, and Answer Key are now available in Saved Exam Sets.`);
+      showToast({
+        message: `Exam saved as ${response.setLabel}. The exam paper, Table of Specification, and Answer Key are now available in Saved Exam Sets.`,
+        type: 'success',
+      });
     } catch (err) {
       console.error('Failed to save exam:', err);
       const message = err?.response?.data?.detail || err?.message || 'Please try again.';

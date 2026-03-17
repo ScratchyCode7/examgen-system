@@ -4,6 +4,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { ToastProvider } from './contexts/ToastContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import PrintAccessControl from './components/PrintAccessControl';
 import Login from './pages/Login';
@@ -18,11 +19,12 @@ import ActivityLogs from './pages/ActivityLogs';
 function App() {
   return (
     <Router>
-      <AuthProvider>
-        <ThemeProvider>
-          <PrintAccessControl />
-          <Routes>
-          <Route path="/login" element={<Login />} />
+      <ToastProvider>
+        <AuthProvider>
+          <ThemeProvider>
+            <PrintAccessControl />
+            <Routes>
+              <Route path="/login" element={<Login />} />
           <Route
             path="/"
             element={
@@ -79,10 +81,11 @@ function App() {
               </ProtectedRoute>
             }
           />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-        </ThemeProvider>
-      </AuthProvider>
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </ThemeProvider>
+        </AuthProvider>
+      </ToastProvider>
     </Router>
   );
 }

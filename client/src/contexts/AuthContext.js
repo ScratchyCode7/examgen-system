@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { apiService } from '../services/api';
+import { useToast } from './ToastContext';
 
 const AuthContext = createContext(null);
 const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
@@ -10,6 +11,7 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const inactivityTimerRef = useRef(null);
+  const { showToast } = useToast();
 
   useEffect(() => {
     // Check if user is logged in on mount
@@ -114,10 +116,13 @@ export const AuthProvider = ({ children }) => {
     if (!isAuthenticated) return;
     clearInactivityTimer();
     inactivityTimerRef.current = setTimeout(() => {
-      alert('You were signed out after 10 minutes of inactivity. Please log in again to continue.');
+      showToast({
+        message: 'You were signed out after 10 minutes of inactivity. Please log in again to continue.',
+        type: 'info',
+      });
       logout();
     }, INACTIVITY_TIMEOUT_MS);
-  }, [clearInactivityTimer, isAuthenticated, logout]);
+  }, [clearInactivityTimer, isAuthenticated, logout, showToast]);
 
   useEffect(() => {
     if (!isAuthenticated) {

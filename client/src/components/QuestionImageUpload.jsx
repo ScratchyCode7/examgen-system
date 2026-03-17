@@ -1,6 +1,7 @@
 import React, { useState, useRef, useImperativeHandle, forwardRef } from 'react';
 import { Upload, X, Image as ImageIcon } from 'lucide-react';
 import { apiService, API_BASE_URL } from '../services/api';
+import { useToast } from '../contexts/ToastContext';
 import '../styles/QuestionImageUpload.css';
 
 const QuestionImageUpload = forwardRef(({ questionId, existingImage, onImageUpdate, isDarkMode }, ref) => {
@@ -13,6 +14,7 @@ const QuestionImageUpload = forwardRef(({ questionId, existingImage, onImageUpda
   );
   const [pendingFile, setPendingFile] = useState(null);
   const fileInputRef = useRef(null);
+  const { showToast } = useToast();
 
   // Expose method to upload pending file after question creation
   useImperativeHandle(ref, () => ({
@@ -52,13 +54,13 @@ const QuestionImageUpload = forwardRef(({ questionId, existingImage, onImageUpda
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      alert('Please select an image file');
+      showToast({ message: 'Please select an image file.', type: 'error' });
       return;
     }
 
     // Validate file size (5MB)
     if (file.size > 5 * 1024 * 1024) {
-      alert('File size must be less than 5MB');
+      showToast({ message: 'File size must be less than 5MB.', type: 'error' });
       return;
     }
 
@@ -82,10 +84,10 @@ const QuestionImageUpload = forwardRef(({ questionId, existingImage, onImageUpda
         setImageData(response);
         setPreviewUrl(`${API_BASE_URL}/${response.imagePath}`);
         if (onImageUpdate) onImageUpdate(response);
-        alert('Image uploaded successfully!');
+        showToast({ message: 'Image uploaded successfully.', type: 'success' });
       } catch (error) {
         console.error('Failed to upload image:', error);
-        alert('Failed to upload image. Please try again.');
+        showToast({ message: 'Failed to upload image. Please try again.', type: 'error' });
         setPreviewUrl(null);
       } finally {
         setIsUploading(false);
@@ -107,10 +109,10 @@ const QuestionImageUpload = forwardRef(({ questionId, existingImage, onImageUpda
       setImageData(null);
       setPreviewUrl(null);
       if (onImageUpdate) onImageUpdate(null);
-      alert('Image deleted successfully!');
+      showToast({ message: 'Image deleted successfully.', type: 'success' });
     } catch (error) {
       console.error('Failed to delete image:', error);
-      alert('Failed to delete image. Please try again.');
+      showToast({ message: 'Failed to delete image. Please try again.', type: 'error' });
     } finally {
       setIsUploading(false);
     }

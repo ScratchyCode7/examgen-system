@@ -10,6 +10,7 @@ import DropdownNavItem from '../components/DropdownNavItem';
 import LogoutModal from '../components/LogoutModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { useToast } from '../contexts/ToastContext';
 import { apiService } from '../services/api';
 import '../styles/CourseTopic.css';
 
@@ -21,6 +22,7 @@ const dataEntryItems = ["Program - Topic", "Test Encoding", "Test Question Editi
 const CourseTopic = () => {
   const { user, logout, isAdmin } = useAuth();
   const { isDarkMode, toggleDarkMode } = useTheme();
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const { departmentCode } = useParams();
   const [activeTab, setActiveTab] = useState('Program - Topic');
@@ -335,7 +337,7 @@ const CourseTopic = () => {
   // Create new topic for selected subject
   const handleAddTopic = () => {
     if (!selectedSubjectForTopic || !topicFormData.title || !topicFormData.allocatedHours) {
-      alert('Please fill in Topic Title and Hours');
+      showToast({ message: 'Please fill in Topic Title and Hours.', type: 'error' });
       return;
     }
 

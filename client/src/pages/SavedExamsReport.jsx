@@ -6,6 +6,7 @@ import DropdownNavItem from '../components/DropdownNavItem';
 import LogoutModal from '../components/LogoutModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { useToast } from '../contexts/ToastContext';
 import { apiService, API_BASE_URL } from '../services/api';
 import '../styles/Dashboard.css';
 import '../styles/TestGeneration.css';
@@ -76,6 +77,7 @@ const resolveQuestionImageUrl = (imagePath) => {
 const SavedExamsReport = () => {
   const { user, logout, isAdmin } = useAuth();
   const { isDarkMode, toggleDarkMode } = useTheme();
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const { departmentCode } = useParams();
   const [activeTab, setActiveTab] = useState('Saved Exam Sets');
@@ -856,7 +858,7 @@ const SavedExamsReport = () => {
       await apiService.submitPrintRequest(selectedExam.id, notes, copies);
       setShowPrintRequestModal(false);
       setError('');
-      alert('Print request submitted successfully! An admin will process your request.');
+      showToast({ message: 'Print request submitted successfully. An admin will process your request.', type: 'success' });
     } catch (err) {
       console.error('Failed to submit print request:', err);
       setError(err.response?.data?.error || 'Failed to submit print request');
