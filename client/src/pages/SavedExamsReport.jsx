@@ -89,7 +89,7 @@ const SavedExamsReport = () => {
   const [selectedDepartment, setSelectedDepartment] = useState('');
   const [selectedCourse, setSelectedCourse] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
-  const [examType, setExamType] = useState('Midterm');
+  const [examType, setExamType] = useState('Prelim');
   const [semester, setSemester] = useState(getAutoSemester());
   const [schoolYear, setSchoolYear] = useState(getAutoSchoolYear());
 
