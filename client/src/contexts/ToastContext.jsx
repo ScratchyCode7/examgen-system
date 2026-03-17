@@ -10,9 +10,10 @@ export const ToastProvider = ({ children }) => {
   const timersRef = useRef(new Map());
 
   useEffect(() => {
+    const timers = timersRef.current;
     return () => {
-      timersRef.current.forEach((timerId) => clearTimeout(timerId));
-      timersRef.current.clear();
+      timers.forEach((timerId) => clearTimeout(timerId));
+      timers.clear();
     };
   }, []);
 
