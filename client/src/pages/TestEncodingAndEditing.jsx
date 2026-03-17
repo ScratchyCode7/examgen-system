@@ -1099,14 +1099,7 @@ const TestEncodingAndEditing = () => {
                                         {summary.bloomData.map((data,index)=>(
                                             <div key={index} className={`summary-card bloom-card color-${index+1}`}>
                                                 <h4 className="bloom-card-title">{data.level}</h4>
-                                                <p className="bloom-card-count"><span style={{fontWeight:'bold'}}>{data.count}</span> Questions</p>
-                                                <div className="bloom-progress-info">
-                                                    <span className="achieved-percent">Achieved: <span style={{fontWeight:'bold'}}>{data.achieved}%</span></span>
-                                                    <span className="target-percent">Target: {data.target}%</span>
-                                                </div>
-                                                <div className="aesthetic-progress-bar-container compact">
-                                                    <div className={`aesthetic-progress-fill color-${index+1} ${data.achieved>=data.target?'over-target':'under-target'}`} style={{width:`${Math.min(data.achieved,100)}%`}}></div>
-                                                </div>
+                                                <p className="bloom-card-count"><span style={{fontWeight:'bold'}}>{data.count}</span> Total Encoded Questions</p>
                                             </div>
                                         ))}
                                     </div>

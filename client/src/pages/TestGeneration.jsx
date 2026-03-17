@@ -1073,6 +1073,36 @@ const TestGeneration = () => {
     return 'evaluating';
   };
 
+  const questionBankSummary = React.useMemo(() => {
+    if (!selectedSubject) return null;
+
+    const flattened = Object.values(questionsByTopic || {}).reduce((acc, list) => {
+      if (Array.isArray(list) && list.length) {
+        acc.push(...list);
+      }
+      return acc;
+    }, []);
+
+    const counts = { lower: 0, middle: 0, higher: 0 };
+    flattened.forEach((question) => {
+      const category = bloomCategoryFromQuestion(question);
+      if (category === 'remembering') counts.lower += 1;
+      else if (category === 'applying') counts.middle += 1;
+      else if (category === 'evaluating') counts.higher += 1;
+    });
+
+    const total = flattened.length;
+    const toPercent = (count) => (total > 0 ? ((count / total) * 100).toFixed(1) : '0.0');
+    const bloomData = [
+      { level: 'Lower Order (Remember/Understand)', count: counts.lower, achieved: toPercent(counts.lower), target: 30 },
+      { level: 'Middle Order (Apply/Analyze)', count: counts.middle, achieved: toPercent(counts.middle), target: 30 },
+      { level: 'Higher Order (Evaluate/Create)', count: counts.higher, achieved: toPercent(counts.higher), target: 40 }
+    ];
+    const loadedTopicCount = Object.values(questionsByTopic || {}).filter((list) => Array.isArray(list) && list.length > 0).length;
+
+    return { totalQuestions: total, bloomData, loadedTopicCount };
+  }, [questionsByTopic, selectedSubject]);
+
   // New exam generation: distribute Bloom levels across selected topics and fetch per-topic questions
   const handleGenerateSample = async () => {
     try {
@@ -1898,7 +1928,8 @@ const TestGeneration = () => {
                   style={{ flex: '1' }}
                   title={isViewSwitchLocked ? 'Finish or cancel the current review before switching modes.' : undefined}
                 >
-                  📝 Test Generation
+                  <BookOpen size={16} style={{ marginRight: '6px', verticalAlign: 'text-bottom' }} />
+                  Test Generation
                 </button>
                 <button
                   className={`btn ${viewMode === 'printrequests' ? 'btn-primary' : 'btn-secondary'}`}
@@ -1910,7 +1941,8 @@ const TestGeneration = () => {
                   style={{ flex: '1', position: 'relative' }}
                   title={isViewSwitchLocked ? 'Finish or cancel the current review before switching modes.' : undefined}
                 >
-                  🖨️ Print Requests {printRequests.length > 0 && <span style={{ background: 'red', color: 'white', borderRadius: '50%', padding: '2px 6px', fontSize: '12px', marginLeft: '5px' }}>{printRequests.length}</span>}
+                  <Printer size={16} style={{ marginRight: '6px', verticalAlign: 'text-bottom' }} />
+                  Print Requests {printRequests.length > 0 && <span style={{ background: 'red', color: 'white', borderRadius: '50%', padding: '2px 6px', fontSize: '12px', marginLeft: '5px' }}>{printRequests.length}</span>}
                 </button>
               </div>
               {isViewSwitchLocked && (
@@ -2138,6 +2170,54 @@ const TestGeneration = () => {
               />
             </div>
           </div>
+
+          {selectedSubject && questionBankSummary && questionBankSummary.totalQuestions > 0 && (
+            <div className="data-summary-block separate-blooms-view">
+              <h3 className="data-summary-heading">
+                Question Bank Overview — {selectedSubjectDetails?.name || 'Selected Subject'}
+              </h3>
+              <div className="summary-details-grid three-col-blooms">
+                <div className="summary-card total-stats">
+                  <h4>Subject Coverage</h4>
+                  <p>
+                    Total Encoded Questions: <span style={{ fontWeight: 'bold' }}>{questionBankSummary.totalQuestions}</span>
+                  </p>
+                  <div className="total-bar-check">
+                    Topics With Questions: <span style={{ fontWeight: 'bold' }}>{questionBankSummary.loadedTopicCount}</span>
+                  </div>
+                </div>
+                {questionBankSummary.bloomData.map((data, index) => (
+                  <div key={data.level} className={`summary-card bloom-card color-${index + 1}`}>
+                    <h4 className="bloom-card-title">{data.level}</h4>
+                    <p className="bloom-card-count">
+                      <span style={{ fontWeight: 'bold' }}>{data.count}</span> Questions
+                    </p>
+                    <div className="bloom-progress-info">
+                      <span className="achieved-percent">
+                        Achieved: <span style={{ fontWeight: 'bold' }}>{data.achieved}%</span>
+                      </span>
+                      <span className="target-percent">Target: {data.target}%</span>
+                    </div>
+                    <div className="aesthetic-progress-bar-container compact">
+                      <div
+                        className={`aesthetic-progress-fill color-${index + 1}`}
+                        style={{ width: `${Math.min(parseFloat(data.achieved), 100)}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {selectedSubject && questionBankSummary && questionBankSummary.totalQuestions === 0 && (
+            <div className="info-message" style={{ marginTop: '1rem' }}>
+              <span className="info-icon">ℹ️</span>
+              <span className="info-text">
+                No encoded questions were found for the selected subject yet. Add questions in Test Encoding to populate the databank.
+              </span>
+            </div>
+          )}
 
           {/* Topics Table */}
           {selectedSubject && (
