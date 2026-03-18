@@ -1830,7 +1830,11 @@ const TestGeneration = () => {
       });
     } catch (err) {
       console.error('Failed to save exam:', err);
-      const message = err?.response?.data?.detail || err?.message || 'Please try again.';
+      const responseBody = err?.response?.data;
+      const message = responseBody?.detail
+        || responseBody?.message
+        || err?.message
+        || 'Please try again.';
       setError(`Failed to save exam: ${message}`);
     } finally {
       setIsSavingExam(false);

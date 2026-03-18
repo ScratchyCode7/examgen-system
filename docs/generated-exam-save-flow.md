@@ -12,7 +12,7 @@ This README summarizes how generated exams move from the Test Generation UI to d
 
 ## Save API Contract
 
-Endpoint: `POST /api/tests/save-generated` (admin only)
+Endpoint: `POST /api/tests/save-generated` (authenticated; teachers must belong to the department they are saving for)
 
 ### Request Shape
 
@@ -58,6 +58,7 @@ Key rules enforced server-side:
 
 - `questions` must be non-empty and each referenced `Question` must belong to the `subjectId` supplied.
 - Course and department IDs must match the subject hierarchy, preventing cross-program saves.
+- Non-admin users must be assigned to the department they are attempting to save for; otherwise the API returns HTTP 403.
 - `displayOrder` is honored exactly as supplied; the frontend must send contiguous ordering to guarantee correct exam layout and answer key letters later.
 - Each question now includes an `options[]` array mirroring the shuffled preview order. Missing or duplicate option IDs result in a `400 Bad Request`, so the client must snapshot every option for immutability.
 

@@ -86,6 +86,7 @@ Full-stack application for managing exam/test databank with C# ASP.NET Core back
   - Persists subject/course/department metadata, semester, school year, set labels, and the exact ordered question list in a single call.
   - Computes a question signature (displayOrder + questionId) to guarantee unique saves per generation and auto-assigns the next `Set A/B/C...` label for the same term.
   - Stores the full specification snapshot and generation warnings for perfect reload fidelity.
+  - Teachers assigned to the selected department can now save sets; the backend enforces department access before persisting.
 - ✅ **Test Generation save flow overhaul:**
   - Save button now validates department/course/subject context, reuses the ordered payload, and surfaces the returned set label inline.
   - Save modal summarizes the upcoming set (course, subject, exam period, total items) instead of relying on a free-text exam name.
@@ -472,7 +473,7 @@ SELECT s.*, t.* FROM "Subjects" s LEFT JOIN "Topics" t ON s."Id" = t."SubjectId"
 ### Tests/Exams (`/api/tests`)
 - `POST /api/tests` - Create test (Admin only)
 - `POST /api/tests/generate` - Generate exam from databank by selecting questions matching criteria (Admin only)
-- `POST /api/tests/save-generated` - Persist a generated exam (Admin only)
+- `POST /api/tests/save-generated` - Persist a generated exam (Requires auth; teachers must have access to the department they are saving for)
   - Body: `departmentId`, `courseId`, `subjectId`, `examType`, `semester`, `schoolYear`, `durationMinutes`, `totalPoints`, `questions[] (questionId + displayOrder)`, optional `specificationSnapshot`, `generationNotes`, and `description`.
   - Auto-computes `Set A/B/...` based on existing exams for the same subject/term and refuses duplicates using the deterministic question signature.
 - `GET /api/tests` - List all tests with pagination (Requires auth)

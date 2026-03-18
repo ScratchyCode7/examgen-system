@@ -4,6 +4,7 @@ using Databank.Abstract;
 using Databank.Database;
 using Databank.Entities;
 using Databank.Services;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 
 namespace Databank.Features.Tests.Save;
@@ -16,6 +17,7 @@ public sealed class SaveGeneratedExamEndpoint : IEndpoint
                 SaveGeneratedExamRequest request,
                 AppDbContext dbContext,
                 ILoggingService loggingService,
+                IDepartmentAccessService departmentAccessService,
                 HttpContext httpContext,
                 CancellationToken ct) =>
         {
@@ -29,6 +31,27 @@ public sealed class SaveGeneratedExamEndpoint : IEndpoint
             if (Guid.TryParse(userIdClaim, out var parsedUserId))
             {
                 createdByUserId = parsedUserId;
+            }
+
+            var isAdminClaim = httpContext.User.FindFirst("isAdmin")?.Value;
+            var isAdminUser = string.Equals(isAdminClaim, "true", StringComparison.OrdinalIgnoreCase);
+
+            if (!isAdminUser)
+            {
+                if (!createdByUserId.HasValue)
+                {
+                    return TypedResults.Problem(
+                        "Unable to determine the current user. Please sign in again and retry.",
+                        statusCode: StatusCodes.Status403Forbidden);
+                }
+
+                var hasAccess = await departmentAccessService.HasAccessToDepartmentAsync(createdByUserId.Value, request.DepartmentId, ct);
+                if (!hasAccess)
+                {
+                    return TypedResults.Problem(
+                        "You do not have permission to save exams for the selected department.",
+                        statusCode: StatusCodes.Status403Forbidden);
+                }
             }
 
             var subject = await dbContext.Subjects
