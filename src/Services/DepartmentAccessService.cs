@@ -2,6 +2,8 @@ using Databank.Database;
 using Databank.Entities;
 using Microsoft.EntityFrameworkCore;
 
+#pragma warning disable CS0618 // Access legacy User.DepartmentId for backward compatibility
+
 namespace Databank.Services;
 
 public interface IDepartmentAccessService
@@ -51,9 +53,17 @@ public sealed class DepartmentAccessService : IDepartmentAccessService
                 .ToArrayAsync(ct);
         }
 
-        return user.UserDepartments
+        var assignedIds = user.UserDepartments
             .Select(ud => ud.DepartmentId)
-            .ToArray();
+            .Distinct()
+            .ToList();
+
+        if (assignedIds.Count == 0 && user.DepartmentId.HasValue)
+        {
+            assignedIds.Add(user.DepartmentId.Value);
+        }
+
+        return assignedIds.ToArray();
     }
 
     public async Task<bool> HasAccessToDepartmentAsync(Guid userId, int departmentId, CancellationToken ct = default)
@@ -74,7 +84,13 @@ public sealed class DepartmentAccessService : IDepartmentAccessService
                 .AnyAsync(d => d.Id == departmentId && d.IsActive, ct);
         }
 
-        return user.UserDepartments.Any(ud => ud.DepartmentId == departmentId);
+        var hasExplicitAccess = user.UserDepartments.Any(ud => ud.DepartmentId == departmentId);
+        if (hasExplicitAccess)
+        {
+            return true;
+        }
+
+        return user.DepartmentId.HasValue && user.DepartmentId.Value == departmentId;
     }
 
     public async Task<bool> HasAccessToAllDepartmentsAsync(Guid userId, int[] departmentIds, CancellationToken ct = default)
@@ -88,3 +104,4 @@ public sealed class DepartmentAccessService : IDepartmentAccessService
         return departmentIds.All(id => userDepartmentIds.Contains(id));
     }
 }
+#pragma warning restore CS0618
