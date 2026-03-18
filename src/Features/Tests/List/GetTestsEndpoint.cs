@@ -20,7 +20,9 @@ public sealed class GetTestsEndpoint : IEndpoint
                 CancellationToken ct = default) =>
         {
             var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
-            var query = dbContext.Tests.AsNoTracking();
+            var query = dbContext.Tests
+                .AsNoTracking()
+                .Include(t => t.CreatedByUser);
 
             if (subjectId.HasValue)
             {

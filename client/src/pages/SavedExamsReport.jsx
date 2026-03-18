@@ -120,6 +120,24 @@ const SavedExamsReport = () => {
   const [isDeletingExam, setIsDeletingExam] = useState(false);
   const [error, setError] = useState('');
 
+  const normalizedUserId = user?.userId ? String(user.userId).toLowerCase() : null;
+  const isExamOwner = React.useCallback((exam) => {
+    if (!exam?.createdByUserId || !normalizedUserId) return false;
+    return String(exam.createdByUserId).toLowerCase() === normalizedUserId;
+  }, [normalizedUserId]);
+
+  const getOwnerDisplay = React.useCallback((exam) => {
+    if (!exam) return '—';
+    if (isExamOwner(exam)) return 'You';
+    return exam.createdByName || 'Unknown';
+  }, [isExamOwner]);
+
+  const canDeleteSelectedExam = React.useMemo(() => {
+    if (!selectedExam) return false;
+    if (user?.isAdmin) return true;
+    return isExamOwner(selectedExam);
+  }, [selectedExam, user?.isAdmin, isExamOwner]);
+
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target)) setIsUserMenuOpen(false);
@@ -308,13 +326,19 @@ const SavedExamsReport = () => {
   };
 
   const promptDeleteExam = () => {
-    if (!selectedExam) return;
+    if (!selectedExam || !canDeleteSelectedExam) return;
     setExamPendingDelete(selectedExam);
     setIsDeleteModalOpen(true);
   };
 
   const handleDeleteExam = async () => {
     if (!examPendingDelete) return;
+    if (!user?.isAdmin && !isExamOwner(examPendingDelete)) {
+      setError('Only the creator or an administrator can delete this exam set.');
+      setIsDeleteModalOpen(false);
+      setExamPendingDelete(null);
+      return;
+    }
     try {
       setIsDeletingExam(true);
       setError('');
@@ -327,7 +351,9 @@ const SavedExamsReport = () => {
       await loadSavedExamSets();
     } catch (err) {
       console.error('Failed to delete exam:', err);
-      const message = err?.response?.data?.detail || err?.message || 'Failed to delete exam.';
+      const message = err?.response?.status === 403
+        ? 'Only the creator or an administrator can delete this exam set.'
+        : err?.response?.data?.detail || err?.message || 'Failed to delete exam.';
       setError(message);
     } finally {
       setIsDeletingExam(false);
@@ -1085,6 +1111,7 @@ const SavedExamsReport = () => {
                       >
                         <div style={{ fontWeight: 'bold' }}>{test.setLabel || 'Set ?'}</div>
                         <div style={{ fontSize: '14px' }}>{test.examType} · {test.semester} Semester · SY {test.schoolYear}</div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Created by {getOwnerDisplay(test)}</div>
                         <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Saved on {formatDateTime(test.createdAt)}</div>
                       </button>
                     );
@@ -1110,6 +1137,9 @@ const SavedExamsReport = () => {
                     <div style={{ marginTop: '8px', fontSize: '14px' }}>
                       <strong>Total Questions:</strong> {selectedExam.totalQuestions} · <strong>Total Points:</strong> {selectedExam.totalPoints || selectedExam.totalQuestions}
                     </div>
+                    <div style={{ marginTop: '6px', fontSize: '14px' }}>
+                      <strong>Created by:</strong> {getOwnerDisplay(selectedExam)}
+                    </div>
                   </div>
 
                   <div className="action-buttons" style={{ justifyContent: 'flex-end', marginTop: '1rem' }}>
@@ -1119,11 +1149,17 @@ const SavedExamsReport = () => {
                     <button
                       className="btn btn-danger"
                       onClick={promptDeleteExam}
-                      disabled={!selectedExam}
+                      disabled={!canDeleteSelectedExam}
+                      title={!canDeleteSelectedExam ? 'Only the creator or an administrator can delete this set.' : undefined}
                     >
                       <Trash2 size={16} /> Delete Set
                     </button>
                   </div>
+                  {!canDeleteSelectedExam && selectedExam && (
+                    <p style={{ marginTop: '8px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+                      You can only delete sets you created. Ask an administrator if this set needs to be removed.
+                    </p>
+                  )}
 
                   <div style={{ marginTop: '20px' }}>
                     <div className="exam-paper" style={{ boxShadow: 'none', border: '1px solid var(--border-color)', borderRadius: '8px' }}>

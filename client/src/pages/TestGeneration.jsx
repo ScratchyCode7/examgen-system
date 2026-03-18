@@ -189,6 +189,8 @@ const TestGeneration = () => {
   const [isLoadingSubjects, setIsLoadingSubjects] = useState(false);
   const [isLoadingTopics, setIsLoadingTopics] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
+  const [customSetLabel, setCustomSetLabel] = useState('');
+  const [saveNameError, setSaveNameError] = useState('');
   const [isSavingExam, setIsSavingExam] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState({ show: false, rowId: null });
   const [showPrintModal, setShowPrintModal] = useState(false);
@@ -200,6 +202,13 @@ const TestGeneration = () => {
   const [isLoadingSavedSets, setIsLoadingSavedSets] = useState(false);
   const [lastSavedSignature, setLastSavedSignature] = useState('');
   const [saveConfirmation, setSaveConfirmation] = useState(null);
+
+  const closeSaveModal = React.useCallback(() => {
+    if (isSavingExam) return;
+    setShowSaveModal(false);
+    setSaveNameError('');
+    setCustomSetLabel('');
+  }, [isSavingExam]);
 
   // Print Requests (Admin)
   const [viewMode, setViewMode] = useState('generation'); // 'generation' or 'printrequests'
@@ -1725,6 +1734,8 @@ const TestGeneration = () => {
       setError('This generated exam has already been saved. Generate a new exam to create another set.');
       return;
     }
+    setCustomSetLabel(nextSetLabel || '');
+    setSaveNameError('');
     setShowSaveModal(true);
   };
 
@@ -1746,6 +1757,17 @@ const TestGeneration = () => {
       return;
     }
 
+    const trimmedSetLabel = (customSetLabel || '').trim();
+    if (!trimmedSetLabel) {
+      setSaveNameError('Please enter a name for this exam set.');
+      return;
+    }
+    if (trimmedSetLabel.length > 120) {
+      setSaveNameError('Saved exam name must be 120 characters or fewer.');
+      return;
+    }
+    setSaveNameError('');
+
     const { ordered, signature } = questionsPayload;
     if (!ordered.length) {
       setError('No questions available to save. Please regenerate the exam.');
@@ -1766,12 +1788,15 @@ const TestGeneration = () => {
         questions: ordered,
         specificationSnapshot: JSON.stringify(generatedSpec),
         generationNotes: generationWarnings?.join('\n') || undefined,
-        description: `${examType} Exam - ${semester} ${schoolYear}`
+        description: `${examType} Exam - ${semester} ${schoolYear}`,
+        setLabel: trimmedSetLabel
       };
 
       const response = await apiService.saveGeneratedExam(payload);
 
       setShowSaveModal(false);
+      setCustomSetLabel('');
+      setSaveNameError('');
       setError('');
       setLastSavedSignature(signature);
       setActiveExamMeta(response);
@@ -2802,7 +2827,7 @@ const TestGeneration = () => {
 
       {/* Save Modal */}
       {showSaveModal && (
-        <div className="modal-overlay" onClick={() => !isSavingExam && setShowSaveModal(false)}>
+        <div className="modal-overlay" onClick={closeSaveModal}>
           <div className="modal-dialog exam-modal" onClick={(e) => e.stopPropagation()}>
             <h3 className="exam-modal-title">Save Exam</h3>
             <div className="exam-modal-body">
@@ -2810,9 +2835,27 @@ const TestGeneration = () => {
                 <p>Checking existing exam sets...</p>
               ) : (
                 <p className="exam-modal-lead">
-                  This exam will be saved as <strong>{nextSetLabel}</strong>.
+                  Suggestion: <strong>{nextSetLabel}</strong>. You can rename the set before saving so it is easier to find later.
                 </p>
               )}
+              <div className="exam-modal-field">
+                <label htmlFor="custom-set-label">Exam Set Name</label>
+                <input
+                  id="custom-set-label"
+                  type="text"
+                  maxLength={120}
+                  value={customSetLabel}
+                  onChange={(e) => {
+                    setCustomSetLabel(e.target.value);
+                    if (saveNameError) setSaveNameError('');
+                  }}
+                  className={`exam-modal-input${saveNameError ? ' has-error' : ''}`}
+                  placeholder={`e.g. ${nextSetLabel} or 'Remedial Prelim'`}
+                  autoFocus
+                />
+                {saveNameError && <p className="error-message" style={{ marginTop: '6px' }}>{saveNameError}</p>}
+                <p className="exam-modal-note" style={{ marginTop: '8px' }}>Max 120 characters. This label shows up in Saved Exam Sets and print requests.</p>
+              </div>
               <ul className="exam-modal-list">
                 <li>Program: {selectedCourseDetails?.name || 'N/A'}</li>
                 <li>Subject: {selectedSubjectDetails?.name || 'N/A'}</li>
@@ -2821,7 +2864,7 @@ const TestGeneration = () => {
               </ul>
             </div>
             <div className="exam-modal-actions">
-              <button className="modal-btn modal-btn-secondary" onClick={() => setShowSaveModal(false)} disabled={isSavingExam}>Cancel</button>
+              <button className="modal-btn modal-btn-secondary" onClick={closeSaveModal} disabled={isSavingExam}>Cancel</button>
               <button className="modal-btn modal-btn-primary" onClick={confirmSaveExam} disabled={isSavingExam}>
                 {isSavingExam ? 'Saving...' : 'Save Exam'}
               </button>

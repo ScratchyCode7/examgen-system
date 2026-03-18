@@ -22,6 +22,7 @@ public sealed class GetTestEndpoint : IEndpoint
                     .ThenInclude(tq => tq.Question)
                         .ThenInclude(q => q.QuestionImage)
                 .Include(t => t.Subject)
+                .Include(t => t.CreatedByUser)
                 .FirstOrDefaultAsync(t => t.Id == id, ct);
 
             if (test is null)

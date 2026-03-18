@@ -24,6 +24,13 @@ public sealed class SaveGeneratedExamEndpoint : IEndpoint
                 return TypedResults.BadRequest("At least one question must be provided.");
             }
 
+            var userIdClaim = httpContext.User.FindFirst("sub")?.Value ?? httpContext.User.FindFirst("userId")?.Value;
+            Guid? createdByUserId = null;
+            if (Guid.TryParse(userIdClaim, out var parsedUserId))
+            {
+                createdByUserId = parsedUserId;
+            }
+
             var subject = await dbContext.Subjects
                 .Include(s => s.Course)
                     .ThenInclude(c => c.Department)
@@ -85,13 +92,22 @@ public sealed class SaveGeneratedExamEndpoint : IEndpoint
                 t.SchoolYear == request.SchoolYear,
                 ct);
 
-            var setLabel = BuildSetLabel(existingSetCount);
+            var requestedLabel = (request.SetLabel ?? string.Empty).Trim();
+            if (requestedLabel.Length > 120)
+            {
+                return TypedResults.BadRequest("Saved exam name must be 120 characters or fewer.");
+            }
+
+            var setLabel = string.IsNullOrWhiteSpace(requestedLabel)
+                ? BuildSetLabel(existingSetCount)
+                : requestedLabel;
 
             var test = new Test
             {
                 SubjectId = request.SubjectId,
                 CourseId = request.CourseId,
                 DepartmentId = request.DepartmentId,
+                CreatedByUserId = createdByUserId,
                 Title = $"{subject.Code} {request.ExamType} {setLabel}".Trim(),
                 Description = request.Description ?? $"{request.ExamType} - {request.Semester} {request.SchoolYear} ({setLabel})",
                 DurationMinutes = request.DurationMinutes,
@@ -145,12 +161,11 @@ public sealed class SaveGeneratedExamEndpoint : IEndpoint
             await dbContext.SaveChangesAsync(ct);
 
             // Log activity
-            var userId = httpContext.User.FindFirst("sub")?.Value ?? httpContext.User.FindFirst("userId")?.Value;
-            await loggingService.LogActivityAsync(userId, "Tests", "Saved", "Test", test.Id,
+            await loggingService.LogActivityAsync(userIdClaim, "Tests", "Saved", "Test", test.Id,
                 $"Saved generated exam: {test.Title} ({request.Questions.Count} questions, {request.ExamType} {request.Semester} {request.SchoolYear})");
 
             return TypedResults.Created($"/api/tests/{test.Id}", test.ToResponse());
-        }).RequireAuthorization("AdminOnly");
+        }).RequireAuthorization();
     }
 
     private static string BuildSetLabel(int index)

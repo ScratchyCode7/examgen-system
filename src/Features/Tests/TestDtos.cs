@@ -21,7 +21,8 @@ public sealed record SaveGeneratedExamRequest(
     List<SaveGeneratedExamQuestionDto> Questions,
     string? SpecificationSnapshot,
     string? GenerationNotes,
-    string? Description
+    string? Description,
+    string? SetLabel
 );
 
 public sealed record SaveGeneratedExamQuestionDto(
@@ -46,6 +47,8 @@ public sealed record TestResponse(
     string Semester,
     string SchoolYear,
     string SetLabel,
+    Guid? CreatedByUserId,
+    string? CreatedByName,
     int DurationMinutes,
     int TotalQuestions,
     int TotalPoints,
