@@ -1,6 +1,7 @@
 using Databank.Abstract;
 using Databank.Common;
 using Databank.Database;
+using Databank.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace Databank.Features.Tests.List;
@@ -20,9 +21,8 @@ public sealed class GetTestsEndpoint : IEndpoint
                 CancellationToken ct = default) =>
         {
             var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
-            var query = dbContext.Tests
-                .AsNoTracking()
-                .Include(t => t.CreatedByUser);
+            IQueryable<Test> query = dbContext.Tests
+                .AsNoTracking();
 
             if (subjectId.HasValue)
             {
@@ -48,6 +48,7 @@ public sealed class GetTestsEndpoint : IEndpoint
 
             var tests = await query
                 .OrderByDescending(t => t.CreatedAt)
+                .Include(t => t.CreatedByUser)
                 .Skip(pagination.Skip)
                 .Take(pagination.Take)
                 .ToListAsync(ct);
