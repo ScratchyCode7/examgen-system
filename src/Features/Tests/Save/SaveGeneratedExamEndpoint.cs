@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using Databank.Abstract;
@@ -26,7 +27,9 @@ public sealed class SaveGeneratedExamEndpoint : IEndpoint
                 return TypedResults.BadRequest("At least one question must be provided.");
             }
 
-            var userIdClaim = httpContext.User.FindFirst("sub")?.Value ?? httpContext.User.FindFirst("userId")?.Value;
+            var userIdClaim = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? httpContext.User.FindFirst("sub")?.Value
+                ?? httpContext.User.FindFirst("userId")?.Value;
             Guid? createdByUserId = null;
             if (Guid.TryParse(userIdClaim, out var parsedUserId))
             {
