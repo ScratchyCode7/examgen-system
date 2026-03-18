@@ -1,3 +1,7 @@
+using System.Globalization;
+using System.Text;
+using System.Text.RegularExpressions;
+
 namespace Databank.Services;
 
 /// <summary>
@@ -11,6 +15,11 @@ public sealed class FileStorageService : IFileStorageService
     public FileStorageService(IWebHostEnvironment environment, ILogger<FileStorageService> logger)
     {
         _environment = environment;
+        if (string.IsNullOrWhiteSpace(_environment.WebRootPath))
+        {
+            _environment.WebRootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+        }
+
         _logger = logger;
     }
 
@@ -18,13 +27,13 @@ public sealed class FileStorageService : IFileStorageService
     {
         try
         {
-            // Sanitize filename
-            var sanitizedFileName = Path.GetFileNameWithoutExtension(fileName);
-            var extension = Path.GetExtension(fileName);
+            var webRoot = _environment.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+            var sanitizedFileName = SanitizeBaseFileName(Path.GetFileNameWithoutExtension(fileName));
+            var extension = NormalizeExtension(Path.GetExtension(fileName));
             var uniqueFileName = $"{sanitizedFileName}_{Guid.NewGuid():N}{extension}";
 
             // Create folder path
-            var uploadsFolder = Path.Combine(_environment.WebRootPath, "uploads", folder);
+            var uploadsFolder = Path.Combine(webRoot, "uploads", folder ?? string.Empty);
             Directory.CreateDirectory(uploadsFolder);
 
             // Full file path
@@ -35,7 +44,8 @@ public sealed class FileStorageService : IFileStorageService
             await fileStream.CopyToAsync(fileStreamOut);
 
             // Return relative path
-            var relativePath = Path.Combine("uploads", folder, uniqueFileName).Replace("\\", "/");
+            var safeFolder = folder ?? string.Empty;
+            var relativePath = Path.Combine("uploads", safeFolder, uniqueFileName).Replace("\\", "/");
             
             _logger.LogInformation("File saved successfully: {RelativePath}", relativePath);
             return relativePath;
@@ -51,8 +61,12 @@ public sealed class FileStorageService : IFileStorageService
     {
         try
         {
-            var fullPath = Path.Combine(_environment.WebRootPath, relativePath.Replace("/", "\\"));
-            
+            var fullPath = GetAbsolutePath(relativePath);
+            if (string.IsNullOrEmpty(fullPath))
+            {
+                return Task.FromResult(false);
+            }
+
             if (File.Exists(fullPath))
             {
                 File.Delete(fullPath);
@@ -74,7 +88,12 @@ public sealed class FileStorageService : IFileStorageService
     {
         try
         {
-            var fullPath = Path.Combine(_environment.WebRootPath, relativePath.Replace("/", "\\"));
+            var fullPath = GetAbsolutePath(relativePath);
+            if (string.IsNullOrEmpty(fullPath))
+            {
+                return Task.FromResult(false);
+            }
+
             return Task.FromResult(File.Exists(fullPath));
         }
         catch (Exception ex)
@@ -82,5 +101,73 @@ public sealed class FileStorageService : IFileStorageService
             _logger.LogError(ex, "Failed to check file existence: {RelativePath}", relativePath);
             return Task.FromResult(false);
         }
+    }
+
+    private static string NormalizeExtension(string extension)
+    {
+        if (string.IsNullOrWhiteSpace(extension))
+        {
+            return string.Empty;
+        }
+
+        var cleaned = extension.Trim();
+        return cleaned.StartsWith('.') ? cleaned.ToLowerInvariant() : $".{cleaned.ToLowerInvariant()}";
+    }
+
+    private static string SanitizeBaseFileName(string? fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            return "upload";
+        }
+
+        var normalized = fileName.Normalize(NormalizationForm.FormD);
+        var builder = new StringBuilder(normalized.Length);
+
+        foreach (var c in normalized)
+        {
+            var category = CharUnicodeInfo.GetUnicodeCategory(c);
+            if (category == UnicodeCategory.NonSpacingMark)
+            {
+                continue;
+            }
+
+            if (char.IsLetterOrDigit(c))
+            {
+                builder.Append(char.ToLowerInvariant(c));
+            }
+            else if (c == '-' || c == '_')
+            {
+                builder.Append(c);
+            }
+            else
+            {
+                builder.Append('-');
+            }
+        }
+
+        var sanitized = Regex.Replace(builder.ToString(), "-+", "-").Trim('-');
+        return string.IsNullOrEmpty(sanitized) ? "upload" : sanitized;
+    }
+
+    private string GetAbsolutePath(string? relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath) || string.IsNullOrWhiteSpace(_environment.WebRootPath))
+        {
+            return string.Empty;
+        }
+
+        var normalized = relativePath
+            .Replace("\\", "/")
+            .TrimStart('/');
+
+        var pathSegments = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var combinedPath = _environment.WebRootPath;
+        foreach (var segment in pathSegments)
+        {
+            combinedPath = Path.Combine(combinedPath, segment);
+        }
+
+        return combinedPath;
     }
 }
