@@ -11,6 +11,7 @@ public static class UserMappings
             user.UserId,
             user.FirstName,
             user.LastName,
+            user.ProfileImagePath,
             departmentIds.FirstOrDefault() == 0 ? null : departmentIds.FirstOrDefault(),
             departmentIds,
             user.Username,

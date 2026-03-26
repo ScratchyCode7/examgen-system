@@ -82,6 +82,20 @@ export const apiService = {
     return response.data;
   },
 
+  getMyAccount: async () => {
+    const response = await apiClient.get('/api/account/me');
+    return response.data;
+  },
+
+  updateMyAccount: async (formData) => {
+    const response = await apiClient.put('/api/account/me', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
   // Users
   getUsers: async (pageNumber = 1, pageSize = 10) => {
     const response = await apiClient.get(`/api/users?pageNumber=${pageNumber}&pageSize=${pageSize}`);

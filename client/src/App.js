@@ -15,6 +15,7 @@ import TestEncodingAndEditing from './pages/TestEncodingAndEditing';
 import TestGeneration from './pages/TestGeneration';
 import SavedExamsReport from './pages/SavedExamsReport';
 import ActivityLogs from './pages/ActivityLogs';
+import AccountSettings from './pages/AccountSettings';
 
 function App() {
   return (
@@ -78,6 +79,14 @@ function App() {
             element={
               <ProtectedRoute requireAdmin={true}>
                 <ActivityLogs />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/account/settings"
+            element={
+              <ProtectedRoute>
+                <AccountSettings />
               </ProtectedRoute>
             }
           />

@@ -63,6 +63,7 @@ export const AuthProvider = ({ children }) => {
         email: payload.email || credentials.username,
         firstName: '', // Will need to fetch from API if needed
         lastName: '',  // Will need to fetch from API if needed
+        profileImagePath: null,
         isAdmin: payload.isAdmin === 'true' || payload.isAdmin === true,
         departmentIds: departmentIds,
         departmentId: departmentIds[0] || null, // Legacy: keep first department for backward compatibility
@@ -74,6 +75,7 @@ export const AuthProvider = ({ children }) => {
           const fullUser = await apiService.getUser(userData.userId);
           userData.firstName = fullUser.firstName || '';
           userData.lastName = fullUser.lastName || '';
+          userData.profileImagePath = fullUser.profileImagePath || null;
           userData.departmentIds = fullUser.departmentIds || userData.departmentIds;
           userData.departmentId = fullUser.departmentId || userData.departmentIds[0] || null;
         } catch (err) {
@@ -103,6 +105,22 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('activeDepartmentId');
     setUser(null);
     setIsAuthenticated(false);
+  }, []);
+
+  const updateCurrentUser = useCallback((updates) => {
+    setUser((previousUser) => {
+      if (!previousUser) {
+        return previousUser;
+      }
+
+      const nextUser = {
+        ...previousUser,
+        ...updates,
+      };
+
+      localStorage.setItem('user', JSON.stringify(nextUser));
+      return nextUser;
+    });
   }, []);
 
   const clearInactivityTimer = useCallback(() => {
@@ -170,6 +188,7 @@ export const AuthProvider = ({ children }) => {
     hasAccessToDepartmentCode,
     login,
     logout,
+    updateCurrentUser,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

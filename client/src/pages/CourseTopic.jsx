@@ -212,6 +212,8 @@ const CourseTopic = () => {
       setIsLogoutModalOpen(true);
     } else if (action === 'Activity Logs') {
       navigate('/activity-logs');
+    } else if (action === 'Edit Account') {
+      navigate('/account/settings');
     } else {
       console.log('Navigate to', action);
     }

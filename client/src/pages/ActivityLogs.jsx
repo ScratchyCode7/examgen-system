@@ -94,6 +94,8 @@ const ActivityLogs = () => {
       if (typeof window !== 'undefined') {
         window.open(HELP_CENTER_URL, '_blank', 'noopener,noreferrer');
       }
+    } else if (action === 'Edit Account') {
+      navigate('/account/settings');
     }
   };
 
