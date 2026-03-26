@@ -38,6 +38,11 @@ const AccountSettings = () => {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [formErrors, setFormErrors] = useState({});
 
+  // Back button handler
+  const handleBack = () => {
+    navigate(-1);
+  };
+
   useEffect(() => {
     let isDisposed = false;
 
@@ -176,111 +181,119 @@ const AccountSettings = () => {
   const displayInitial = (fullName || user?.username || 'U').charAt(0).toUpperCase();
 
   return (
-    <div className={`account-settings-page ${isDarkMode ? 'dark' : ''}`}>
-      <div className="account-settings-card">
-        <button type="button" className="account-back-btn" onClick={() => navigate(-1)}>
-          <ArrowLeft size={16} /> Back
-        </button>
+    <div className={`dashboard ${isDarkMode ? 'dark' : ''}`}>
+      <div className="main-container">
+        <div className="main-card">
+          <button type="button" className="account-back-btn" onClick={handleBack}>
+            <ArrowLeft size={16} /> Back
+          </button>
 
-        <h1>Account Settings</h1>
-        <p className="account-settings-subtitle">Update your profile picture, name, and password.</p>
+          <h2>Account Settings</h2>
+          <p className="subtitle">Update your profile picture, name, and password.</p>
 
-        {loadingProfile ? (
-          <div className="account-settings-loading">Loading account information...</div>
-        ) : (
-          <form
-            className="account-settings-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              handleSaveClick();
-            }}
-          >
-            <div className="profile-picture-section">
-              <div className="profile-picture-preview">
-                {currentImageSrc ? (
-                  <img src={currentImageSrc} alt="Profile" />
-                ) : (
-                  <span>{displayInitial}</span>
-                )}
+          {loadingProfile ? (
+            <div className="account-loading">Loading account information...</div>
+          ) : (
+            <form
+              className="account-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                handleSaveClick();
+              }}
+            >
+              {/* Profile Picture Section */}
+              <div className="profile-section">
+                <div className="profile-image-wrapper">
+                  <div className="profile-image">
+                    {currentImageSrc ? (
+                      <img src={currentImageSrc} alt="Profile" />
+                    ) : (
+                      <span>{displayInitial}</span>
+                    )}
+                  </div>
+                  <label className="profile-upload-btn" htmlFor="profile-upload-input">
+                    <Upload size={16} /> Change picture
+                  </label>
+                  <input
+                    id="profile-upload-input"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageChange}
+                    hidden
+                  />
+                </div>
               </div>
-              <label className="profile-upload-btn" htmlFor="profile-upload-input">
-                <Upload size={16} /> Change picture
-              </label>
-              <input
-                id="profile-upload-input"
-                type="file"
-                accept="image/*"
-                onChange={handleImageChange}
-                hidden
-              />
-            </div>
 
-            <div className="account-field-group">
-              <label htmlFor="fullName">Full Name</label>
-              <input
-                id="fullName"
-                type="text"
-                value={fullName}
-                onChange={(event) => setFullName(event.target.value)}
-                placeholder="Enter your full name"
-              />
-              {formErrors.fullName && <p className="field-error">{formErrors.fullName}</p>}
-            </div>
+              {/* Form Section */}
+              <div className="input-section">
+                <div className="field-container">
+                  <label htmlFor="fullName">Full Name</label>
+                  <input
+                    id="fullName"
+                    type="text"
+                    value={fullName}
+                    onChange={(event) => setFullName(event.target.value)}
+                    placeholder="Enter your full name"
+                  />
+                  {formErrors.fullName && <p className="field-error">{formErrors.fullName}</p>}
+                </div>
 
-            <div className="account-field-group">
-              <label htmlFor="email">Email</label>
-              <input id="email" type="email" value={email} disabled readOnly />
-            </div>
+                <div className="field-container">
+                  <label htmlFor="email">Email</label>
+                  <input id="email" type="email" value={email} disabled readOnly />
+                </div>
 
-            <div className="account-field-group">
-              <label htmlFor="newPassword">New Password</label>
-              <div className="password-input-wrapper">
-                <input
-                  id="newPassword"
-                  type={showNewPassword ? 'text' : 'password'}
-                  value={newPassword}
-                  onChange={(event) => setNewPassword(event.target.value)}
-                  placeholder="Leave blank to keep current password"
-                />
-                <button
-                  type="button"
-                  className="password-toggle-btn"
-                  onClick={() => setShowNewPassword((prev) => !prev)}
-                >
-                  {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                <div className="field-container">
+                  <label htmlFor="newPassword">New Password (optional)</label>
+                  <div className="password-input-wrapper">
+                    <input
+                      id="newPassword"
+                      type={showNewPassword ? 'text' : 'password'}
+                      value={newPassword}
+                      onChange={(event) => setNewPassword(event.target.value)}
+                      placeholder="Leave blank to keep current password"
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle-btn"
+                      onClick={() => setShowNewPassword((prev) => !prev)}
+                    >
+                      {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  {formErrors.newPassword && <p className="field-error">{formErrors.newPassword}</p>}
+                </div>
+
+                <div className="field-container">
+                  <label htmlFor="confirmPassword">Confirm Password</label>
+                  <div className="password-input-wrapper">
+                    <input
+                      id="confirmPassword"
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      value={confirmPassword}
+                      onChange={(event) => setConfirmPassword(event.target.value)}
+                      placeholder="Confirm your new password"
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle-btn"
+                      onClick={() => setShowConfirmPassword((prev) => !prev)}
+                    >
+                      {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  {formErrors.confirmPassword && <p className="field-error">{formErrors.confirmPassword}</p>}
+                </div>
+              </div>
+
+              <div className="account-actions">
+                <button type="submit" className="action-btn" disabled={savingProfile}>
+                  {savingProfile ? 'Saving Changes...' : 'Save Changes'}
                 </button>
               </div>
-              {formErrors.newPassword && <p className="field-error">{formErrors.newPassword}</p>}
-            </div>
-
-            <div className="account-field-group">
-              <label htmlFor="confirmPassword">Confirm Password</label>
-              <div className="password-input-wrapper">
-                <input
-                  id="confirmPassword"
-                  type={showConfirmPassword ? 'text' : 'password'}
-                  value={confirmPassword}
-                  onChange={(event) => setConfirmPassword(event.target.value)}
-                  placeholder="Confirm your new password"
-                />
-                <button
-                  type="button"
-                  className="password-toggle-btn"
-                  onClick={() => setShowConfirmPassword((prev) => !prev)}
-                >
-                  {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-              {formErrors.confirmPassword && <p className="field-error">{formErrors.confirmPassword}</p>}
-            </div>
-
-            <div className="account-actions">
-              <button type="submit" className="account-save-btn" disabled={savingProfile}>
-                {savingProfile ? 'Saving Changes...' : 'Save Changes'}
-              </button>
-            </div>
-          </form>
-        )}
+            </form>
+          )}
+        </div>
       </div>
 
       <ConfirmationModal
