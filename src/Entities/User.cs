@@ -33,4 +33,5 @@ public sealed class User
     
     public ICollection<UserDepartment> UserDepartments { get; set; } = new List<UserDepartment>();
     public ICollection<ActivityLog> ActivityLogs { get; set; } = new List<ActivityLog>();
+    public ICollection<UserSession> Sessions { get; set; } = new List<UserSession>();
 }

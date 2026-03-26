@@ -38,6 +38,9 @@ public sealed class TestConfiguration : IEntityTypeConfiguration<Test>
         builder.Property(x => x.GenerationNotes)
             .HasMaxLength(1000);
 
+        builder.Property(x => x.IsDraft)
+            .HasDefaultValue(false);
+
         builder.Property(x => x.IsPublished)
             .HasDefaultValue(false);
 

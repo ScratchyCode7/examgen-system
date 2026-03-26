@@ -1,0 +1,248 @@
+.question-image-upload {
+  margin: 1.5rem 0;
+  padding: 1.5rem;
+  border: 2px dashed #cbd5e0;
+  border-radius: 12px;
+  background: #f7fafc;
+  transition: all 0.3s ease;
+}
+
+.question-image-upload.dark {
+  background: #1e293b;
+  border-color: #475569;
+}
+
+.image-upload-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.question-image-upload.dark .image-upload-header {
+  color: #e2e8f0;
+}
+
+.image-upload-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2rem;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.image-upload-area:hover {
+  background: #edf2f7;
+}
+
+.question-image-upload.dark .image-upload-area:hover {
+  background: #334155;
+}
+
+.image-upload-area svg {
+  color: #718096;
+  margin-bottom: 1rem;
+}
+
+.image-upload-area p {
+  margin: 0.5rem 0;
+  color: #4a5568;
+  font-weight: 500;
+}
+
+.image-upload-area small {
+  color: #a0aec0;
+}
+
+.question-image-upload.dark .image-upload-area p {
+  color: #cbd5e0;
+}
+
+.question-image-upload.dark .image-upload-area small {
+  color: #94a3b8;
+}
+
+.image-preview-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.image-preview {
+  padding: 1rem;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.question-image-upload.dark .image-preview {
+  background: #0f172a;
+  border-color: #334155;
+}
+
+.image-preview img {
+  display: inline-block;
+  border-radius: 4px;
+}
+
+.image-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.control-group label {
+  font-weight: 500;
+  color: #4a5568;
+  font-size: 0.9rem;
+}
+
+.question-image-upload.dark .control-group label {
+  color: #cbd5e0;
+}
+
+.control-group input[type="range"] {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: #e2e8f0;
+  outline: none;
+  -webkit-appearance: none;
+}
+
+.question-image-upload.dark .control-group input[type="range"] {
+  background: #334155;
+}
+
+.control-group input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #4299e1;
+  cursor: pointer;
+}
+
+.control-group input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #4299e1;
+  cursor: pointer;
+  border: none;
+}
+
+.alignment-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.align-btn {
+  flex: 1;
+  padding: 0.5rem 1rem;
+  border: 2px solid #e2e8f0;
+  background: white;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  color: #4a5568;
+  transition: all 0.2s ease;
+}
+
+.align-btn:hover {
+  background: #edf2f7;
+}
+
+.align-btn.active {
+  background: #4299e1;
+  border-color: #4299e1;
+  color: white;
+}
+
+.question-image-upload.dark .align-btn {
+  background: #1e293b;
+  border-color: #475569;
+  color: #cbd5e0;
+}
+
+.question-image-upload.dark .align-btn:hover {
+  background: #334155;
+}
+
+.question-image-upload.dark .align-btn.active {
+  background: #4299e1;
+  border-color: #4299e1;
+  color: white;
+}
+
+.delete-image-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: #fed7d7;
+  color: #c53030;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.delete-image-btn:hover {
+  background: #fc8181;
+  color: white;
+}
+
+.delete-image-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.image-upload-hint {
+  margin-top: 1rem;
+  text-align: center;
+}
+
+.image-upload-hint small {
+  color: #718096;
+  font-style: italic;
+}
+
+.question-image-upload.dark .image-upload-hint small {
+  color: #94a3b8;
+}
+
+/* Print styles for images */
+@media print {
+  .image-controls,
+  .delete-image-btn,
+  .image-upload-hint {
+    display: none !important;
+  }
+
+  .image-preview {
+    border: none;
+    padding: 0;
+    background: none;
+    page-break-inside: avoid;
+  }
+
+  .image-preview img {
+    max-height: 600px;
+    page-break-inside: avoid;
+  }
+}

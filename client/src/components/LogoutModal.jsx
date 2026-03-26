@@ -1,20 +1,19 @@
 import React from 'react';
+import ConfirmationModal from './ConfirmationModal';
 
 const LogoutModal = ({ isOpen, onClose, onConfirm, isDarkMode }) => {
-  if (!isOpen) return null;
-
   return (
-    <div className="logout-overlay">
-      <div className={`logout-modal ${isDarkMode ? 'dark' : ''}`}>
-        <h2>Confirm Logout</h2>
-        <p>Are you sure you want to log out?</p>
-
-        <div className="logout-actions">
-          <button className="btn-cancel" onClick={onClose}>No</button>
-          <button className="btn-confirm" onClick={onConfirm}>Yes, logout</button>
-        </div>
-      </div>
-    </div>
+    <ConfirmationModal
+      isOpen={isOpen}
+      title="Confirm Logout"
+      message="Are you sure you want to log out?"
+      onConfirm={onConfirm}
+      onCancel={onClose}
+      cancelText="No"
+      confirmText="Yes, logout"
+      isDarkMode={isDarkMode}
+      isDanger={true}
+    />
   );
 };
 

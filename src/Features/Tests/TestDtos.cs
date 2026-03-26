@@ -33,7 +33,8 @@ public sealed record SaveGeneratedExamQuestionDto(
 
 public sealed record SaveGeneratedExamOptionDto(
     int OptionId,
-    int DisplayOrder
+    int DisplayOrder,
+    bool? IsCorrect = null
 );
 
 public sealed record TestResponse(
@@ -56,6 +57,7 @@ public sealed record TestResponse(
     DateTime AvailableFrom,
     DateTime CreatedAt,
     DateTime UpdatedAt,
+    bool IsDraft,
     string? SpecificationSnapshot,
     string QuestionSignature,
     List<QuestionResponse>? Questions = null

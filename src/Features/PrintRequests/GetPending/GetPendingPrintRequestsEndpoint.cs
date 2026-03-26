@@ -33,7 +33,8 @@ public sealed class GetPendingPrintRequestsEndpoint : IEndpoint
                     pr.ProcessedByUserId,
                     null,
                     pr.Notes,
-                    pr.CopiesRequested
+                    pr.CopiesRequested,
+                    pr.IsDraftRequest
                 ))
                 .ToListAsync(ct);
 

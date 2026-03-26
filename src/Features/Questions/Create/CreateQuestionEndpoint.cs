@@ -13,6 +13,7 @@ public sealed class CreateQuestionEndpoint : IEndpoint
         app.MapPost("/api/questions", async Task<IResult> (
                 QuestionRequest request,
                 AppDbContext dbContext,
+                ISearchService searchService,
                 ILogger<CreateQuestionEndpoint> logger,
                 ILoggingService loggingService,
                 HttpContext httpContext,
@@ -78,6 +79,15 @@ public sealed class CreateQuestionEndpoint : IEndpoint
 
                 await dbContext.Options.AddRangeAsync(options, ct);
                 await dbContext.SaveChangesAsync(ct);
+            }
+
+            try
+            {
+                await searchService.IndexQuestionAsync(question.Id, ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Question {QuestionId} saved but search index update failed.", question.Id);
             }
 
             // Reload question with options for response

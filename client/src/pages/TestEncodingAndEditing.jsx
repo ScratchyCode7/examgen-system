@@ -6,20 +6,22 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { 
-    Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search, 
-    FileText, Plus, Edit2, Trash2, Save,
+    Home, ClipboardList, BookOpen, Settings, LogOut, User, Users, Sun, Moon, Search, 
+    FileText, Plus, Edit2, Trash2, Save, HelpCircle,
     Bold, Italic, Underline, Link, List, ListOrdered, Sigma, Image, Edit, 
     Heading1, Heading2,
 } from 'lucide-react';
 import NavItem from '../components/NavItem';
 import DropdownNavItem from '../components/DropdownNavItem';
+import BM25QuestionSearch from '../components/BM25QuestionSearch';
 import LogoutModal from '../components/LogoutModal';
-import QuestionImageUpload from '../components/QuestionImageUpload';
+import ConfirmationModal from '../components/ConfirmationModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useToast } from '../contexts/ToastContext';
 import { apiService } from '../services/api';
 import DEPARTMENT_LOGOS from '../constants/departmentLogos';
+import { HELP_CENTER_URL } from '../constants/helpLinks';
 import '../styles/TestEncodingAndEditing.css';
 
 // Assets
@@ -62,6 +64,23 @@ const MATH_SYMBOLS = [
     '√', '³√', '⁄',
     '°', '⊥', '∠', '∆', 
 ];
+
+const IMAGE_EDITOR_DEFAULTS = {
+    brightness: 100,
+    contrast: 100,
+    saturation: 100,
+    grayscale: 0,
+    rotate: 0,
+    imageSize: 100,
+    alignment: 'Center',
+};
+
+const IMAGE_EDITOR_DEFAULT_CROP = {
+    x: 12,
+    y: 12,
+    width: 76,
+    height: 76,
+};
 // -----------------
 
 
@@ -241,6 +260,9 @@ const TestEncodingAndEditing = () => {
     const [activeTab, setActiveTab] = useState('Test Question Encoding');
     const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
     const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [pendingDeleteQuestionId, setPendingDeleteQuestionId] = useState(null);
+    const [isDeletingQuestion, setIsDeletingQuestion] = useState(false);
     const userMenuRef = useRef(null);
 
     // Backend data state
@@ -271,10 +293,25 @@ const TestEncodingAndEditing = () => {
     const [mathPickerPosition, setMathPickerPosition] = useState(null);
     const activeEditableRef = useRef(null); 
     const activeSetterRef = useRef(null); 
+    const searchScopeRef = useRef(null);
+    const encodingFormRef = useRef(null);
     const [savedRange, setSavedRange] = useState(null); // The critical saved selection range
     const [activeCommands, setActiveCommands] = useState({}); // State for TOOLBAR HIGHLIGHTING
+    const imageFileInputRef = useRef(null);
+    const imagePreviewCanvasRef = useRef(null);
+    const imageEditTargetRef = useRef({ mode: 'insert', element: null });
+    const [isImageEditorOpen, setIsImageEditorOpen] = useState(false);
+    const [imageEditorSource, setImageEditorSource] = useState('');
+    const [originalImageSource, setOriginalImageSource] = useState('');
+    const [imageEditorSettings, setImageEditorSettings] = useState({ ...IMAGE_EDITOR_DEFAULTS });
+    const [cropSelection, setCropSelection] = useState({ ...IMAGE_EDITOR_DEFAULT_CROP });
+    const [isCropMode, setIsCropMode] = useState(false);
+    const [isCropApplied, setIsCropApplied] = useState(false);
+    const [cropDragState, setCropDragState] = useState(null);
+    const [isApplyingImageEdits, setIsApplyingImageEdits] = useState(false);
 
     const [searchText, setSearchText] = useState("");
+    const [isBm25SearchActive, setIsBm25SearchActive] = useState(false);
     
     // Questions from backend
     const [questions, setQuestions] = useState([]);
@@ -288,13 +325,8 @@ const TestEncodingAndEditing = () => {
     const [choiceD, setChoiceD] = useState('');
     const [explanation, setExplanation] = useState('');
     const [correctAnswer, setCorrectAnswer] = useState(''); 
-    const [questionImage, setQuestionImage] = useState(null);
 
     const [editingQuestion, setEditingQuestion] = useState(null); 
-    
-    // Ref for QuestionImageUpload to access pending image upload method
-    const imageUploadRef = useRef(null); 
-    const questionImageSectionRef = useRef(null);
     
 
     // --- Effects & Handlers ---
@@ -428,7 +460,6 @@ const TestEncodingAndEditing = () => {
         setCorrectAnswer(''); 
         setBloomLevel('');
         setEditingQuestion(null);
-        setQuestionImage(null);
         
         // Clear contentEditable divs visually
         document.querySelectorAll('.content-editable-area').forEach(el => el.innerHTML = '');
@@ -560,6 +591,406 @@ const TestEncodingAndEditing = () => {
         return activeSetterRef.current === setter ? activeCommands : {};
     };
 
+    const getImageAlignmentStyle = (alignment) => {
+        if (alignment === 'Left') {
+            return { marginLeft: '0', marginRight: 'auto' };
+        }
+        if (alignment === 'Right') {
+            return { marginLeft: 'auto', marginRight: '0' };
+        }
+        return { marginLeft: 'auto', marginRight: 'auto' };
+    };
+
+    const getImageEditorSettingsFromElement = (imageElement) => {
+        if (!imageElement) return { ...IMAGE_EDITOR_DEFAULTS };
+
+        const widthMatch = /^([\d.]+)%$/.exec((imageElement.style.width || '').trim());
+        const parsedSize = widthMatch ? Number(widthMatch[1]) : 100;
+
+        const savedAlignment = imageElement.dataset?.alignment;
+        let alignment = 'Center';
+        if (savedAlignment === 'Left' || savedAlignment === 'Center' || savedAlignment === 'Right') {
+            alignment = savedAlignment;
+        } else {
+            const marginLeft = imageElement.style.marginLeft;
+            const marginRight = imageElement.style.marginRight;
+            if (marginLeft === 'auto' && marginRight !== 'auto') {
+                alignment = 'Right';
+            } else if (marginLeft !== 'auto' && marginRight === 'auto') {
+                alignment = 'Left';
+            }
+        }
+
+        return {
+            ...IMAGE_EDITOR_DEFAULTS,
+            imageSize: Math.max(20, Math.min(100, Number.isFinite(parsedSize) ? parsedSize : 100)),
+            alignment,
+        };
+    };
+
+    const getOriginalImageSourceFromElement = (imageElement) => {
+        if (!imageElement) return '';
+        return imageElement.dataset?.originalSrc || imageElement.src || '';
+    };
+
+    const resetImageEditorStateToOriginal = () => {
+        const fallbackSource = originalImageSource || imageEditorSource;
+        if (fallbackSource) {
+            setImageEditorSource(fallbackSource);
+        }
+        setImageEditorSettings({ ...IMAGE_EDITOR_DEFAULTS });
+        setCropSelection({ ...IMAGE_EDITOR_DEFAULT_CROP });
+        setIsCropMode(false);
+        setIsCropApplied(false);
+        setCropDragState(null);
+    };
+
+    const openImageEditor = (imageSource, mode = 'insert', targetElement = null, initialSettings = null, baseOriginalSource = null) => {
+        imageEditTargetRef.current = { mode, element: targetElement };
+        setImageEditorSource(imageSource);
+        setOriginalImageSource(baseOriginalSource || imageSource);
+        setImageEditorSettings({ ...IMAGE_EDITOR_DEFAULTS, ...(initialSettings || {}) });
+        setCropSelection({ ...IMAGE_EDITOR_DEFAULT_CROP });
+        setIsCropMode(false);
+        setIsCropApplied(false);
+        setCropDragState(null);
+        setIsImageEditorOpen(true);
+    };
+
+    const startCropDrag = (event, dragType) => {
+        if (!isCropMode || !imagePreviewCanvasRef.current) return;
+        event.preventDefault();
+        event.stopPropagation();
+
+        setCropDragState({
+            dragType,
+            startClientX: event.clientX,
+            startClientY: event.clientY,
+            startRect: { ...cropSelection },
+        });
+    };
+
+    useEffect(() => {
+        if (!cropDragState || !imagePreviewCanvasRef.current) return;
+
+        const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+        const onMouseMove = (event) => {
+            if (!imagePreviewCanvasRef.current) return;
+
+            const bounds = imagePreviewCanvasRef.current.getBoundingClientRect();
+            if (!bounds.width || !bounds.height) return;
+
+            const deltaPercentX = ((event.clientX - cropDragState.startClientX) / bounds.width) * 100;
+            const deltaPercentY = ((event.clientY - cropDragState.startClientY) / bounds.height) * 100;
+
+            const minSize = 5;
+            const maxX = 100 - cropDragState.startRect.width;
+            const maxY = 100 - cropDragState.startRect.height;
+
+            if (cropDragState.dragType === 'move') {
+                const nextX = clamp(cropDragState.startRect.x + deltaPercentX, 0, maxX);
+                const nextY = clamp(cropDragState.startRect.y + deltaPercentY, 0, maxY);
+                setCropSelection(prev => ({ ...prev, x: nextX, y: nextY }));
+                return;
+            }
+
+            if (cropDragState.dragType === 'resize-se') {
+                const nextWidth = clamp(cropDragState.startRect.width + deltaPercentX, minSize, 100 - cropDragState.startRect.x);
+                const nextHeight = clamp(cropDragState.startRect.height + deltaPercentY, minSize, 100 - cropDragState.startRect.y);
+                setCropSelection(prev => ({ ...prev, width: nextWidth, height: nextHeight }));
+                return;
+            }
+
+            if (cropDragState.dragType === 'resize-sw') {
+                const proposedX = clamp(cropDragState.startRect.x + deltaPercentX, 0, cropDragState.startRect.x + cropDragState.startRect.width - minSize);
+                const proposedWidth = clamp(cropDragState.startRect.width - (proposedX - cropDragState.startRect.x), minSize, 100 - proposedX);
+                const proposedHeight = clamp(cropDragState.startRect.height + deltaPercentY, minSize, 100 - cropDragState.startRect.y);
+                setCropSelection(prev => ({ ...prev, x: proposedX, width: proposedWidth, height: proposedHeight }));
+                return;
+            }
+
+            if (cropDragState.dragType === 'resize-ne') {
+                const proposedY = clamp(cropDragState.startRect.y + deltaPercentY, 0, cropDragState.startRect.y + cropDragState.startRect.height - minSize);
+                const proposedHeight = clamp(cropDragState.startRect.height - (proposedY - cropDragState.startRect.y), minSize, 100 - proposedY);
+                const proposedWidth = clamp(cropDragState.startRect.width + deltaPercentX, minSize, 100 - cropDragState.startRect.x);
+                setCropSelection(prev => ({ ...prev, y: proposedY, height: proposedHeight, width: proposedWidth }));
+                return;
+            }
+
+            if (cropDragState.dragType === 'resize-nw') {
+                const proposedX = clamp(cropDragState.startRect.x + deltaPercentX, 0, cropDragState.startRect.x + cropDragState.startRect.width - minSize);
+                const proposedY = clamp(cropDragState.startRect.y + deltaPercentY, 0, cropDragState.startRect.y + cropDragState.startRect.height - minSize);
+                const proposedWidth = clamp(cropDragState.startRect.width - (proposedX - cropDragState.startRect.x), minSize, 100 - proposedX);
+                const proposedHeight = clamp(cropDragState.startRect.height - (proposedY - cropDragState.startRect.y), minSize, 100 - proposedY);
+                setCropSelection(prev => ({ ...prev, x: proposedX, y: proposedY, width: proposedWidth, height: proposedHeight }));
+            }
+        };
+
+        const onMouseUp = () => {
+            setCropDragState(null);
+        };
+
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+
+        return () => {
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+        };
+    }, [cropDragState]);
+
+    const triggerImagePicker = (mode = 'insert', targetElement = null) => {
+        imageEditTargetRef.current = { mode, element: targetElement };
+        if (!imageFileInputRef.current) {
+            showToast({ message: 'Image picker is currently unavailable.', type: 'error' });
+            return;
+        }
+        imageFileInputRef.current.value = '';
+        imageFileInputRef.current.click();
+    };
+
+    const findSelectedImageElement = () => {
+        const currentRef = activeEditableRef.current;
+        if (!currentRef) return null;
+
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) return null;
+
+        const range = selection.getRangeAt(0);
+        const commonNode = range.commonAncestorContainer;
+        const commonElement = commonNode.nodeType === Node.ELEMENT_NODE
+            ? commonNode
+            : commonNode.parentElement;
+
+        if (commonElement?.tagName === 'IMG' && currentRef.contains(commonElement)) {
+            return commonElement;
+        }
+
+        if (commonElement?.closest) {
+            const closestImage = commonElement.closest('img');
+            if (closestImage && currentRef.contains(closestImage)) {
+                return closestImage;
+            }
+        }
+
+        if (range.startContainer.nodeType === Node.ELEMENT_NODE) {
+            const startElement = range.startContainer;
+            const startChild = startElement.childNodes[range.startOffset];
+            if (startChild?.nodeType === Node.ELEMENT_NODE && startChild.tagName === 'IMG' && currentRef.contains(startChild)) {
+                return startChild;
+            }
+        }
+
+        return null;
+    };
+
+    const getFinalImageSizePercent = (imageSizePercent, shouldCrop, selection) => {
+        const baseSize = Math.max(20, Math.min(100, Number(imageSizePercent) || 100));
+        if (!shouldCrop) return baseSize;
+        const cropWidthScale = Math.max(0.1, Math.min(1, (selection?.width || 100) / 100));
+        return Math.max(10, Math.round(baseSize * cropWidthScale));
+    };
+
+    const applyImagePresentation = (imageElement, { imageSizePercent, shouldCrop, cropRect, alignment, originalSource }) => {
+        if (!imageElement) return;
+        const finalSizePercent = getFinalImageSizePercent(imageSizePercent, shouldCrop, cropRect);
+        const marginStyle = getImageAlignmentStyle(alignment);
+
+        imageElement.style.maxWidth = '100%';
+        imageElement.style.width = `${finalSizePercent}%`;
+        imageElement.style.height = 'auto';
+        imageElement.style.display = 'block';
+        imageElement.style.marginTop = '8px';
+        imageElement.style.marginBottom = '8px';
+        imageElement.style.marginLeft = marginStyle.marginLeft;
+        imageElement.style.marginRight = marginStyle.marginRight;
+        imageElement.dataset.alignment = alignment;
+        if (originalSource) {
+            imageElement.dataset.originalSrc = originalSource;
+        }
+    };
+
+    const insertImageAtCaret = (imageUrl, imageSizePercent = 100, shouldCrop = false, cropRect = null) => {
+        const currentRef = activeEditableRef.current;
+        if (!currentRef) return false;
+
+        currentRef.focus();
+        const selection = window.getSelection();
+
+        let rangeToUse;
+        if (savedRange && currentRef.contains(savedRange.startContainer)) {
+            rangeToUse = savedRange.cloneRange();
+        } else if (selection.rangeCount > 0 && currentRef.contains(selection.getRangeAt(0).startContainer)) {
+            rangeToUse = selection.getRangeAt(0).cloneRange();
+        } else {
+            rangeToUse = document.createRange();
+            rangeToUse.selectNodeContents(currentRef);
+            rangeToUse.collapse(false);
+        }
+
+        const imageElement = document.createElement('img');
+        imageElement.src = imageUrl;
+        imageElement.alt = 'Inserted image';
+        applyImagePresentation(imageElement, {
+            imageSizePercent,
+            shouldCrop,
+            cropRect,
+            alignment: imageEditorSettings.alignment,
+            originalSource: originalImageSource || imageEditorSource,
+        });
+
+        if (!rangeToUse.collapsed) {
+            rangeToUse.deleteContents();
+        }
+
+        rangeToUse.insertNode(imageElement);
+        rangeToUse.setStartAfter(imageElement);
+        rangeToUse.collapse(true);
+
+        selection.removeAllRanges();
+        selection.addRange(rangeToUse);
+
+        setSavedRange(rangeToUse);
+        if (activeSetterRef.current) {
+            activeSetterRef.current(currentRef.innerHTML);
+        }
+
+        return true;
+    };
+
+    const buildEditedImageDataUrl = (sourceUrl, settings, cropRect, shouldCrop) => {
+        return new Promise((resolve, reject) => {
+            const image = new window.Image();
+            image.crossOrigin = 'anonymous';
+
+            image.onload = () => {
+                try {
+                    const sourceWidth = image.naturalWidth || image.width;
+                    const sourceHeight = image.naturalHeight || image.height;
+
+                    const normalizedCrop = shouldCrop
+                        ? {
+                            x: Math.max(0, Math.min(100, cropRect.x)),
+                            y: Math.max(0, Math.min(100, cropRect.y)),
+                            width: Math.max(5, Math.min(100, cropRect.width)),
+                            height: Math.max(5, Math.min(100, cropRect.height)),
+                        }
+                        : { x: 0, y: 0, width: 100, height: 100 };
+
+                    const sourceX = Math.round((normalizedCrop.x / 100) * sourceWidth);
+                    const sourceY = Math.round((normalizedCrop.y / 100) * sourceHeight);
+                    const cropWidth = Math.max(1, Math.round((normalizedCrop.width / 100) * sourceWidth));
+                    const cropHeight = Math.max(1, Math.round((normalizedCrop.height / 100) * sourceHeight));
+
+                    const normalizedRotation = ((Number(settings.rotate) || 0) % 360 + 360) % 360;
+                    const swapDimensions = normalizedRotation === 90 || normalizedRotation === 270;
+                    const canvas = document.createElement('canvas');
+                    canvas.width = swapDimensions ? cropHeight : cropWidth;
+                    canvas.height = swapDimensions ? cropWidth : cropHeight;
+
+                    const context = canvas.getContext('2d');
+                    if (!context) {
+                        reject(new Error('Unable to initialize image editor canvas.'));
+                        return;
+                    }
+
+                    context.filter = `brightness(${settings.brightness}%) contrast(${settings.contrast}%) saturate(${settings.saturation}%) grayscale(${settings.grayscale}%)`;
+                    context.translate(canvas.width / 2, canvas.height / 2);
+                    context.rotate((normalizedRotation * Math.PI) / 180);
+                    context.drawImage(
+                        image,
+                        sourceX,
+                        sourceY,
+                        cropWidth,
+                        cropHeight,
+                        -cropWidth / 2,
+                        -cropHeight / 2,
+                        cropWidth,
+                        cropHeight
+                    );
+
+                    resolve(canvas.toDataURL('image/png'));
+                } catch (error) {
+                    reject(error);
+                }
+            };
+
+            image.onerror = () => reject(new Error('Unable to load image for editing.'));
+            image.src = sourceUrl;
+        });
+    };
+
+    const handleImageFileSelection = (event) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        if (!file.type.startsWith('image/')) {
+            showToast({ message: 'Please select an image file.', type: 'error' });
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (loadEvent) => {
+            const source = loadEvent.target?.result;
+            if (!source) {
+                showToast({ message: 'Failed to read selected image.', type: 'error' });
+                return;
+            }
+
+            const target = imageEditTargetRef.current || { mode: 'insert', element: null };
+            const initialSettings = target.mode === 'replace' && target.element
+                ? getImageEditorSettingsFromElement(target.element)
+                : null;
+            const originalSource = target.mode === 'replace' && target.element
+                ? getOriginalImageSourceFromElement(target.element)
+                : source;
+            openImageEditor(source, target.mode, target.element || null, initialSettings, originalSource);
+        };
+        reader.onerror = () => {
+            showToast({ message: 'Failed to read selected image.', type: 'error' });
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const applyImageEdits = async () => {
+        if (!imageEditorSource) return;
+
+        try {
+            setIsApplyingImageEdits(true);
+            const editedImageUrl = await buildEditedImageDataUrl(imageEditorSource, imageEditorSettings, cropSelection, isCropApplied);
+            const target = imageEditTargetRef.current || { mode: 'insert', element: null };
+
+            if (target.mode === 'replace' && target.element) {
+                target.element.src = editedImageUrl;
+                applyImagePresentation(target.element, {
+                    imageSizePercent: imageEditorSettings.imageSize,
+                    shouldCrop: isCropApplied,
+                    cropRect: cropSelection,
+                    alignment: imageEditorSettings.alignment,
+                    originalSource: getOriginalImageSourceFromElement(target.element) || originalImageSource || imageEditorSource,
+                });
+                if (activeEditableRef.current && activeSetterRef.current) {
+                    activeSetterRef.current(activeEditableRef.current.innerHTML);
+                }
+            } else {
+                const inserted = insertImageAtCaret(editedImageUrl, imageEditorSettings.imageSize, isCropApplied, cropSelection);
+                if (!inserted) {
+                    showToast({ message: 'Click inside a content field first.', type: 'info' });
+                    return;
+                }
+            }
+
+            setIsImageEditorOpen(false);
+            showToast({ message: isCropApplied ? 'Image cropped and inserted successfully.' : 'Image inserted successfully.', type: 'success' });
+        } catch (error) {
+            console.error('Failed to apply image edits:', error);
+            showToast({ message: 'Could not apply image edits. Try a different image.', type: 'error' });
+        } finally {
+            setIsApplyingImageEdits(false);
+        }
+    };
+
     const handleFormat = (type, command, value) => { 
         if (type === 'openPicker' && command === 'math') { 
             const element = value;
@@ -605,13 +1036,23 @@ const TestEncodingAndEditing = () => {
                 break;
             case 'image':
                 if(command==='insertImage'){ 
-                    const url = prompt("Enter image URL:"); 
-                    if(url) { 
-                        document.execCommand('insertImage', false, url); 
-                    }
+                    triggerImagePicker('insert');
+                    return;
                 }
                 else if(command==='editImage'){ 
-                    showToast({ message: 'Image editing tools are coming soon.', type: 'info' }); 
+                    const selectedImage = findSelectedImageElement();
+                    if (!selectedImage) {
+                        showToast({ message: 'Select an image inside the editor first, then click Edit Image.', type: 'info' });
+                        return;
+                    }
+                    openImageEditor(
+                        selectedImage.src,
+                        'replace',
+                        selectedImage,
+                        getImageEditorSettingsFromElement(selectedImage),
+                        getOriginalImageSourceFromElement(selectedImage)
+                    );
+                    return;
                 }
                 break;
             default: 
@@ -646,6 +1087,10 @@ const TestEncodingAndEditing = () => {
             setIsLogoutModalOpen(true);
         } else if (action === 'Activity Logs') {
             navigate('/activity-logs');
+        } else if (action === 'Need Help') {
+            if (typeof window !== 'undefined') {
+                window.open(HELP_CENTER_URL, '_blank', 'noopener,noreferrer');
+            }
         } else {
             console.log('Navigate to', action);
         }
@@ -711,17 +1156,24 @@ const TestEncodingAndEditing = () => {
         }, 0); 
     };
 
-    const handleQuestionImageRequest = () => {
-        if (questionImageSectionRef.current) {
-            questionImageSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
+    const handleEditableClick = (event, setter) => {
+        const currentEditable = event.currentTarget;
+        activeEditableRef.current = currentEditable;
+        activeSetterRef.current = setter;
 
-        if (imageUploadRef.current?.openFilePicker) {
-            imageUploadRef.current.openFilePicker();
+        if (event.target?.tagName === 'IMG') {
+            const selectedImage = event.target;
+            openImageEditor(
+                selectedImage.src,
+                'replace',
+                selectedImage,
+                getImageEditorSettingsFromElement(selectedImage),
+                getOriginalImageSourceFromElement(selectedImage)
+            );
             return;
         }
 
-        showToast({ message: 'Question image upload is currently unavailable. Please try again.', type: 'error' });
+        handleSaveRange();
     };
 
 
@@ -745,7 +1197,6 @@ const TestEncodingAndEditing = () => {
         
         // Populate the content fields with the question data
         setQuestionText(question.content || '');
-        setQuestionImage(question.image || null); 
         
         // Extract options (A, B, C, D) from question.options array
         if (question.options && Array.isArray(question.options)) {
@@ -764,19 +1215,38 @@ const TestEncodingAndEditing = () => {
         }
         
         setExplanation(question.explanation || ''); 
+
+        setTimeout(() => {
+            encodingFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 0);
     };
     
-    // Delete question handler
-    const handleDeleteQuestion = async (questionId) => {
-        if (!window.confirm('Are you sure you want to delete this question?')) return;
-        
+    const handleDeleteQuestion = (questionId) => {
+        setPendingDeleteQuestionId(questionId);
+        setIsDeleteModalOpen(true);
+    };
+
+    const handleCloseDeleteModal = () => {
+        if (isDeletingQuestion) return;
+        setIsDeleteModalOpen(false);
+        setPendingDeleteQuestionId(null);
+    };
+
+    const handleConfirmDeleteQuestion = async () => {
+        if (!pendingDeleteQuestionId) return;
+
         try {
-            await apiService.deleteQuestion(questionId);
-            setQuestions(questions.filter(q => q.id !== questionId));
+            setIsDeletingQuestion(true);
+            await apiService.deleteQuestion(pendingDeleteQuestionId);
+            setQuestions(prevQuestions => prevQuestions.filter(q => q.id !== pendingDeleteQuestionId));
             showToast({ message: 'Question deleted successfully.', type: 'success' });
+            setIsDeleteModalOpen(false);
+            setPendingDeleteQuestionId(null);
         } catch (err) {
             console.error('Failed to delete question:', err);
             showToast({ message: 'Failed to delete question. Please try again.', type: 'error' });
+        } finally {
+            setIsDeletingQuestion(false);
         }
     };
     
@@ -838,18 +1308,6 @@ const TestEncodingAndEditing = () => {
                 console.log('➕ Creating new question...');
                 savedQuestion = await apiService.createQuestion(questionData);
                 
-                // Upload pending image if user selected one before saving question
-                if (imageUploadRef.current?.hasPendingImage()) {
-                    try {
-                        console.log('📸 Uploading pending image for new question ID:', savedQuestion.id);
-                        await imageUploadRef.current.uploadPendingImage(savedQuestion.id);
-                        console.log('✅ Image uploaded successfully');
-                    } catch (imgError) {
-                        console.error('⚠️ Failed to upload image:', imgError);
-                        showToast({ message: 'Question saved, but the image upload failed. Try editing the question to upload again.', type: 'error' });
-                    }
-                }
-                
                 setQuestions([...questions, savedQuestion]);
                 showToast({ message: 'Question added successfully.', type: 'success' });
             }
@@ -883,6 +1341,21 @@ const TestEncodingAndEditing = () => {
     // Filter questions - all questions are already filtered by topic from useEffect
     const filteredQuestions = questions;
     const isFilterComplete = topic; // Need topic selected
+    const normalizedSearchText = searchText.trim().toLowerCase();
+
+    const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    const highlightMatch = (value) => {
+        const text = value == null ? '' : String(value);
+        if (!normalizedSearchText) return text;
+
+        const regex = new RegExp(`(${escapeRegExp(normalizedSearchText)})`, 'ig');
+        return text.split(regex).map((part, index) => (
+            part.toLowerCase() === normalizedSearchText
+                ? <mark key={`${part}-${index}`} className="search-highlight">{part}</mark>
+                : part
+        ));
+    };
     
     // Modified computeDataSummary to calculate based on Bloom levels
     const computeDataSummary = useCallback((targetQuestions) => {
@@ -914,6 +1387,14 @@ const TestEncodingAndEditing = () => {
     }, []);
 
     const summary = computeDataSummary(filteredQuestions);
+
+    const scrollToFirstSearchMatch = () => {
+        if (!normalizedSearchText) return;
+        const firstMatch = searchScopeRef.current?.querySelector('.search-highlight');
+        if (firstMatch) {
+            firstMatch.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    };
     
     // Group questions by Bloom Level for display (map backend values to grouped values)
     const groupedQuestions = filteredQuestions.reduce((acc, question) => {
@@ -943,10 +1424,198 @@ const TestEncodingAndEditing = () => {
         <div className={`dashboard test-encoding ${isDarkMode?'dark':''}`}>
             <div className="background" style={{backgroundImage:`url(${UPHSL})`}} />
             {isMathPickerOpen && <MathSymbolPicker position={mathPickerPosition} onSelect={insertSymbol} onClose={()=>setIsMathPickerOpen(false)} />}
+            <input
+                ref={imageFileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleImageFileSelection}
+                style={{ display: 'none' }}
+            />
             
             <LogoutModal isOpen={isLogoutModalOpen} onClose={()=>setIsLogoutModalOpen(false)} onConfirm={handleConfirmLogout} />
 
-            <div className="main-container" style={{marginTop:'2rem'}}>
+            <ConfirmationModal
+                isOpen={isDeleteModalOpen}
+                title="Confirm Delete"
+                message="Are you sure you want to delete this question?"
+                onCancel={handleCloseDeleteModal}
+                onConfirm={handleConfirmDeleteQuestion}
+                cancelText="Cancel"
+                confirmText={isDeletingQuestion ? 'Deleting...' : 'Delete'}
+                isLoading={isDeletingQuestion}
+                isDarkMode={isDarkMode}
+                isDanger={true}
+            />
+
+            {isImageEditorOpen && (
+                <div className="image-editor-overlay" role="dialog" aria-modal="true" aria-label="Image editor">
+                    <div className={`image-editor-modal ${isDarkMode ? 'dark' : ''}`}>
+                        <div className="image-editor-header">
+                            <h2>Edit Image</h2>
+                            <button className="image-editor-close" onClick={() => setIsImageEditorOpen(false)} disabled={isApplyingImageEdits}>
+                                ×
+                            </button>
+                        </div>
+
+                        <div className="image-editor-body">
+                            <div className="image-editor-preview-wrap">
+                                <div ref={imagePreviewCanvasRef} className="image-editor-preview-canvas">
+                                    <img
+                                        src={imageEditorSource}
+                                        alt="Preview"
+                                        className="image-editor-preview-image"
+                                        style={{
+                                            filter: `brightness(${imageEditorSettings.brightness}%) contrast(${imageEditorSettings.contrast}%) saturate(${imageEditorSettings.saturation}%) grayscale(${imageEditorSettings.grayscale}%)`,
+                                            transform: `rotate(${imageEditorSettings.rotate}deg)`,
+                                            width: `${getFinalImageSizePercent(imageEditorSettings.imageSize, isCropApplied, cropSelection)}%`,
+                                            ...getImageAlignmentStyle(imageEditorSettings.alignment),
+                                            clipPath: (isCropMode || isCropApplied)
+                                                ? `inset(${cropSelection.y}% ${Math.max(0, 100 - (cropSelection.x + cropSelection.width))}% ${Math.max(0, 100 - (cropSelection.y + cropSelection.height))}% ${cropSelection.x}%)`
+                                                : 'none',
+                                        }}
+                                    />
+                                    {isCropMode && (
+                                        <div className="crop-overlay-layer">
+                                            <div
+                                                className="crop-selection-box"
+                                                style={{
+                                                    left: `${cropSelection.x}%`,
+                                                    top: `${cropSelection.y}%`,
+                                                    width: `${cropSelection.width}%`,
+                                                    height: `${cropSelection.height}%`,
+                                                }}
+                                                onMouseDown={(event) => startCropDrag(event, 'move')}
+                                            >
+                                                <span className="crop-selection-size">{Math.round(cropSelection.width)}% × {Math.round(cropSelection.height)}%</span>
+                                                <span
+                                                    className="crop-resize-handle crop-resize-handle-nw"
+                                                    onMouseDown={(event) => startCropDrag(event, 'resize-nw')}
+                                                    title="Resize crop (top-left)"
+                                                />
+                                                <span
+                                                    className="crop-resize-handle crop-resize-handle-ne"
+                                                    onMouseDown={(event) => startCropDrag(event, 'resize-ne')}
+                                                    title="Resize crop (top-right)"
+                                                />
+                                                <span
+                                                    className="crop-resize-handle crop-resize-handle-sw"
+                                                    onMouseDown={(event) => startCropDrag(event, 'resize-sw')}
+                                                    title="Resize crop (bottom-left)"
+                                                />
+                                                <span
+                                                    className="crop-resize-handle crop-resize-handle-se"
+                                                    onMouseDown={(event) => startCropDrag(event, 'resize-se')}
+                                                    title="Resize crop (bottom-right)"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="image-editor-controls">
+                                <div className="image-editor-crop-actions">
+                                    <button
+                                        type="button"
+                                        className={`crop-toggle-btn ${isCropMode ? 'active' : ''}`}
+                                        onClick={() => {
+                                            setIsCropMode(prev => !prev);
+                                            if (!isCropMode) {
+                                                setIsCropApplied(false);
+                                            }
+                                        }}
+                                    >
+                                        {isCropMode ? 'Disable Crop Drag' : 'Enable Crop Drag'}
+                                    </button>
+                                    <div className="crop-action-row">
+                                        <button
+                                            type="button"
+                                            className="crop-apply-btn"
+                                            onClick={() => {
+                                                setIsCropApplied(true);
+                                                setIsCropMode(false);
+                                            }}
+                                            disabled={!isCropMode}
+                                        >
+                                            Crop Image
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="crop-reset-btn"
+                                            onClick={resetImageEditorStateToOriginal}
+                                        >
+                                            Reset Crop
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="crop-reset-btn"
+                                            onClick={resetImageEditorStateToOriginal}
+                                        >
+                                            Reset Image
+                                        </button>
+                                    </div>
+                                    {isCropMode && <p>Drag the crop box. Use any corner handle to resize, then click Crop Image.</p>}
+                                    {isCropApplied && <p className="crop-size-note">Cropped view: {Math.round(cropSelection.width)}% of original width (kept at cropped size for print).</p>}
+                                </div>
+
+                                <label>Brightness ({imageEditorSettings.brightness}%)</label>
+                                <input type="range" min="50" max="150" value={imageEditorSettings.brightness} onChange={(e) => setImageEditorSettings(prev => ({ ...prev, brightness: Number(e.target.value) }))} />
+
+                                <label>Contrast ({imageEditorSettings.contrast}%)</label>
+                                <input type="range" min="50" max="150" value={imageEditorSettings.contrast} onChange={(e) => setImageEditorSettings(prev => ({ ...prev, contrast: Number(e.target.value) }))} />
+
+                                <label>Saturation ({imageEditorSettings.saturation}%)</label>
+                                <input type="range" min="0" max="200" value={imageEditorSettings.saturation} onChange={(e) => setImageEditorSettings(prev => ({ ...prev, saturation: Number(e.target.value) }))} />
+
+                                <label>Grayscale ({imageEditorSettings.grayscale}%)</label>
+                                <input type="range" min="0" max="100" value={imageEditorSettings.grayscale} onChange={(e) => setImageEditorSettings(prev => ({ ...prev, grayscale: Number(e.target.value) }))} />
+
+                                <label>Image Size ({imageEditorSettings.imageSize}%)</label>
+                                <input type="range" min="20" max="100" value={imageEditorSettings.imageSize} onChange={(e) => setImageEditorSettings(prev => ({ ...prev, imageSize: Number(e.target.value) }))} />
+
+                                <label>Placement</label>
+                                <div className="align-action-row">
+                                    {['Left', 'Center', 'Right'].map((align) => (
+                                        <button
+                                            key={align}
+                                            type="button"
+                                            className={`align-btn ${imageEditorSettings.alignment === align ? 'active' : ''}`}
+                                            onClick={() => setImageEditorSettings(prev => ({ ...prev, alignment: align }))}
+                                        >
+                                            {align}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <label>Rotate ({imageEditorSettings.rotate}°)</label>
+                                <div className="rotate-action-row">
+                                    <button
+                                        type="button"
+                                        className="rotate-btn"
+                                        onClick={() => setImageEditorSettings(prev => ({ ...prev, rotate: (prev.rotate + 270) % 360 }))}
+                                    >
+                                        Rotate Left
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="rotate-btn"
+                                        onClick={() => setImageEditorSettings(prev => ({ ...prev, rotate: (prev.rotate + 90) % 360 }))}
+                                    >
+                                        Rotate Right
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="image-editor-actions">
+                            <button className="btn-cancel" onClick={() => setIsImageEditorOpen(false)} disabled={isApplyingImageEdits}>Cancel</button>
+                            <button className="btn-confirm" onClick={applyImageEdits} disabled={isApplyingImageEdits}>{isApplyingImageEdits ? 'Applying...' : 'Apply & Insert'}</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <div className="main-container">
                 <nav className={`navbar ${isDarkMode?'dark':''}`}>
                     <div className="nav-left">
                         <button
@@ -962,6 +1631,17 @@ const TestEncodingAndEditing = () => {
                     </div>
                     <div className="nav-center">
                         <NavItem icon={Home} label="Home" isActive={activeTab==='Home'} onClick={()=>handleSetActiveTab('Home')} />
+                        {user?.isAdmin && (
+                            <NavItem
+                                icon={Users}
+                                label="Users"
+                                isActive={activeTab === 'User Management'}
+                                onClick={() => {
+                                    handleSetActiveTab('User Management');
+                                    navigate('/admin', { state: { openUsers: true } });
+                                }}
+                            />
+                        )}
                         <DropdownNavItem
                             icon={ClipboardList}
                             label="Data Entry"
@@ -1009,6 +1689,7 @@ const TestEncodingAndEditing = () => {
                                         <button onClick={()=>handleUserAction('Activity Logs')}><FileText size={18}/> Activity Logs</button>
                                     </>
                                 )}
+                                <button onClick={()=>handleUserAction('Need Help')}><HelpCircle size={18}/> Need Help</button>
                                 <button onClick={()=>handleUserAction('Edit Account')}><User size={18}/> Edit Account</button>
                                 <button className="logout-btn" onClick={()=>handleUserAction('Logout')}><LogOut size={18}/> Logout</button>
                             </div>
@@ -1016,12 +1697,26 @@ const TestEncodingAndEditing = () => {
                     </div>
                 </nav>
 
-                <div className={`search-bar ${isDarkMode?'dark':''}`}>
-                    <Search className="search-icon" />
-                    <input type="text" placeholder="Search Question/Topic..." value={searchText} onChange={e=>setSearchText(e.target.value)} className={isDarkMode?'dark':''}/>
-                </div>
+                {activeTab !== 'Test Question Editing' && (
+                    <div className={`search-bar ${isDarkMode?'dark':''}`}>
+                        <Search className="search-icon" onClick={scrollToFirstSearchMatch} />
+                        <input
+                            type="text"
+                            placeholder="Search..."
+                            value={searchText}
+                            onChange={e=>setSearchText(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    scrollToFirstSearchMatch();
+                                }
+                            }}
+                            className={isDarkMode?'dark':''}
+                        />
+                    </div>
+                )}
 
-                <div className="main-card">
+                <div className="main-card" ref={searchScopeRef}>
                     <HeaderTitleBlock 
                         activeTab={activeTab} 
                         isDarkMode={isDarkMode} 
@@ -1035,45 +1730,50 @@ const TestEncodingAndEditing = () => {
                         <>
                             {/* Selection Fields for ENCODING (Department, Course, Subject, Topic, Bloom Level) */}
                             <div className="selection-fields encoding-filter-block">
-                                {/* Department */}
-                                <div className="input-group">
-                                    <label htmlFor="department">Department</label>
-                                    <select id="department" value={department} onChange={e=>handleDepartmentChange(e.target.value)}>
-                                        <option value="" disabled>Select Department</option>
-                                        {departments.map(d=><option key={d.id} value={d.id}>{d.code} - {d.name}</option>)}
-                                    </select>
+                                <div className="encoding-filter-row top-row">
+                                    {/* Department */}
+                                    <div className="input-group">
+                                        <label htmlFor="department">Department</label>
+                                        <select id="department" value={department} onChange={e=>handleDepartmentChange(e.target.value)}>
+                                            <option value="" disabled>Select Department</option>
+                                            {departments.map(d=><option key={d.id} value={d.id}>{d.code} - {d.name}</option>)}
+                                        </select>
+                                    </div>
+                                    {/* Program */}
+                                    <div className="input-group">
+                                        <label htmlFor="course">Program</label>
+                                        <select id="course" value={course} onChange={e=>{setCourse(e.target.value); setSubject(''); setTopic(''); resetInputContent();}} disabled={!department || isLoadingCourses}>
+                                            <option value="" disabled>{isLoadingCourses ? "Loading..." : department ? "Select Program" : "Select Department first"}</option>
+                                            {courses.map(c=><option key={c.id} value={c.id}>{c.code} - {c.name}</option>)}
+                                        </select>
+                                    </div>
                                 </div>
-                                {/* Program */}
-                                <div className="input-group">
-                                    <label htmlFor="course">Program</label>
-                                    <select id="course" value={course} onChange={e=>{setCourse(e.target.value); setSubject(''); setTopic(''); resetInputContent();}} disabled={!department || isLoadingCourses}>
-                                        <option value="" disabled>{isLoadingCourses ? "Loading..." : department ? "Select Program" : "Select Department first"}</option>
-                                        {courses.map(c=><option key={c.id} value={c.id}>{c.code} - {c.name}</option>)}
-                                    </select>
-                                </div>
-                                {/* Subject */}
-                                <div className="input-group">
-                                    <label htmlFor="subject">Subject</label>
-                                    <select id="subject" value={subject} onChange={e=>{setSubject(e.target.value); setTopic(''); resetInputContent();}} disabled={!course || isLoadingSubjects}>
-                                        <option value="" disabled>{isLoadingSubjects ? "Loading..." : course ? "Select Subject" : "Select Program first"}</option>
-                                        {subjects.map(s=><option key={s.id} value={s.id}>{s.code} - {s.name}</option>)}
-                                    </select>
-                                </div>
-                                {/* Topic */}
-                                <div className="input-group">
-                                    <label htmlFor="topic">Topic</label>
-                                    <select id="topic" value={topic} onChange={e=>{setTopic(e.target.value); resetInputContent();}} disabled={!subject || isLoadingTopics}>
-                                        <option value="" disabled>{isLoadingTopics ? "Loading..." : subject ? "Select Topic" : "Select Subject first"}</option>
-                                        {topics.map(t=><option key={t.id} value={t.id}>{t.title}</option>)}
-                                    </select>
-                                </div>
-                                {/* Bloom Level */}
-                                <div className="input-group">
-                                    <label htmlFor="bloomLevel">Bloom Level</label>
-                                    <select id="bloomLevel" value={bloomLevel} onChange={e=>setBloomLevel(e.target.value)}>
-                                        <option value="" disabled>Select Bloom Level</option>
-                                        {BLOOM_LEVELS.map(bl=><option key={bl.id} value={bl.value}>{bl.label}</option>)}
-                                    </select>
+
+                                <div className="encoding-filter-row bottom-row">
+                                    {/* Course */}
+                                    <div className="input-group">
+                                        <label htmlFor="subject">Course</label>
+                                        <select id="subject" value={subject} onChange={e=>{setSubject(e.target.value); setTopic(''); resetInputContent();}} disabled={!course || isLoadingSubjects}>
+                                            <option value="" disabled>{isLoadingSubjects ? "Loading..." : course ? "Select Course" : "Select Program first"}</option>
+                                            {subjects.map(s=><option key={s.id} value={s.id}>{s.code} - {s.name}</option>)}
+                                        </select>
+                                    </div>
+                                    {/* Topic */}
+                                    <div className="input-group">
+                                        <label htmlFor="topic">Topic</label>
+                                        <select id="topic" value={topic} onChange={e=>{setTopic(e.target.value); resetInputContent();}} disabled={!subject || isLoadingTopics}>
+                                            <option value="" disabled>{isLoadingTopics ? "Loading..." : subject ? "Select Topic" : "Select Course first"}</option>
+                                            {topics.map(t=><option key={t.id} value={t.id}>{t.title}</option>)}
+                                        </select>
+                                    </div>
+                                    {/* Bloom Level */}
+                                    <div className="input-group">
+                                        <label htmlFor="bloomLevel">Bloom Level</label>
+                                        <select id="bloomLevel" value={bloomLevel} onChange={e=>setBloomLevel(e.target.value)}>
+                                            <option value="" disabled>Select Bloom Level</option>
+                                            {BLOOM_LEVELS.map(bl=><option key={bl.id} value={bl.value}>{bl.label}</option>)}
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
                             
@@ -1107,20 +1807,19 @@ const TestEncodingAndEditing = () => {
                                 </div>
                             ) : (
                                 <div className="filter-prompt data-summary-prompt">
-                                    <p>Please select all filters (Department, Program, Subject, Topic) above to start encoding and view the current **Data Summary**.</p>
+                                    <p>Please select all filters (Department, Program, Course, Topic) above to start encoding and view the current **Data Summary**.</p>
                                 </div>
                             )}
                             
                             <hr className="section-separator" />
 
                             {/* Question Block */}
-                            <div className="question-block">
+                            <div className="question-block" ref={encodingFormRef}>
                                 <label><FileText size={20} style={{ verticalAlign: 'middle', marginRight: '8px' }} />Question</label>
                                 <RichTextToolbar 
                                     onFormat={handleFormat} 
                                     onSaveRange={handleSaveRange} 
                                     activeCommands={getToolbarActiveCommands(setQuestionText)} 
-                                    onImageEdit={handleQuestionImageRequest}
                                 />
                                 <div 
                                     contentEditable="true" 
@@ -1128,19 +1827,11 @@ const TestEncodingAndEditing = () => {
                                     data-placeholder="Enter question text..." 
                                     onBlur={e=>handleContentChange(e,setQuestionText)} 
                                     onFocus={e=>handleFocus(e,setQuestionText)} 
+                                    onClick={e=>handleEditableClick(e,setQuestionText)}
                                     onKeyUp={handleSaveRange} 
                                     onMouseUp={handleSaveRange} 
                                     dangerouslySetInnerHTML={{__html:questionText}}
                                 />
-                                <div ref={questionImageSectionRef} className="question-image-inline">
-                                    <QuestionImageUpload 
-                                        ref={imageUploadRef}
-                                        questionId={editingQuestion?.id}
-                                        existingImage={questionImage}
-                                        onImageUpdate={setQuestionImage}
-                                        isDarkMode={isDarkMode}
-                                    />
-                                </div>
                             </div>
 
                             {/* Choices */}
@@ -1162,6 +1853,7 @@ const TestEncodingAndEditing = () => {
                                                 data-placeholder={`Enter choice ${ch}...`} 
                                                 onBlur={e=>handleContentChange(e,setter)} 
                                                 onFocus={e=>handleFocus(e,setter)} 
+                                                onClick={e=>handleEditableClick(e,setter)}
                                                 onKeyUp={handleSaveRange}
                                                 onMouseUp={handleSaveRange}
                                                 dangerouslySetInnerHTML={{__html:content}}
@@ -1183,7 +1875,7 @@ const TestEncodingAndEditing = () => {
                                                     key={letter}
                                                     type="button"
                                                     className={`correct-answer-button${isSelected ? ' selected' : ''}`}
-                                                    onClick={() => setCorrectAnswer(letter)}
+                                                    onClick={() => setCorrectAnswer(prev => (prev === letter ? '' : letter))}
                                                     aria-pressed={isSelected}
                                                 >
                                                     {letter}
@@ -1204,6 +1896,7 @@ const TestEncodingAndEditing = () => {
                                         data-placeholder="Answer Key Explanation..." 
                                         onBlur={e=>handleContentChange(e,setExplanation)} 
                                         onFocus={e=>handleFocus(e,setExplanation)} 
+                                        onClick={e=>handleEditableClick(e,setExplanation)}
                                         onKeyUp={handleSaveRange}
                                         onMouseUp={handleSaveRange}
                                         dangerouslySetInnerHTML={{__html:explanation}}
@@ -1255,7 +1948,7 @@ const TestEncodingAndEditing = () => {
                                                                         <tr key={q.id}>
                                                                             <td>{idx + 1}</td>
                                                                             <td>
-                                                                                <div>{(q.content || '').replace(/<[^>]*>?/gm, '').substring(0, 70)}...</div>
+                                                                                <div>{highlightMatch(`${(q.content || '').replace(/<[^>]*>?/gm, '').substring(0, 70)}...`)}</div>
                                                                                 <small style={{color: '#666'}}>Answer: {correctLetter}</small>
                                                                             </td>
                                                                             <td className="actions-cell">
@@ -1306,24 +1999,41 @@ const TestEncodingAndEditing = () => {
                                     </select>
                                 </div>
                                 <div className="input-group">
-                                    <label htmlFor="subject">Subject</label>
+                                    <label htmlFor="subject">Course</label>
                                     <select id="subject" value={subject} onChange={e=>{setSubject(e.target.value); setTopic(''); resetInputContent();}} disabled={!course || isLoadingSubjects}>
-                                        <option value="" disabled>{isLoadingSubjects ? "Loading..." : course ? "Select Subject" : "Select Program first"}</option>
+                                        <option value="" disabled>{isLoadingSubjects ? "Loading..." : course ? "Select Course" : "Select Program first"}</option>
                                         {subjects.map(s=><option key={s.id} value={s.id}>{s.code} - {s.name}</option>)}
                                     </select>
                                 </div>
                                 <div className="input-group">
                                     <label htmlFor="topic">Topic</label>
                                     <select id="topic" value={topic} onChange={e=>{setTopic(e.target.value); resetInputContent();}} disabled={!subject || isLoadingTopics}>
-                                        <option value="" disabled>{isLoadingTopics ? "Loading..." : subject ? "Select Topic" : "Select Subject first"}</option>
+                                        <option value="" disabled>{isLoadingTopics ? "Loading..." : subject ? "Select Topic" : "Select Course first"}</option>
                                         {topics.map(t=><option key={t.id} value={t.id}>{t.title}</option>)}
                                     </select>
                                 </div>
                             </div>
                             
                             <hr className="section-separator" />
+
+                            <BM25QuestionSearch
+                                isDarkMode={isDarkMode}
+                                subjects={subjects}
+                                topics={topics}
+                                selectedSubjectId={subject}
+                                selectedTopicId={topic}
+                                onEditQuestion={handleEditQuestion}
+                                onDeleteQuestion={handleDeleteQuestion}
+                                onSearchStateChange={setIsBm25SearchActive}
+                            />
+
+                            <hr className="section-separator" />
                             
-                            {isFilterComplete ? (
+                            {isBm25SearchActive ? (
+                                <div className="filter-prompt">
+                                    <p>Showing BM25-ranked results above. Clear the search query to return to topic-grouped editing view.</p>
+                                </div>
+                            ) : isFilterComplete ? (
                                 // --- STAGE 2: Filter is complete, show the grouped list ---
                                 <>
                                     {/* Filter Display Box */}
@@ -1352,7 +2062,7 @@ const TestEncodingAndEditing = () => {
                                                         <div className="history-table-container">
                                                             <table className="history-table">
                                                                 <thead>
-                                                                    <tr><th>#</th><th>Question</th><th>Actions</th></tr>
+                                                                    <tr><th>ID</th><th>Question</th><th>Actions</th></tr>
                                                                 </thead>
                                                                 <tbody>
                                                                     {groupedQuestions[level].map((q, idx) => {
@@ -1362,9 +2072,9 @@ const TestEncodingAndEditing = () => {
                                                                         
                                                                         return (
                                                                             <tr key={q.id}>
-                                                                                <td>{idx + 1}</td>
+                                                                                <td>{q.id}</td>
                                                                                 <td>
-                                                                                    <div>{(q.content || '').replace(/<[^>]*>?/gm, '').substring(0, 70)}...</div>
+                                                                                    <div>{highlightMatch(`${(q.content || '').replace(/<[^>]*>?/gm, '').substring(0, 70)}...`)}</div>
                                                                                     <small style={{color: '#666'}}>Answer: {correctLetter}</small>
                                                                                 </td>
                                                                                 <td className="actions-cell">
@@ -1391,7 +2101,7 @@ const TestEncodingAndEditing = () => {
                             ) : (
                                 // --- STAGE 1: Filter is incomplete, show a prompt ---
                                 <div className="filter-prompt">
-                                    <p>Please select all filters (Department, Program, Subject, Topic) above to view and edit questions.</p>
+                                    <p>Please select all filters (Department, Program, Course, Topic) above to view and edit questions.</p>
                                 </div>
                             )}
                         </div>

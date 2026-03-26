@@ -29,6 +29,7 @@ public static class TestMappings
             test.AvailableFrom,
             test.CreatedAt,
             test.UpdatedAt,
+            test.IsDraft,
             test.SpecificationSnapshot,
             test.QuestionSignature,
             questions

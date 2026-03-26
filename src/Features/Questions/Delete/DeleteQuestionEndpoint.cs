@@ -12,6 +12,8 @@ public sealed class DeleteQuestionEndpoint : IEndpoint
         app.MapDelete("/api/questions/{id:int}", async Task<IResult> (
                 int id, 
                 AppDbContext dbContext, 
+                ISearchService searchService,
+                ILogger<DeleteQuestionEndpoint> logger,
                 ILoggingService loggingService,
                 HttpContext httpContext,
                 CancellationToken ct) =>
@@ -26,6 +28,15 @@ public sealed class DeleteQuestionEndpoint : IEndpoint
             
             dbContext.Questions.Remove(question);
             await dbContext.SaveChangesAsync(ct);
+
+            try
+            {
+                await searchService.RemoveQuestionAsync(id, ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Question {QuestionId} deleted but search index cleanup failed.", id);
+            }
 
             // Log activity
             var userId = httpContext.User.FindFirst("sub")?.Value ?? httpContext.User.FindFirst("userId")?.Value;

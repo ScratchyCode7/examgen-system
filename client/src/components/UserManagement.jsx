@@ -1,14 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { apiService } from '../services/api';
+import { useTheme } from '../contexts/ThemeContext';
+import ConfirmationModal from './ConfirmationModal';
 import '../styles/UserManagement.css';
 
-const UserManagement = () => {
+const UserManagement = ({ searchQuery = '' }) => {
+  const { isDarkMode } = useTheme();
   const [users, setUsers] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
+  const [pendingDeleteUserId, setPendingDeleteUserId] = useState(null);
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -146,21 +151,23 @@ const UserManagement = () => {
     }
   };
 
-  const handleDelete = async (userId) => {
-    if (!window.confirm('Are you sure you want to delete this user?')) {
-      return;
-    }
+  const handleDelete = (userId) => {
+    setPendingDeleteUserId(userId);
+  };
 
+  const confirmDelete = async () => {
+    if (!pendingDeleteUserId) return;
     try {
-      setLoading(true);
-      await apiService.deleteUser(userId);
+      setIsDeletingUser(true);
+      await apiService.deleteUser(pendingDeleteUserId);
       setSuccess('User deleted successfully');
       await loadUsers();
+      setPendingDeleteUserId(null);
     } catch (err) {
       console.error('Failed to delete user:', err);
       setError('Failed to delete user');
     } finally {
-      setLoading(false);
+      setIsDeletingUser(false);
     }
   };
 
@@ -193,6 +200,17 @@ const UserManagement = () => {
       isAdmin: false
     });
   };
+
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const filteredUsers = users.filter((user) => {
+    if (!normalizedSearch) return true;
+    const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim().toLowerCase();
+    const username = (user.username || '').toLowerCase();
+    const email = (user.email || '').toLowerCase();
+    return fullName.includes(normalizedSearch)
+      || username.includes(normalizedSearch)
+      || email.includes(normalizedSearch);
+  });
 
   return (
     <div className="user-management">
@@ -233,7 +251,7 @@ const UserManagement = () => {
               </tr>
             </thead>
             <tbody>
-              {users.map(user => (
+              {filteredUsers.map(user => (
                 <tr key={user.userId}>
                   <td>{`${user.firstName} ${user.lastName}`.trim() || '-'}</td>
                   <td>{user.username}</td>
@@ -251,23 +269,32 @@ const UserManagement = () => {
                     </span>
                   </td>
                   <td>
-                    <button 
-                      className="btn btn-sm btn-secondary" 
-                      onClick={() => handleEdit(user)}
-                      disabled={loading}
-                    >
-                      Edit
-                    </button>
-                    <button 
-                      className="btn btn-sm btn-danger" 
-                      onClick={() => handleDelete(user.userId)}
-                      disabled={loading}
-                    >
-                      Delete
-                    </button>
+                    <div className="user-row-actions">
+                      <button 
+                        className="btn btn-sm btn-secondary" 
+                        onClick={() => handleEdit(user)}
+                        disabled={loading}
+                      >
+                        Edit
+                      </button>
+                      <button 
+                        className="btn btn-sm btn-danger" 
+                        onClick={() => handleDelete(user.userId)}
+                        disabled={loading}
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
+              {filteredUsers.length === 0 && (
+                <tr>
+                  <td colSpan="6" style={{ textAlign: 'center', color: 'var(--text-secondary, #6c757d)' }}>
+                    No matching users found.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -282,28 +309,26 @@ const UserManagement = () => {
             </div>
 
             <form onSubmit={handleSubmit} className="user-form">
-              <div className="form-row">
-                <div className="form-group">
-                  <label>First Name *</label>
-                  <input
-                    type="text"
-                    name="firstName"
-                    value={formData.firstName}
-                    onChange={handleInputChange}
-                    required
-                  />
-                </div>
+              <div className="form-group">
+                <label>First Name *</label>
+                <input
+                  type="text"
+                  name="firstName"
+                  value={formData.firstName}
+                  onChange={handleInputChange}
+                  required
+                />
+              </div>
 
-                <div className="form-group">
-                  <label>Last Name *</label>
-                  <input
-                    type="text"
-                    name="lastName"
-                    value={formData.lastName}
-                    onChange={handleInputChange}
-                    required
-                  />
-                </div>
+              <div className="form-group">
+                <label>Last Name *</label>
+                <input
+                  type="text"
+                  name="lastName"
+                  value={formData.lastName}
+                  onChange={handleInputChange}
+                  required
+                />
               </div>
 
               <div className="form-group">
@@ -346,7 +371,7 @@ const UserManagement = () => {
                     onClick={() => setShowPassword(!showPassword)}
                     aria-label={showPassword ? "Hide password" : "Show password"}
                   >
-                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    {showPassword ? <EyeOff size={18} strokeWidth={2} /> : <Eye size={18} strokeWidth={2} />}
                   </button>
                 </div>
               </div>
@@ -355,17 +380,18 @@ const UserManagement = () => {
                 <label>Departments * (Select at least one)</label>
                 <div className="department-selector">
                   {departments.map(dept => (
-                    <label key={dept.id} className="department-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={formData.departmentIds.includes(dept.id)}
-                        onChange={() => handleDepartmentToggle(dept.id)}
-                      />
+                    <button
+                      type="button"
+                      key={dept.id}
+                      className={`department-checkbox ${formData.departmentIds.includes(dept.id) ? 'selected' : ''}`}
+                      onClick={() => handleDepartmentToggle(dept.id)}
+                    >
+                      <span className="dept-indicator" aria-hidden="true" />
                       <span className="dept-info">
                         <strong>{dept.name}</strong>
                         <span className="dept-code">{dept.code}</span>
                       </span>
-                    </label>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -403,6 +429,19 @@ const UserManagement = () => {
           </div>
         </div>
       )}
+
+      <ConfirmationModal
+        isOpen={pendingDeleteUserId !== null}
+        title="Confirm Delete"
+        message="Are you sure you want to delete this user?"
+        onCancel={() => setPendingDeleteUserId(null)}
+        onConfirm={confirmDelete}
+        cancelText="Cancel"
+        confirmText={isDeletingUser ? 'Deleting...' : 'Delete'}
+        isLoading={isDeletingUser}
+        isDarkMode={isDarkMode}
+        isDanger={true}
+      />
     </div>
   );
 };

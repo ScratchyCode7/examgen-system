@@ -12,12 +12,13 @@ public sealed class JwtTokenService(IOptions<JwtOptions> jwtOptions) : ITokenSer
 {
     private readonly JwtOptions _options = jwtOptions.Value;
 
-    public TokenResult CreateToken(User user)
+    public TokenResult CreateToken(User user, Guid sessionId)
     {
         var expiration = DateTime.UtcNow.AddMinutes(_options.ExpiresInMinutes);
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub, user.UserId.ToString()),
+            new(JwtRegisteredClaimNames.Sid, sessionId.ToString()),
             new(JwtRegisteredClaimNames.UniqueName, user.Username),
             new(JwtRegisteredClaimNames.Email, user.Email),
             new("isAdmin", user.IsAdmin.ToString().ToLowerInvariant())

@@ -33,6 +33,13 @@ public sealed class PrintRequestConfiguration : IEntityTypeConfiguration<PrintRe
         builder.Property(x => x.CopiesRequested)
             .HasDefaultValue(1);
 
+        builder.Property(x => x.IsDraftRequest)
+            .HasDefaultValue(false);
+
+        builder.Property(x => x.ExamSnapshotJson)
+            .HasColumnType("text")
+            .IsRequired(false);
+
         // Relationships
         builder.HasOne(x => x.Test)
             .WithMany()

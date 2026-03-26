@@ -28,7 +28,7 @@
 .main-container {
   position: relative;
   z-index: 10;
-  padding: 1rem 2rem;
+  padding: 0 2rem 1rem;
 }
 
 /* Navbar */
@@ -347,7 +347,7 @@
 
 /* Main card */
 .main-card {
-  margin-top: 1rem;
+  margin-top: 4rem;
   background: white;
   border-radius: 30px;
   padding: 2rem;
@@ -362,11 +362,23 @@
 
 .main-card h3 {
   color: #1C4DA1;
-  margin-bottom: 1rem;
+  margin: 0 0 1rem 0;
 }
 
 .dashboard.dark .main-card h3 {
   color: #E5E5E5;
+}
+
+.program-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.program-header h3 {
+  margin: 0;
 }
 
 .welcome-card {
@@ -383,6 +395,30 @@
   border-left-color: #FFC63E;
 }
 
+.spacer {
+  height: 0;
+}
+
+.search-region {
+  max-width: 1140px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 5.2rem;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.search-region .search-bar {
+  margin: 0 auto;
+  transform: translateY(14px);
+}
+
+.home-card {
+  margin-top: 0;
+}
+
 /* Search and view */
 .search-and-view {
   display: flex;
@@ -396,18 +432,23 @@
   position: relative;
   flex: 1;
   max-width: 600px;
-  margin: 0 auto;
+  margin: 20px auto;
 }
 
 .search-bar input {
   width: 100%;
   padding: 0.75rem 2.5rem 0.75rem 1rem;
-  border-radius: 30px;
+  border-radius: 9999px;
   border: 1px solid #d1d5db;
   background: #fff;
-  color: inherit;
+  color: #000;
   font-size: 0.95rem;
   transition: all 0.2s;
+  box-sizing: border-box;
+}
+
+.search-bar input::placeholder {
+  color: #888;
 }
 
 .dashboard.dark .search-bar input {
@@ -416,11 +457,20 @@
   color: #E5E5E5;
 }
 
+.dashboard.dark .search-bar input::placeholder {
+  color: #E5E5E5;
+}
+
 .search-bar .search-icon {
   position: absolute;
   right: 1rem;
-  top: 30%;
+  top: calc(50% - 12px);
+  bottom: auto;
   transform: translateY(-50%);
+  display: block;
+  margin: 0;
+  padding: 0;
+  line-height: 1;
   color: #888;
   width: 18px;
   height: 18px;
@@ -609,7 +659,14 @@
 
 .btn-confirm:hover {
   background: #FFC63E;
-  color: #1C4DA1;
+  color: #ffffff;
+}
+
+.dashboard .logout-actions .btn-confirm:hover,
+.dashboard.dark .logout-actions .btn-confirm:hover {
+  background: #FFC63E;
+  color: #ffffff;
+  transform: none;
 }
 
 .dashboard.dark .btn-cancel {
@@ -625,7 +682,7 @@
 /* Small screens */
 @media (max-width: 768px) {
   .nav-center { display: none; }
-  .main-container { padding: 1rem; }
+  .main-container { padding: 0 1rem 1rem; }
   .nav-left .logo { width: 64px; }
   .program-grid { grid-template-columns: repeat(2, 1fr); }
 }

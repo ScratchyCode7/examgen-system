@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Download, RefreshCw, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
+import { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Download, RefreshCw, ChevronLeft, ChevronRight, FileText, HelpCircle } from 'lucide-react';
 import NavItem from '../components/NavItem';
 import DropdownNavItem from '../components/DropdownNavItem';
 import LogoutModal from '../components/LogoutModal';
@@ -9,6 +9,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { apiService } from '../services/api';
 import '../styles/Dashboard.css';
 import '../styles/ActivityLogs.css';
+import { HELP_CENTER_URL } from '../constants/helpLinks';
 
 import TDBLogo from '../assets/TDB logo.png';
 import UPHSL from '../assets/uphsl.png';
@@ -89,6 +90,10 @@ const ActivityLogs = () => {
       navigate('/admin');
     } else if (action === 'Activity Logs') {
       navigate('/activity-logs');
+    } else if (action === 'Need Help') {
+      if (typeof window !== 'undefined') {
+        window.open(HELP_CENTER_URL, '_blank', 'noopener,noreferrer');
+      }
     }
   };
 
@@ -275,6 +280,7 @@ const ActivityLogs = () => {
                     <button onClick={() => handleUserAction('Activity Logs')}><FileText /> Activity Logs</button>
                   </>
                 )}
+                <button onClick={() => handleUserAction('Need Help')}><HelpCircle /> Need Help</button>
                 <button onClick={() => handleUserAction('Edit Account')}><User /> Edit Account</button>
                 <button className="logout-btn" onClick={() => handleUserAction('Logout')}><LogOut /> Logout</button>
               </div>

@@ -34,7 +34,8 @@ public sealed class GetPrintRequestsByDepartmentEndpoint : IEndpoint
                     pr.ProcessedByUserId,
                     pr.ProcessedBy != null ? pr.ProcessedBy.FirstName + " " + pr.ProcessedBy.LastName : null,
                     pr.Notes,
-                    pr.CopiesRequested
+                    pr.CopiesRequested,
+                    pr.IsDraftRequest
                 ))
                 .ToListAsync(ct);
 

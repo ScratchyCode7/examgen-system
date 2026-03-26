@@ -13,6 +13,8 @@ public sealed class UpdateQuestionEndpoint : IEndpoint
                 int id,
                 QuestionRequest request,
                 AppDbContext dbContext,
+                ISearchService searchService,
+                ILogger<UpdateQuestionEndpoint> logger,
                 ILoggingService loggingService,
                 HttpContext httpContext,
                 CancellationToken ct) =>
@@ -40,6 +42,15 @@ public sealed class UpdateQuestionEndpoint : IEndpoint
             question.UpdatedAt = DateTime.UtcNow;
 
             await dbContext.SaveChangesAsync(ct);
+
+            try
+            {
+                await searchService.IndexQuestionAsync(question.Id, ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Question {QuestionId} updated but search index update failed.", question.Id);
+            }
 
             // Log activity
             var userId = httpContext.User.FindFirst("sub")?.Value ?? httpContext.User.FindFirst("userId")?.Value;

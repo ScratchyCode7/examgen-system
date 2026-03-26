@@ -226,6 +226,14 @@ namespace src.Migrations
                     b.Property<int>("DepartmentId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("ExamSnapshotJson")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsDraftRequest")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("Notes")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
@@ -277,8 +285,7 @@ namespace src.Migrations
 
                     b.Property<string>("Content")
                         .IsRequired()
-                        .HasMaxLength(3000)
-                        .HasColumnType("character varying(3000)");
+                        .HasColumnType("text");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
@@ -461,6 +468,11 @@ namespace src.Migrations
                     b.Property<string>("GenerationNotes")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
+
+                    b.Property<bool>("IsDraft")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
 
                     b.Property<bool>("IsPublished")
                         .ValueGeneratedOnAdd()
@@ -718,6 +730,46 @@ namespace src.Migrations
                     b.ToTable("UserDepartments", (string)null);
                 });
 
+            modelBuilder.Entity("Databank.Entities.UserSession", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<DateTime>("LastActivity")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .IsUnicode(false)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("active");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SessionId")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "Status");
+
+                    b.ToTable("UserSessions", (string)null);
+                });
+
             modelBuilder.Entity("Databank.Entities.ActivityLog", b =>
                 {
                     b.HasOne("Databank.Entities.Department", "Department")
@@ -913,6 +965,17 @@ namespace src.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Databank.Entities.UserSession", b =>
+                {
+                    b.HasOne("Databank.Entities.User", "User")
+                        .WithMany("Sessions")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Databank.Entities.Course", b =>
                 {
                     b.Navigation("Subjects");
@@ -958,6 +1021,8 @@ namespace src.Migrations
             modelBuilder.Entity("Databank.Entities.User", b =>
                 {
                     b.Navigation("ActivityLogs");
+
+                    b.Navigation("Sessions");
 
                     b.Navigation("UserDepartments");
                 });

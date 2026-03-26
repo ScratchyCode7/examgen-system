@@ -1,4 +1,6 @@
 using System.Text;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using System.Text.Json.Serialization;
 using Databank.Database;
 using Databank.Entities;
@@ -10,6 +12,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using SessionOptions = Databank.Options.SessionOptions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,12 +21,17 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 );
 
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
+builder.Services.Configure<SessionOptions>(builder.Configuration.GetSection(SessionOptions.SectionName));
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
+builder.Services.AddScoped<IUserSessionService, UserSessionService>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<ILoggingService, LoggingService>();
 builder.Services.AddScoped<IDepartmentAccessService, DepartmentAccessService>();
 builder.Services.AddScoped<IFileStorageService, FileStorageService>();
+builder.Services.AddScoped<ISearchService, LuceneSearchService>();
+builder.Services.AddHostedService<SearchIndexWarmupService>();
 builder.Services.AddEndpoints(typeof(Program).Assembly);
+builder.Services.AddControllers();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -38,6 +46,35 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidIssuer = jwtOptions.Issuer,
             ValidAudience = jwtOptions.Audience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SigningKey))
+        };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async context =>
+            {
+                var principal = context.Principal;
+                var userIdValue = principal?.FindFirstValue(JwtRegisteredClaimNames.Sub)
+                                  ?? principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+                var sessionIdValue = principal?.FindFirstValue(JwtRegisteredClaimNames.Sid)
+                                     ?? principal?.FindFirstValue("sid");
+
+                if (!Guid.TryParse(userIdValue, out var userId) || !Guid.TryParse(sessionIdValue, out var sessionId))
+                {
+                    context.Fail("Invalid session claims.");
+                    return;
+                }
+
+                var sessionService = context.HttpContext.RequestServices.GetRequiredService<IUserSessionService>();
+                var isSessionValid = await sessionService.ValidateAndTouchAsync(
+                    userId,
+                    sessionId,
+                    context.HttpContext.RequestAborted);
+
+                if (!isSessionValid)
+                {
+                    context.Fail("Session is invalid or expired.");
+                }
+            }
         };
     });
 
@@ -65,8 +102,11 @@ builder.Services.AddCors(options =>
         var allowedOrigins = new List<string> 
         { 
             "http://localhost:3000", 
+            "http://127.0.0.1:3000",
             "http://localhost:5173", 
-            "http://localhost:5174" 
+            "http://127.0.0.1:5173",
+            "http://localhost:5174",
+            "http://127.0.0.1:5174" 
         };
         
         // Add production frontend URL from environment variable
@@ -113,6 +153,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapGet("/", () => "Databank connected!");
+app.MapControllers();
 app.Endpoint();
 
 app.Run();

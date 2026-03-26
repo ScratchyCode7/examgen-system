@@ -4,6 +4,7 @@ import * as Icons from 'lucide-react';
 import NavItem from '../components/NavItem';
 import DropdownNavItem from '../components/DropdownNavItem';
 import LogoutModal from '../components/LogoutModal';
+import ConfirmationModal from '../components/ConfirmationModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useToast } from '../contexts/ToastContext';
@@ -14,15 +15,9 @@ import '../styles/TestGeneration.css';
 import TDBLogo from '../assets/TDB logo.png';
 import UPHSL from '../assets/uphsl.png';
 import UPHSLLogo from '../assets/UPHSL Logo.png';
+import { HELP_CENTER_URL } from '../constants/helpLinks';
 
-const { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search, Printer, Eye, Trash2, RefreshCcw, FileText } = Icons;
-
-const getAutoSemester = () => {
-  const month = new Date().getMonth() + 1;
-  if (month >= 8 || month <= 12) return '1st';
-  if (month >= 1 && month <= 5) return '2nd';
-  return 'Summer';
-};
+const { Home, ClipboardList, BookOpen, Settings, LogOut, User, Users, Sun, Moon, Search, Printer, Eye, Trash2, RefreshCcw, FileText, HelpCircle } = Icons;
 
 const getAutoSchoolYear = () => {
   const now = new Date();
@@ -91,8 +86,8 @@ const SavedExamsReport = () => {
   const [selectedDepartment, setSelectedDepartment] = useState('');
   const [selectedCourse, setSelectedCourse] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
-  const [examType, setExamType] = useState('Prelim');
-  const [semester, setSemester] = useState(getAutoSemester());
+  const [examType, setExamType] = useState('');
+  const [semester, setSemester] = useState('');
   const [schoolYear, setSchoolYear] = useState(getAutoSchoolYear());
 
   // Collections
@@ -236,7 +231,7 @@ const SavedExamsReport = () => {
         setSelectedExam(null);
       } catch (err) {
         console.error('Failed to load subjects:', err);
-        setError('Failed to load subjects.');
+        setError('Failed to load courses.');
       } finally {
         setIsLoadingSubjects(false);
       }
@@ -246,7 +241,7 @@ const SavedExamsReport = () => {
   }, [selectedCourse]);
 
   const loadSavedExamSets = React.useCallback(async () => {
-    if (!selectedSubject) {
+    if (!selectedSubject || !examType || !semester) {
       setSavedExamSets([]);
       setSelectedExam(null);
       return;
@@ -300,6 +295,10 @@ const SavedExamsReport = () => {
       setIsLogoutModalOpen(true);
     } else if (action === 'Activity Logs') {
       navigate('/activity-logs');
+    } else if (action === 'Need Help') {
+      if (typeof window !== 'undefined') {
+        window.open(HELP_CENTER_URL, '_blank', 'noopener,noreferrer');
+      }
     } else {
       console.log('Navigate to', action);
     }
@@ -385,7 +384,7 @@ const SavedExamsReport = () => {
 
   const getSubjectName = () => {
     const details = selectedSubject && subjects.find(s => s.id === parseInt(selectedSubject, 10));
-    return details?.name || 'Subject Name';
+    return details?.name || 'Course Name';
   };
 
   const isOptionMarkedCorrect = React.useCallback((option) => {
@@ -682,7 +681,7 @@ const SavedExamsReport = () => {
             .form-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 15px 0; }
             .form-field { display: flex; align-items: center; gap: 5px; }
             .form-field label { color: #000; font-size: 14px; white-space: nowrap; }
-            .form-field-blank { flex: 1; border-bottom: 1px solid #000; min-width: 150px; height: 0; }
+            .form-field-blank { flex: 1; display: block; border-bottom: 1.5px solid #000; min-width: 150px; min-height: 14px; }
             .reminders { margin: 15px 0; font-size: 13px; color: #000; }
             .reminders p { margin: 5px 0; }
             .questions-section { margin: 20px 0; }
@@ -919,6 +918,17 @@ const SavedExamsReport = () => {
 
           <div className="nav-center">
             <NavItem icon={Home} label="Home" isActive={activeTab === 'Home'} onClick={() => { setActiveTab('Home'); navigate('/'); }} />
+            {user?.isAdmin && (
+              <NavItem
+                icon={Users}
+                label="Users"
+                isActive={activeTab === 'User Management'}
+                onClick={() => {
+                  setActiveTab('User Management');
+                  navigate('/admin', { state: { openUsers: true } });
+                }}
+              />
+            )}
             <DropdownNavItem
               icon={ClipboardList}
               label="Data Entry"
@@ -966,6 +976,7 @@ const SavedExamsReport = () => {
                     <button onClick={() => handleUserAction('Activity Logs')}><FileText /> Activity Logs</button>
                   </>
                 )}
+                <button onClick={() => handleUserAction('Need Help')}><HelpCircle /> Need Help</button>
                 <button onClick={() => handleUserAction('Edit Account')}><User /> Edit Account</button>
                 <button className="logout-btn" onClick={() => handleUserAction('Logout')}><LogOut /> Logout</button>
               </div>
@@ -980,7 +991,7 @@ const SavedExamsReport = () => {
           </div>
         </div>
 
-        <div className="main-card">
+        <div className="main-card" style={{ marginTop: '-40px' }}>
           <h2>Saved Exam Sets</h2>
           <p className="subtitle">Review previously generated exams, print official sets, and access the stored Table of Specification</p>
 
@@ -988,12 +999,13 @@ const SavedExamsReport = () => {
             <div className="error-message">{error}</div>
           )}
 
-          <div className="input-section">
+          <div className="input-section saved-exams-input-section">
             <div className="field-container">
               <label>Department</label>
               <select
                 value={selectedDepartment}
                 onChange={(e) => handleDepartmentChange(e.target.value)}
+                className={!selectedDepartment ? 'unselected-placeholder' : ''}
                 disabled={isLoadingDepartments}
               >
                 <option value="">Select Department</option>
@@ -1012,6 +1024,7 @@ const SavedExamsReport = () => {
               <select
                 value={selectedCourse}
                 onChange={(e) => setSelectedCourse(e.target.value)}
+                className={!selectedCourse ? 'unselected-placeholder' : ''}
                 disabled={!selectedDepartment || isLoadingCourses}
               >
                 <option value="">Select Program</option>
@@ -1028,17 +1041,17 @@ const SavedExamsReport = () => {
             </div>
 
             <div className="field-container">
-              <label>Subject</label>
+              <label>Course</label>
               <select
                 value={selectedSubject}
                 onChange={(e) => setSelectedSubject(e.target.value)}
                 disabled={!selectedCourse || isLoadingSubjects}
               >
-                <option value="">Select Subject</option>
+                <option value="">Select Course</option>
                 {isLoadingSubjects ? (
-                  <option disabled>Loading subjects...</option>
+                  <option disabled>Loading courses...</option>
                 ) : subjects.length === 0 ? (
-                  <option disabled>No subjects found</option>
+                  <option disabled>No courses found</option>
                 ) : (
                   subjects.map(subject => (
                     <option key={subject.id} value={subject.id}>{(subject.code ? `${subject.code} - ` : '') + subject.name}</option>
@@ -1049,7 +1062,12 @@ const SavedExamsReport = () => {
 
             <div className="field-container">
               <label>Exam Period</label>
-              <select value={examType} onChange={(e) => setExamType(e.target.value)}>
+              <select
+                value={examType}
+                onChange={(e) => setExamType(e.target.value)}
+                className={!examType ? 'unselected-placeholder' : ''}
+              >
+                <option value="" disabled>Select Exam Period</option>
                 <option value="Prelim">Prelim</option>
                 <option value="Midterm">Midterm</option>
                 <option value="Finals">Finals</option>
@@ -1058,16 +1076,26 @@ const SavedExamsReport = () => {
 
             <div className="field-container">
               <label>Semester</label>
-              <select value={semester} onChange={(e) => setSemester(e.target.value)}>
-                <option value="1st">1st</option>
-                <option value="2nd">2nd</option>
+              <select
+                value={semester}
+                onChange={(e) => setSemester(e.target.value)}
+                className={!semester ? 'unselected-placeholder' : ''}
+              >
+                <option value="" disabled>Select Semester</option>
+                <option value="1st">1st Sem</option>
+                <option value="2nd">2nd Sem</option>
                 <option value="Summer">Summer</option>
               </select>
             </div>
 
             <div className="field-container">
               <label>School Year</label>
-              <input type="text" value={schoolYear} onChange={(e) => setSchoolYear(e.target.value)} />
+              <input
+                type="text"
+                value={schoolYear}
+                onChange={(e) => setSchoolYear(e.target.value)}
+                placeholder="e.g., 20252026"
+              />
             </div>
 
           </div>
@@ -1187,8 +1215,8 @@ const SavedExamsReport = () => {
                       </div>
 
                       <div className="exam-instructions">
-                        <p><strong>REMINDER:</strong> Cheating, borrowing, or lending examination permits are punishable under university policy.</p>
-                        <p><strong>Direction:</strong> Multiple Choice — Choose the letter of the correct answer.</p>
+                        <p><strong>REMINDER: CHEATING during examinations, BORROWING and LENDING of examination permit fall under Major offenses and are punishable under the existing University Policy</strong></p>
+                        <p><strong>Direction:</strong> Multiple Choice - Choose the letter of the correct answer.</p>
                       </div>
 
                       <div className="exam-questions-section">
@@ -1332,25 +1360,25 @@ const SavedExamsReport = () => {
         </div>
       )}
 
-      {isDeleteModalOpen && examPendingDelete && (
-        <div className="modal-overlay">
-          <div className={`modal ${isDarkMode ? 'dark' : ''}`}>
-            <h3>Delete Saved Exam</h3>
+      <ConfirmationModal
+        isOpen={isDeleteModalOpen && !!examPendingDelete}
+        title="Delete Saved Exam"
+        message={
+          <>
             <p>
-              Permanently delete <strong>{examPendingDelete.setLabel}</strong> ({examPendingDelete.examType} · {examPendingDelete.semester} Semester · SY {examPendingDelete.schoolYear})?
+              Permanently delete <strong>{examPendingDelete?.setLabel}</strong> ({examPendingDelete?.examType} · {examPendingDelete?.semester} Semester · SY {examPendingDelete?.schoolYear})?
             </p>
-            <p>This removes the stored exam paper, answer key, and TOS snapshot for this set.</p>
-            <div className="modal-buttons">
-              <button className="btn btn-secondary" onClick={() => { setIsDeleteModalOpen(false); setExamPendingDelete(null); }} disabled={isDeletingExam}>
-                Cancel
-              </button>
-              <button className="btn btn-danger" onClick={handleDeleteExam} disabled={isDeletingExam}>
-                {isDeletingExam ? 'Deleting...' : 'Delete Set'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            <p style={{ marginTop: '10px' }}>This removes the stored exam paper, answer key, and TOS snapshot for this set.</p>
+          </>
+        }
+        onCancel={() => { setIsDeleteModalOpen(false); setExamPendingDelete(null); }}
+        onConfirm={handleDeleteExam}
+        cancelText="Cancel"
+        confirmText={isDeletingExam ? 'Deleting...' : 'Delete Set'}
+        isLoading={isDeletingExam}
+        isDarkMode={isDarkMode}
+        isDanger={true}
+      />
     </div>
   );
 };

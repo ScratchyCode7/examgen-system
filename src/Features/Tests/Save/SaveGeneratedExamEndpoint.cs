@@ -99,6 +99,7 @@ public sealed class SaveGeneratedExamEndpoint : IEndpoint
                 request.Questions.Select(q => (q.QuestionId, q.DisplayOrder)));
 
             var duplicateExists = await dbContext.Tests.AnyAsync(t =>
+                !t.IsDraft &&
                 t.SubjectId == request.SubjectId &&
                 t.ExamType == request.ExamType &&
                 t.Semester == request.Semester &&
@@ -112,6 +113,7 @@ public sealed class SaveGeneratedExamEndpoint : IEndpoint
             }
 
             var existingSetCount = await dbContext.Tests.CountAsync(t =>
+                !t.IsDraft &&
                 t.SubjectId == request.SubjectId &&
                 t.ExamType == request.ExamType &&
                 t.Semester == request.Semester &&
@@ -128,32 +130,60 @@ public sealed class SaveGeneratedExamEndpoint : IEndpoint
                 ? BuildSetLabel(existingSetCount)
                 : requestedLabel;
 
-            var test = new Test
+            Test? existingDraft = null;
+            if (createdByUserId.HasValue)
+            {
+                existingDraft = await dbContext.Tests
+                    .Include(t => t.TestQuestions)
+                    .FirstOrDefaultAsync(t =>
+                        t.IsDraft &&
+                        t.CreatedByUserId == createdByUserId.Value &&
+                        t.SubjectId == request.SubjectId &&
+                        t.CourseId == request.CourseId &&
+                        t.DepartmentId == request.DepartmentId &&
+                        t.ExamType == request.ExamType &&
+                        t.Semester == request.Semester &&
+                        t.SchoolYear == request.SchoolYear &&
+                        t.QuestionSignature == signature,
+                        ct);
+            }
+
+            var test = existingDraft ?? new Test
             {
                 SubjectId = request.SubjectId,
                 CourseId = request.CourseId,
                 DepartmentId = request.DepartmentId,
                 CreatedByUserId = createdByUserId,
-                Title = $"{subject.Code} {request.ExamType} {setLabel}".Trim(),
-                Description = request.Description ?? $"{request.ExamType} - {request.Semester} {request.SchoolYear} ({setLabel})",
-                DurationMinutes = request.DurationMinutes,
-                TotalQuestions = request.Questions.Count,
-                TotalPoints = request.TotalPoints,
-                ExamType = request.ExamType,
-                Semester = request.Semester,
-                SchoolYear = request.SchoolYear,
-                SetLabel = setLabel,
-                SpecificationSnapshot = request.SpecificationSnapshot,
-                GenerationNotes = request.GenerationNotes,
-                QuestionSignature = signature,
-                IsPublished = false,
-                AvailableFrom = DateTime.UtcNow,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow
             };
 
-            await dbContext.Tests.AddAsync(test, ct);
-            await dbContext.SaveChangesAsync(ct);
+            test.Title = $"{subject.Code} {request.ExamType} {setLabel}".Trim();
+            test.Description = request.Description ?? $"{request.ExamType} - {request.Semester} {request.SchoolYear} ({setLabel})";
+            test.DurationMinutes = request.DurationMinutes;
+            test.TotalQuestions = request.Questions.Count;
+            test.TotalPoints = request.TotalPoints;
+            test.ExamType = request.ExamType;
+            test.Semester = request.Semester;
+            test.SchoolYear = request.SchoolYear;
+            test.SetLabel = setLabel;
+            test.SpecificationSnapshot = request.SpecificationSnapshot;
+            test.GenerationNotes = request.GenerationNotes;
+            test.QuestionSignature = signature;
+            test.IsDraft = false;
+            test.IsPublished = false;
+            test.AvailableFrom = DateTime.UtcNow;
+            test.UpdatedAt = DateTime.UtcNow;
+
+            if (existingDraft is null)
+            {
+                await dbContext.Tests.AddAsync(test, ct);
+                await dbContext.SaveChangesAsync(ct);
+            }
+            else if (existingDraft.TestQuestions.Count > 0)
+            {
+                dbContext.TestQuestions.RemoveRange(existingDraft.TestQuestions);
+                await dbContext.SaveChangesAsync(ct);
+            }
 
             var questionLookup = questions.ToDictionary(q => q.Id);
             var orderedRequestQuestions = request.Questions
@@ -220,16 +250,16 @@ public sealed class SaveGeneratedExamEndpoint : IEndpoint
         if (dto.Options is null || dto.Options.Count == 0)
         {
             var fallback = options
-                .Select(o => new OptionSnapshotDto(o.Id, o.DisplayOrder))
+                .Select(o => new OptionSnapshotDto(o.Id, o.DisplayOrder, o.IsCorrect))
                 .ToList();
             return (true, JsonSerializer.Serialize(fallback), null);
         }
 
         var validOptionIds = options.Select(o => o.Id).ToHashSet();
         var seen = new HashSet<int>();
-        var snapshotItems = new List<OptionSnapshotDto>(dto.Options.Count);
+            var snapshotItems = new List<OptionSnapshotDto>(dto.Options.Count);
 
-        foreach (var optionDto in dto.Options.OrderBy(o => o.DisplayOrder))
+            foreach (var optionDto in dto.Options.OrderBy(o => o.DisplayOrder))
         {
             if (!validOptionIds.Contains(optionDto.OptionId))
             {
@@ -241,7 +271,9 @@ public sealed class SaveGeneratedExamEndpoint : IEndpoint
                 return (false, string.Empty, $"Option {optionDto.OptionId} is duplicated for question {question.Id}.");
             }
 
-            snapshotItems.Add(new OptionSnapshotDto(optionDto.OptionId, optionDto.DisplayOrder));
+                var sourceOption = options.First(o => o.Id == optionDto.OptionId);
+                var isCorrect = optionDto.IsCorrect ?? sourceOption.IsCorrect;
+                snapshotItems.Add(new OptionSnapshotDto(optionDto.OptionId, optionDto.DisplayOrder, isCorrect));
         }
 
         if (snapshotItems.Count != options.Count)
@@ -249,8 +281,14 @@ public sealed class SaveGeneratedExamEndpoint : IEndpoint
             return (false, string.Empty, $"All options must be included when saving question {question.Id}.");
         }
 
+            var correctCount = snapshotItems.Count(item => item.IsCorrect);
+            if (correctCount != 1)
+            {
+                return (false, string.Empty, $"Question {question.Id} must have exactly one correct answer in the saved exam snapshot.");
+            }
+
         return (true, JsonSerializer.Serialize(snapshotItems), null);
     }
 
-    private sealed record OptionSnapshotDto(int OptionId, int DisplayOrder);
+    private sealed record OptionSnapshotDto(int OptionId, int DisplayOrder, bool IsCorrect);
 }

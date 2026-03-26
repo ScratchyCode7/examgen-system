@@ -9,6 +9,42 @@ const apiClient = axios.create({
   },
 });
 
+const UPDATED_COEA_NAME = 'College of Engineering, Architecture and Aviation';
+const UPDATED_COEA_DESCRIPTION = 'Engineering, Architecture and Aviation programs';
+
+const normalizeDepartmentRecord = (department) => {
+  if (!department || typeof department !== 'object') return department;
+
+  const code = (department.code || department.departmentCode || '')
+    .toString()
+    .trim()
+    .toUpperCase();
+
+  if (code !== 'COEA') {
+    return department;
+  }
+
+  const updatedDescription = department.description && department.description.trim().length > 0
+    ? department.description.replace(/College of Engineering and Architecture/gi, UPDATED_COEA_NAME)
+    : UPDATED_COEA_DESCRIPTION;
+
+  return {
+    ...department,
+    name: UPDATED_COEA_NAME,
+    departmentName: UPDATED_COEA_NAME,
+    description: updatedDescription,
+  };
+};
+
+const extractArray = (data) => {
+  if (Array.isArray(data)) return data;
+  if (data?.items && Array.isArray(data.items)) return data.items;
+  if (data?.data && Array.isArray(data.data)) return data.data;
+  return [];
+};
+
+const normalizeDepartmentArray = (data) => extractArray(data).map((dept) => normalizeDepartmentRecord(dept));
+
 // Request interceptor to add auth token
 apiClient.interceptors.request.use(
   (config) => {
@@ -27,7 +63,10 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const requestUrl = error.config?.url || '';
+    const isLoginRequest = requestUrl.includes('/api/auth/login');
+
+    if (error.response?.status === 401 && !isLoginRequest) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';
@@ -176,6 +215,18 @@ export const apiService = {
     return [];
   },
 
+  searchQuestions: async (params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.q) queryParams.append('q', params.q);
+    if (params.subject) queryParams.append('subject', params.subject);
+    if (params.topic) queryParams.append('topic', params.topic);
+    if (params.bloomLevel) queryParams.append('bloomLevel', params.bloomLevel);
+    if (params.questionType) queryParams.append('questionType', params.questionType);
+
+    const response = await apiClient.get(`/api/search?${queryParams.toString()}`);
+    return response.data;
+  },
+
   // Test connectivity
   testConnection: async () => {
     try {
@@ -193,24 +244,17 @@ export const apiService = {
   // Departments
   getDepartments: async () => {
     const response = await apiClient.get('/api/departments');
-    const data = response.data;
-    // normalize: some endpoints return { items: [...] } while others return an array
-    if (Array.isArray(data)) return data;
-    if (data?.items && Array.isArray(data.items)) return data.items;
-    return [];
+    return normalizeDepartmentArray(response.data);
   },
 
   getDepartmentByCode: async (code) => {
     const response = await apiClient.get(`/api/departments/by-code/${code}`);
-    return response.data;
+    return normalizeDepartmentRecord(response.data);
   },
 
   getUserDepartments: async (userId) => {
     const response = await apiClient.get(`/api/users/${userId}/departments`);
-    const data = response.data;
-    if (Array.isArray(data)) return data;
-    if (data?.items && Array.isArray(data.items)) return data.items;
-    return [];
+    return normalizeDepartmentArray(response.data);
   },
 
   // Courses by department
@@ -306,6 +350,16 @@ export const apiService = {
     return response.data;
   },
 
+  updateTopic: async (id, topicData) => {
+    const response = await apiClient.put(`/api/topics/${id}`, topicData);
+    return response.data;
+  },
+
+  deleteTopic: async (id) => {
+    const response = await apiClient.delete(`/api/topics/${id}`);
+    return response.data;
+  },
+
   // Exams/Tests
   generateExam: async (generateData) => {
     const response = await apiClient.post('/api/tests/generate', generateData);
@@ -352,12 +406,23 @@ export const apiService = {
   },
 
   // Print Requests
-  submitPrintRequest: async (testId, notes = null, copiesRequested = 1) => {
-    const response = await apiClient.post('/api/printrequests', {
-      testId,
-      notes,
-      copiesRequested
-    });
+  submitPrintRequest: async (requestOrTestId, notes = null, copiesRequested = 1) => {
+    const payload = (requestOrTestId && typeof requestOrTestId === 'object')
+      ? {
+          testId: null,
+          notes: null,
+          copiesRequested: 1,
+          isDraft: false,
+          examData: null,
+          ...requestOrTestId,
+        }
+      : {
+          testId: requestOrTestId,
+          notes,
+          copiesRequested,
+        };
+
+    const response = await apiClient.post('/api/printrequests', payload);
     return response.data;
   },
 
@@ -382,6 +447,10 @@ export const apiService = {
       notes
     });
     return response.data;
+  },
+
+  deletePrintRequest: async (printRequestId) => {
+    await apiClient.delete(`/api/printrequests/${printRequestId}`);
   },
 
   getMasterSet: async (printRequestId) => {

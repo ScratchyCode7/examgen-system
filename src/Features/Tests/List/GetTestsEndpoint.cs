@@ -17,12 +17,18 @@ public sealed class GetTestsEndpoint : IEndpoint
                 string? examType = null,
                 string? semester = null,
                 string? schoolYear = null,
+                bool includeDrafts = false,
                 AppDbContext dbContext = null!,
                 CancellationToken ct = default) =>
         {
             var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
             IQueryable<Test> query = dbContext.Tests
                 .AsNoTracking();
+
+            if (!includeDrafts)
+            {
+                query = query.Where(t => !t.IsDraft);
+            }
 
             if (subjectId.HasValue)
             {

@@ -47,7 +47,7 @@
   border-radius: 50px;
   border: 1px solid rgba(255,255,255,0.5);
   box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-  -webkit-text-fill-color: #7E7E7E;
+  color: var(--text-dark);
 }
 
 .login-logo {
@@ -72,16 +72,16 @@
 .login-title {
   font-size: 2rem;
   font-weight: 800;
-  color:#3B3B3B;
+  color: var(--primary-blue);
   margin-bottom: 2rem;
   text-align: center;
    
 }
 
-label {
+.login-content label {
   display: block;
   margin-bottom: 0.5rem;
-  color: var(--text-dark);
+  color: var(--primary-blue);
   font-weight: 500;
 }
 
@@ -92,7 +92,8 @@ input[type="email"], input[type="password"], input[type="text"] {
   border: 1px solid #ccc;
   border-radius: 0.5rem;
   font-size: 0.9rem;
-  color: var(--text-dark);
+  color: #000;
+  caret-color: #000;
 }
 
 .password-wrapper {
@@ -118,7 +119,11 @@ input[type="email"], input[type="password"], input[type="text"] {
   display: block;
   text-align: left;
   font-size: 0.75rem;
-  color: var(--text-dark);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: rgba(59, 59, 59, 0.85);
   margin-bottom: 1.5rem;
   text-decoration: none;
 }
@@ -140,37 +145,48 @@ input[type="email"], input[type="password"], input[type="text"] {
   font-size: 1.25rem;
   font-weight: 800;
   border-radius: 0.5rem;
-  color: white;
-  background-color: var(--button-disabled);
+  color: rgba(255, 255, 255, 0.28);
+  background-color: #9a9a9a;
   cursor: not-allowed;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
 }
 
-.login-button:enabled {
+.login-button:disabled {
+  color: rgba(255, 255, 255, 0.28);
+  background-color: #9a9a9a;
+}
+
+.login-button:not(:disabled) {
   background-color: var(--primary-blue);
+  color: #fff;
   cursor: pointer;
 }
 
-.login-button:enabled:hover {
+.login-button:not(:disabled):hover {
   background-color: var(--secondary-yellow);
+  color: #fff;
 }
 
 .contact-us {
   font-size: 0.75rem;
   text-align: center;
   margin-top: 1.5rem;
-  color: var(--text-dark);
+  color: rgba(59, 59, 59, 0.85);
 }
 
-.contact-us a {
+.contact-link {
+  background: none;
+  border: none;
+  padding: 0;
   margin-left: 0.25rem;
   font-weight: 500;
   color: var(--secondary-yellow);
+  cursor: pointer;
   text-decoration: none;
 }
 
-.contact-us a:hover {
-  color: var(--text-dark);
+.contact-link:hover {
+  color: var(--primary-blue);
 }
 
 

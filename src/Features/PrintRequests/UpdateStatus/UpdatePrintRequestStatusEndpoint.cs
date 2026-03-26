@@ -17,7 +17,16 @@ public sealed class UpdatePrintRequestStatusEndpoint : IEndpoint
                 AppDbContext db,
                 CancellationToken ct) =>
         {
-            var adminUserId = Guid.Parse(httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var userIdValue = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? httpContext.User.FindFirst("sub")?.Value
+                ?? httpContext.User.FindFirst("userId")?.Value;
+
+            if (!Guid.TryParse(userIdValue, out var actingUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var isAdmin = httpContext.User.HasClaim("isAdmin", "true");
 
             var printRequest = await db.PrintRequests
                 .FirstOrDefaultAsync(pr => pr.PrintRequestId == id, ct);
@@ -33,11 +42,32 @@ public sealed class UpdatePrintRequestStatusEndpoint : IEndpoint
                 return Results.BadRequest(new { error = "Invalid status. Valid values: Pending, ReadyForPickup, Completed, Rejected" });
             }
 
+            if (!isAdmin)
+            {
+                if (printRequest.RequestedByUserId != actingUserId)
+                {
+                    return Results.Forbid();
+                }
+
+                if (newStatus != PrintRequestStatus.Completed)
+                {
+                    return Results.BadRequest(new { error = "Only completed status can be confirmed by the request owner." });
+                }
+
+                if (printRequest.Status != PrintRequestStatus.ReadyForPickup && printRequest.Status != PrintRequestStatus.Completed)
+                {
+                    return Results.BadRequest(new { error = "This request is not ready for pickup yet." });
+                }
+            }
+            else
+            {
+                printRequest.ProcessedByUserId = actingUserId;
+            }
+
             printRequest.Status = newStatus;
             printRequest.ProcessedAt = DateTime.UtcNow;
-            printRequest.ProcessedByUserId = adminUserId;
-            
-            if (!string.IsNullOrWhiteSpace(request.Notes))
+
+            if (isAdmin && !string.IsNullOrWhiteSpace(request.Notes))
             {
                 printRequest.Notes = request.Notes;
             }
@@ -51,7 +81,7 @@ public sealed class UpdatePrintRequestStatusEndpoint : IEndpoint
                 processedAt = printRequest.ProcessedAt
             });
         })
-        .RequireAuthorization("AdminOnly")
+        .RequireAuthorization()
         .WithTags("PrintRequests");
     }
 }

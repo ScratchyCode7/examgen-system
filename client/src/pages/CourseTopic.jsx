@@ -36,10 +36,10 @@ const CourseTopic = () => {
 
   // Course topic form states
   const [course, setCourse] = useState("");
-  const [topicCode, setTopicCode] = useState("");
-  const [value, setValue] = useState("");
-  const [topicDesc, setTopicDesc] = useState("");
-  const [hours, setHours] = useState("");
+  const [courseCode, setCourseCode] = useState("");
+  const [courseTitle, setCourseTitle] = useState("");
+  const [courseUnits, setCourseUnits] = useState("");
+  const [courseHours, setCourseHours] = useState("");
   // dynamic lists
   const [courses, setCourses] = useState([]);
   const [departments, setDepartments] = useState([]);
@@ -95,21 +95,21 @@ const CourseTopic = () => {
               const meta = s.description ? JSON.parse(s.description) : {};
               courseIdFromMeta = meta.course != null ? Number(meta.course) : null;
 
-              if (!meta.topicCode || !meta.topicDesc || !meta.hours) {
-                // If important meta fields are missing, still allow if API provides courseId and name/code
-                if (!s.courseId && !(meta.topicCode && meta.topicDesc && meta.hours)) return null;
-              }
+              const derivedCourseCode = meta.courseCode || meta.topicCode || s.code || '';
+              const derivedCourseTitle = meta.courseTitle || meta.topicTitle || meta.topicDesc || s.name || '';
+              const derivedCourseUnits = meta.courseUnits || meta.topicUnits || meta.value || '';
+              const derivedCourseHours = meta.courseHours || meta.hours || (s.hours ? Number(s.hours) : '');
+
+              if (!derivedCourseCode || !derivedCourseTitle) return null;
 
               return {
                 subjectId: s.id,
-                // use API field if present, otherwise use parsed meta.course
                 courseId: s.courseId != null ? Number(s.courseId) : courseIdFromMeta,
-                topicCode: meta.topicCode || s.code || '',
-                value: meta.value || '',
-                topicDesc: meta.topicDesc || s.name || '',
-                hours: meta.hours || (s.hours ? Number(s.hours) : ''),
+                courseCode: derivedCourseCode,
+                courseTitle: derivedCourseTitle,
+                courseUnits: derivedCourseUnits,
+                courseHours: derivedCourseHours,
                 createdAt: s.createdAt,
-                topic: null, // Will be loaded on-demand when expanding
               };
             } catch (ex) {
               console.warn('Invalid subject description JSON for subject', s.id, ex);
@@ -151,7 +151,7 @@ const CourseTopic = () => {
     const filtered = allSubjects.filter(s => {
       const subjCourseId = Number(s.courseId || s.course || 0);
       const match = courseIds.includes(subjCourseId);
-      if (!match) console.debug(`Excluding subject ${s.topicCode} course:${subjCourseId}`);
+      if (!match) console.debug(`Excluding subject ${s.courseCode} course:${subjCourseId}`);
       return match;
     });
 
@@ -225,7 +225,7 @@ const CourseTopic = () => {
 
   // Save course/topic mapping as a Subject in the backend
   const handleSave = () => {
-    if (!course || !topicCode || !value || !topicDesc || !hours) return;
+    if (!course || !courseCode || !courseTitle || !courseUnits || !courseHours) return;
 
     const saveAsync = async () => {
       try {
@@ -234,34 +234,28 @@ const CourseTopic = () => {
         // Pack the extra metadata into the Subject.Description field as JSON
         const description = JSON.stringify({
           course,
-          topicCode,
-          value,
-          topicDesc,
-          hours,
+          courseCode,
+          courseTitle,
+          courseUnits,
+          courseHours,
+          // Backward compatibility fields
+          topicCode: courseCode,
+          topicTitle: courseTitle,
+          topicDesc: courseTitle,
+          topicUnits: courseUnits,
+          value: courseUnits,
+          hours: courseHours,
         });
 
         const subjectPayload = {
           courseId: Number(course),
-          code: topicCode,
-          name: topicCode,
+          code: courseCode,
+          name: courseTitle,
           description,
         };
 
-        // 1. Create Subject
         const createdSubject = await apiService.createSubject(subjectPayload);
         console.log('Subject created:', createdSubject);
-
-        // 2. Create Topic for this Subject with topicDesc as the title
-        const topicPayload = {
-          subjectId: createdSubject.id,
-          title: topicDesc,  // Topic Description becomes Topic.Title
-          description: '',
-          sequenceOrder: 1,
-          allocatedHours: Number(hours),
-        };
-
-        const createdTopic = await apiService.createTopic(topicPayload);
-        console.log('Topic created:', createdTopic);
 
         // Update local history table
         setHistory((prev) => [
@@ -269,20 +263,19 @@ const CourseTopic = () => {
           {
             subjectId: createdSubject.id,
             courseId: createdSubject.courseId || Number(course),
-            topicCode,
-            value,
-            topicDesc,
-            hours,
+            courseCode,
+            courseTitle,
+            courseUnits,
+            courseHours,
             createdAt: createdSubject.createdAt,
-            topic: createdTopic, // Include the created topic
           },
         ]);
 
         setCourse("");
-        setTopicCode("");
-        setValue("");
-        setTopicDesc("");
-        setHours("");
+        setCourseCode("");
+        setCourseTitle("");
+        setCourseUnits("");
+        setCourseHours("");
       } catch (err) {
         console.error('Failed to save program topic:', err);
         const message =
@@ -509,33 +502,33 @@ const CourseTopic = () => {
 
           <div className="row-fields">
             <div className="field-container half-width">
-              <label>Topic Code</label>
+              <label>Course ID</label>
               <input
                 type="text"
-                value={topicCode}
-                onChange={(e) => setTopicCode(e.target.value)}
-                placeholder="Enter topic code (e.g., T001)"
+                value={courseCode}
+                onChange={(e) => setCourseCode(e.target.value)}
+                placeholder="Enter course ID (e.g., FCL100)"
               />
             </div>
             <div className="field-container half-width">
-              <label>Value</label>
+              <label>Course Title</label>
               <input
-                type="number"
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                placeholder="Value"
+                type="text"
+                value={courseTitle}
+                onChange={(e) => setCourseTitle(e.target.value)}
+                placeholder="Enter course title"
               />
             </div>
           </div>
 
           <div className="row-fields">
             <div className="field-container flex-2">
-              <label>Topic Description</label>
-              <input type="text" value={topicDesc} onChange={(e) => setTopicDesc(e.target.value)} />
+              <label>Units</label>
+              <input type="text" value={courseUnits} onChange={(e) => setCourseUnits(e.target.value)} placeholder="Enter units (e.g., 3)" />
             </div>
             <div className="field-container flex-1">
-              <label>Hours Per Topic</label>
-              <input type="number" value={hours} onChange={(e) => setHours(e.target.value)} />
+              <label>Allotted Hours</label>
+              <input type="number" value={courseHours} onChange={(e) => setCourseHours(e.target.value)} placeholder="Enter hours" />
             </div>
           </div>
 
@@ -545,9 +538,9 @@ const CourseTopic = () => {
           <div className="history-table">
             <div className="history-row header">
               <span style={{width: '5%'}}>#</span>
-              <span style={{width: '20%'}}>Subject Code</span>
-              <span style={{width: '50%'}}>Topic</span>
-              <span style={{width: '15%'}}>Hrs</span>
+              <span style={{width: '20%'}}>Course ID</span>
+              <span style={{width: '45%'}}>Course Title</span>
+              <span style={{width: '20%'}}>Course Hours</span>
               <span style={{width: '10%'}}></span>
             </div>
             {isLoading && history.length === 0 && (
@@ -565,9 +558,9 @@ const CourseTopic = () => {
                 {/* Subject Row with Manage Topics button */}
                 <div className="history-row subject-row">
                   <span style={{width: '5%'}}>{index + 1}</span>
-                  <span style={{width: '25%'}}>{item.topicCode}</span>
-                  <span style={{width: '50%'}}><strong>{item.topicDesc}</strong></span>
-                  <span style={{width: '15%'}}>{item.hours}</span>
+                  <span style={{width: '20%'}}>{item.courseCode}</span>
+                  <span style={{width: '45%'}}><strong>{item.courseTitle}</strong></span>
+                  <span style={{width: '20%'}}>{item.courseHours}</span>
                   <span style={{width: '10%', display: 'flex', justifyContent: 'center', alignItems: 'center'}}>
                     <button 
                       className={`expand-btn ${expandedSubjectsMap[item.subjectId] ? 'expanded' : ''}`}
@@ -579,31 +572,20 @@ const CourseTopic = () => {
                   </span>
                 </div>
                 
-                {/* Default Topic Row - automatically created with subject */}
-                {item.topic && (
-                  <div className="history-row topic-row">
-                    <span style={{width: '5%'}}>└</span>
-                    <span style={{width: '20%'}}>-</span>
-                    <span style={{width: '50%'}}>{item.topic.title} (Topic)</span>
-                    <span style={{width: '15%'}}>{item.topic.allocatedHours}</span>
-                    <span style={{width: '10%'}}></span>
-                  </div>
-                )}
-
                 {/* Expanded Topics Section */}
                 {expandedSubjectsMap[item.subjectId] && (
                   <div className="subject-topics-container">
                     {/* Existing Topics List */}
                     <div className="topics-list-section">
-                      <h4>Topics for {item.topicDesc}</h4>
+                      <h4>Topics for {item.courseTitle}</h4>
                       {subjectTopicsMap[item.subjectId] && subjectTopicsMap[item.subjectId].length > 0 ? (
                         <div className="topics-list">
                           {subjectTopicsMap[item.subjectId].map((topic, topicIdx) => (
                             <div key={topic.id} className="history-row topic-item-row">
                               <span style={{width: '5%'}}>{topicIdx + 1}</span>
-                              <span style={{width: '20%'}}>{course.code}</span>
+                              <span style={{width: '20%'}}>{item.courseCode}</span>
                               <span style={{width: '50%'}}>• {topic.title}</span>
-                              <span style={{width: '15%'}}>{topic.allocatedHours} hrs</span>
+                              <span className="hours-cell" style={{width: '15%'}}>{topic.allocatedHours}</span>
                               <span style={{width: '10%'}}></span>
                             </div>
                           ))}
@@ -616,44 +598,61 @@ const CourseTopic = () => {
                     {/* Form to Add New Topic */}
                     {selectedSubjectForTopic === item.subjectId && (
                       <div className="topic-form-section">
-                        <h4>Add New Topic</h4>
-                        <div className="topic-form">
-                          <div className="form-row">
-                            <div className="form-field">
+                        <div className="topic-form-card">
+                          <div className="topic-form-header">
+                            <div>
+                              <p className="topic-form-eyebrow">Add Topic</p>
+                              <h5>{item.courseTitle}</h5>
+                              <span className="topic-form-subtext">Outline the lesson and pacing for this course.</span>
+                            </div>
+                            <span className="course-chip">{item.courseCode}</span>
+                          </div>
+
+                          <div className="topic-form-grid">
+                            <div className="topic-input-group span-2">
                               <label>Topic Title</label>
                               <input 
                                 type="text"
                                 value={topicFormData.title}
                                 onChange={(e) => setTopicFormData({...topicFormData, title: e.target.value})}
-                                placeholder="Enter topic title"
+                                placeholder="Lesson 1 - Foundations"
                               />
+                              <span className="input-hint">Use descriptive titles so students immediately know the focus.</span>
                             </div>
-                            <div className="form-field">
-                              <label>Value</label>
+                            <div className="topic-input-group">
+                              <label>Sequence #</label>
                               <input 
                                 type="number"
+                                min="1"
                                 value={topicFormData.sequenceOrder}
                                 onChange={(e) => setTopicFormData({...topicFormData, sequenceOrder: e.target.value})}
                                 placeholder="1"
                               />
+                              <span className="input-hint">Controls how topics are ordered in the syllabus.</span>
                             </div>
-                            <div className="form-field">
-                              <label>Hours</label>
+                            <div className="topic-input-group">
+                              <label>Allocated Hours</label>
                               <input 
                                 type="number"
+                                min="0"
                                 value={topicFormData.allocatedHours}
                                 onChange={(e) => setTopicFormData({...topicFormData, allocatedHours: e.target.value})}
-                                placeholder="0"
+                                placeholder="3"
                               />
+                              <span className="input-hint">Total contact time reserved for this lesson.</span>
                             </div>
                           </div>
-                          <button 
-                            className="add-topic-btn"
-                            onClick={handleAddTopic}
-                            disabled={topicCreating}
-                          >
-                            {topicCreating ? 'Creating...' : 'Add Topic'}
-                          </button>
+
+                          <div className="topic-form-footer">
+                            <p className="helper-text">Need a refresher? Align sequence numbers with your actual lesson plan to keep encoding consistent.</p>
+                            <button 
+                              className="topic-submit-btn"
+                              onClick={handleAddTopic}
+                              disabled={topicCreating}
+                            >
+                              {topicCreating ? 'Creating…' : 'Add Topic'}
+                            </button>
+                          </div>
                         </div>
                       </div>
                     )}

@@ -1,3 +1,5 @@
+
+
 /* User Management Component Styles */
 
 .user-management {
@@ -90,6 +92,11 @@
   color: var(--text-primary, #212529);
 }
 
+.users-table th:last-child,
+.users-table td:last-child {
+  text-align: center;
+}
+
 .users-table tbody tr:hover {
   background: var(--bg-hover, #f8f9fa);
 }
@@ -171,6 +178,25 @@
   margin-right: 0.5rem;
 }
 
+.user-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.user-row-actions .btn-sm {
+  margin-right: 0;
+  min-width: 72px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.75rem;
+}
+
 /* Modal */
 .modal-overlay {
   position: fixed;
@@ -227,22 +253,22 @@
 
 /* Form */
 .user-form {
-  padding: 1.5rem;
+  padding: 0.75rem 1.5rem 1.5rem;
 }
 
 .form-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.20rem;
 }
 
 .form-group {
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.20rem;
 }
 
 .form-group label {
   display: block;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.1rem;
   font-weight: 500;
   color: var(--text-primary, #212529);
   font-size: 0.95rem;
@@ -252,7 +278,7 @@
 .form-group input[type="email"],
 .form-group input[type="password"] {
   width: 100%;
-  padding: 0.75rem;
+  padding: 0.58rem 0.75rem;
   border: 1px solid var(--border-color, #dee2e6);
   border-radius: 6px;
   font-size: 1rem;
@@ -264,32 +290,49 @@
 /* Password Input Wrapper */
 .password-input-wrapper {
   position: relative;
+  display: flex;
+  align-items: center;
   width: 100%;
 }
 
 .password-input-wrapper input {
   width: 100%;
-  padding-right: 3rem; /* Make room for the toggle button */
+  height: 52px;
+  padding-right: 3rem;
 }
 
 .password-toggle-btn {
   position: absolute;
-  top: 50%;
+  top: calc(50% - 10px);
   right: 0.75rem;
   transform: translateY(-50%);
   background: none;
   border: none;
   cursor: pointer;
   color: var(--text-secondary, #6c757d);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.25rem;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  margin: 0;
+  line-height: 0;
   transition: color 0.2s;
+}
+
+.password-toggle-btn svg {
+  display: block;
+  width: 20px;
+  height: 20px;
 }
 
 .password-toggle-btn:hover {
   color: var(--text-primary, #212529);
+}
+
+.password-toggle-btn:focus-visible {
+  outline: 2px solid rgba(13, 110, 253, 0.35);
+  outline-offset: 2px;
 }
 
 .form-group input:focus {
@@ -304,43 +347,97 @@
 }
 
 /* Department Selector */
+
+
 .department-selector {
-  max-height: 200px;
+  max-height: 240px;
   overflow-y: auto;
   border: 1px solid var(--border-color, #dee2e6);
-  border-radius: 6px;
-  padding: 0.5rem;
+  border-radius: 10px;
+  padding: 0.75rem;
+  background: var(--bg-primary, #ffffff);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.department-selector::-webkit-scrollbar {
+  width: 8px;
+}
+
+.department-selector::-webkit-scrollbar-thumb {
+  background: rgba(15, 76, 129, 0.2);
+  border-radius: 999px;
 }
 
 .department-checkbox {
   display: flex;
   align-items: center;
-  padding: 0.75rem;
+  gap: 0.9rem;
+  padding: 0.85rem 1rem;
   cursor: pointer;
-  border-radius: 6px;
-  transition: background 0.2s;
+  border-radius: 10px;
+  background: var(--bg-secondary, #f8f9fa);
+  border: 1px solid transparent;
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: inset 0 0 0 1px rgba(13, 110, 253, 0);
+  border: none;
 }
 
 .department-checkbox:hover {
-  background: var(--bg-hover, #f8f9fa);
+  background: #eef4ff;
 }
 
-.department-checkbox input[type="checkbox"] {
-  margin-right: 0.75rem;
-  width: 18px;
-  height: 18px;
-  cursor: pointer;
+.department-checkbox.selected {
+  background: rgba(13, 110, 253, 0.08);
+  border-color: rgba(13, 110, 253, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(13, 110, 253, 0.35);
+}
+
+.department-checkbox .dept-indicator {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(13, 110, 253, 0.4);
+  background: transparent;
+  flex-shrink: 0;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.department-checkbox.selected .dept-indicator {
+  background: var(--primary-color, #0d6efd);
+  border-color: var(--primary-color, #0d6efd);
+  box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.2);
 }
 
 .dept-info {
-  display: flex;
-  flex-direction: column;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dept-info strong {
+  font-weight: 600;
+  color: var(--text-primary, #212529);
+  font-size: 1rem;
 }
 
 .dept-code {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: var(--text-secondary, #6c757d);
-  margin-top: 0.15rem;
+  text-transform: uppercase;
+}
+
+.department-checkbox.selected .dept-info {
+  color: var(--primary-color, #0d6efd);
+}
+
+.department-checkbox.selected .dept-info strong {
+  color: var(--primary-color, #0d6efd);
+}
+
+.department-checkbox.selected .dept-code {
+  color: rgba(13, 110, 253, 0.8);
 }
 
 .checkbox-label {
@@ -528,12 +625,45 @@ body.dark .department-checkbox:hover {
   background: #374151;
 }
 
+body.dark .department-checkbox {
+  background: #1f2735;
+  border-color: #2f3b52;
+  box-shadow: inset 0 0 0 1px rgba(66, 153, 225, 0.1);
+}
+body.dark .dept-indicator {
+  border-color: rgba(66, 153, 225, 0.4);
+}
+
+body.dark .department-checkbox.selected .dept-indicator {
+  background: #4299e1;
+  border-color: #4299e1;
+  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.35);
+}
+
+body.dark .department-checkbox.selected {
+  background: rgba(66, 153, 225, 0.18);
+  border-color: rgba(66, 153, 225, 0.5);
+  box-shadow: inset 0 0 0 1px rgba(66, 153, 225, 0.5);
+}
+
 body.dark .dept-code {
   color: #a0aec0;
 }
 
 body.dark .dept-info strong {
   color: #e9ecef;
+}
+
+body.dark .department-selector::-webkit-scrollbar-thumb {
+  background: rgba(66, 153, 225, 0.35);
+}
+
+body.dark .department-checkbox.selected .dept-code {
+  color: rgba(174, 198, 255, 0.9);
+}
+
+body.dark .department-checkbox.selected .dept-info strong {
+  color: #90cdf4;
 }
 
 body.dark .modal-actions {

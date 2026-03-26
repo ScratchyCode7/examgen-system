@@ -2,6 +2,7 @@ import React, { useState, useRef, useImperativeHandle, forwardRef } from 'react'
 import { Upload, X, Image as ImageIcon } from 'lucide-react';
 import { apiService, API_BASE_URL } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
+import ConfirmationModal from './ConfirmationModal';
 import '../styles/QuestionImageUpload.css';
 
 const QuestionImageUpload = forwardRef(({ questionId, existingImage, onImageUpdate, isDarkMode }, ref) => {
@@ -13,6 +14,7 @@ const QuestionImageUpload = forwardRef(({ questionId, existingImage, onImageUpda
     existingImage ? `${API_BASE_URL}/${existingImage.imagePath}` : null
   );
   const [pendingFile, setPendingFile] = useState(null);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const fileInputRef = useRef(null);
   const { showToast } = useToast();
 
@@ -98,10 +100,12 @@ const QuestionImageUpload = forwardRef(({ questionId, existingImage, onImageUpda
     }
   };
 
-  const handleDelete = async () => {
-    if (!imageData || !questionId) return;
+  const handleDelete = () => {
+    setShowDeleteConfirmation(true);
+  };
 
-    if (!window.confirm('Are you sure you want to delete this image?')) return;
+  const confirmDelete = async () => {
+    if (!imageData || !questionId) return;
 
     try {
       setIsUploading(true);
@@ -110,6 +114,7 @@ const QuestionImageUpload = forwardRef(({ questionId, existingImage, onImageUpda
       setPreviewUrl(null);
       if (onImageUpdate) onImageUpdate(null);
       showToast({ message: 'Image deleted successfully.', type: 'success' });
+      setShowDeleteConfirmation(false);
     } catch (error) {
       console.error('Failed to delete image:', error);
       showToast({ message: 'Failed to delete image. Please try again.', type: 'error' });
@@ -240,6 +245,19 @@ const QuestionImageUpload = forwardRef(({ questionId, existingImage, onImageUpda
           <small>💡 Image will be uploaded when you save the question</small>
         </div>
       )}
+
+      <ConfirmationModal
+        isOpen={showDeleteConfirmation}
+        title="Confirm Delete"
+        message="Are you sure you want to delete this image?"
+        onCancel={() => setShowDeleteConfirmation(false)}
+        onConfirm={confirmDelete}
+        cancelText="Cancel"
+        confirmText={isUploading ? 'Deleting...' : 'Delete'}
+        isLoading={isUploading}
+        isDarkMode={isDarkMode}
+        isDanger={true}
+      />
     </div>
   );
 });

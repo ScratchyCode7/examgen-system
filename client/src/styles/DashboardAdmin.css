@@ -207,16 +207,25 @@
   border-radius: 9999px;
   border: 1px solid #d1d5db;
   background: #fff;
-  color: inherit;
+  color: #000;
   font-size: 0.95rem;
   transition: all 0.2s;
+}
+
+.dashboard-admin .search-bar input::placeholder {
+  color: #888;
 }
 
 .dashboard-admin .search-bar .search-icon {
   position: absolute;
   right: 1rem;
-  top: 30%;
+  top: calc(50% - 12px);
+  bottom: auto;
   transform: translateY(-50%);
+  display: block;
+  margin: 0;
+  padding: 0;
+  line-height: 1;
   color: #888;
   width: 18px;
   height: 18px;
@@ -228,6 +237,10 @@
   background-color: #14202b; /* dark background */
   border-color: #263244;
   color: #ffffff; /* white text */
+}
+
+.dashboard-admin.dark .search-bar input::placeholder {
+  color: #ffffff;
 }
 
 .dashboard-admin.dark .search-bar .search-icon {

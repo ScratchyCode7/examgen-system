@@ -292,7 +292,7 @@ const AdminPrintQueue = () => {
             .form-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 15px 0; }
             .form-field { display: flex; align-items: center; gap: 5px; }
             .form-field label { color: #000; font-size: 14px; white-space: nowrap; }
-            .form-field-blank { flex: 1; border-bottom: 1px solid #000; min-width: 150px; height: 0; }
+            .form-field-blank { flex: 1; display: block; border-bottom: 1.5px solid #000; min-width: 150px; min-height: 14px; }
             .reminders { margin: 15px 0; font-size: 13px; color: #000; }
             .reminders p { margin: 5px 0; }
             .questions-section { margin: 20px 0; }

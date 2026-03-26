@@ -23,6 +23,7 @@ public sealed class LoginEndpoint : IEndpoint
                 AppDbContext dbContext,
                 IPasswordHasher<User> passwordHasher,
                 ITokenService tokenService,
+                IUserSessionService userSessionService,
                 ILoggingService loggingService,
                 HttpContext httpContext,
                 CancellationToken ct) =>
@@ -91,26 +92,33 @@ public sealed class LoginEndpoint : IEndpoint
                 return TypedResults.Unauthorized();
             }
 
-            var stateChanged = false;
             if (user.FailedLoginAttempts > 0)
             {
                 user.FailedLoginAttempts = 0;
-                stateChanged = true;
             }
 
             if (user.LockoutEnd.HasValue)
             {
                 user.LockoutEnd = null;
-                stateChanged = true;
             }
 
-            var token = tokenService.CreateToken(user);
-            var response = new LoginResponse(token.AccessToken, token.ExpiresAt);
+            await dbContext.SaveChangesAsync(ct);
 
-            if (stateChanged)
+            var sessionId = await userSessionService.StartSessionIfAvailableAsync(user.UserId, terminateExistingSessions: true, ct);
+            if (!sessionId.HasValue)
             {
-                await dbContext.SaveChangesAsync(ct);
+                const string activeSessionMessage = "This account is already logged in on another device.";
+                await loggingService.LogWarningAsync(
+                    user.UserId.ToString(),
+                    "Auth",
+                    "Login Blocked - Active Session Exists",
+                    $"{activeSessionMessage} {contextDetails}");
+
+                return TypedResults.Conflict(new { message = activeSessionMessage });
             }
+
+            var token = tokenService.CreateToken(user, sessionId.Value);
+            var response = new LoginResponse(token.AccessToken, token.ExpiresAt);
 
             await loggingService.LogActivityAsync(
                 user.UserId.ToString(),

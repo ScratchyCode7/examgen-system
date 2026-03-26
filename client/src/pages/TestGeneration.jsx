@@ -4,6 +4,7 @@ import * as Icons from 'lucide-react';
 import NavItem from '../components/NavItem';
 import DropdownNavItem from '../components/DropdownNavItem';
 import LogoutModal from '../components/LogoutModal';
+import ConfirmationModal from '../components/ConfirmationModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useToast } from '../contexts/ToastContext';
@@ -14,8 +15,132 @@ import '../styles/TestGeneration.css';
 import TDBLogo from '../assets/TDB logo.png';
 import UPHSL from '../assets/uphsl.png';
 import UPHSLLogo from '../assets/UPHSL Logo.png';
+import { HELP_CENTER_URL } from '../constants/helpLinks';
 
-const { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search, Printer, Save, Eye, Trash2, PlayCircle, CheckCircle, AlertTriangle, FileText } = Icons;
+const DEFAULT_QUESTION_EDIT_STATE = {
+  isOpen: false,
+  questionIndex: null,
+  topicId: null,
+  topicName: '',
+  level: null,
+  currentQuestionId: null,
+  levelGroup: null,
+  courseId: null,
+  subjectId: null,
+  selectedAnswer: ''
+};
+
+const getQuestionIdentifier = (question) => {
+  if (!question) return null;
+  return (
+    question.id ??
+    question.questionId ??
+    question.QuestionId ??
+    question.testQuestionId ??
+    question.TestQuestionId ??
+    null
+  );
+};
+
+const getQuestionTopicId = (question) => {
+  if (!question) return null;
+  return (
+    question.topicId ??
+    question.TopicId ??
+    question.topic?.id ??
+    question.Topic?.Id ??
+    question.topic ??
+    question.Topic ??
+    null
+  );
+};
+
+const getQuestionSubjectId = (question) => {
+  if (!question) return null;
+  return (
+    question.subjectId ??
+    question.SubjectId ??
+    question.subject?.id ??
+    question.Subject?.Id ??
+    question.subject ??
+    question.Subject ??
+    null
+  );
+};
+
+const getQuestionCourseId = (question) => {
+  if (!question) return null;
+  return (
+    question.courseId ??
+    question.CourseId ??
+    question.programId ??
+    question.ProgramId ??
+    question.course?.id ??
+    question.Course?.Id ??
+    question.program?.id ??
+    question.Program?.Id ??
+    question.course ??
+    question.Course ??
+    question.program ??
+    question.Program ??
+    null
+  );
+};
+
+const BLOOM_DISPLAY_LABELS = {
+  remembering: 'Remember / Understand',
+  applying: 'Apply / Analyze',
+  evaluating: 'Evaluate / Create'
+};
+
+const BLOOM_KEYS = ['remembering', 'applying', 'evaluating'];
+
+const getBloomGroupKey = (value) => {
+  if (value === undefined || value === null) return null;
+  const normalized = String(value).trim().toLowerCase();
+  if (!normalized) return null;
+  if (
+    normalized === 'remembering' ||
+    normalized.includes('remember') ||
+    normalized.includes('understand') ||
+    normalized.includes('knowledge') ||
+    normalized.includes('comprehension') ||
+    normalized.includes('low order') ||
+    normalized.includes('low-order')
+  ) {
+    return 'lower';
+  }
+  if (
+    normalized === 'applying' ||
+    normalized.includes('apply') ||
+    normalized.includes('analy') ||
+    normalized.includes('middle order') ||
+    normalized.includes('middle-order')
+  ) {
+    return 'middle';
+  }
+  if (
+    normalized === 'evaluating' ||
+    normalized.includes('evaluate') ||
+    normalized.includes('create') ||
+    normalized.includes('synth') ||
+    normalized.includes('higher order') ||
+    normalized.includes('higher-order')
+  ) {
+    return 'higher';
+  }
+  return null;
+};
+
+const getLevelKeyFromBloom = (value) => {
+  const group = getBloomGroupKey(value);
+  if (group === 'lower') return 'low';
+  if (group === 'middle') return 'middle';
+  if (group === 'higher') return 'high';
+  return null;
+};
+
+const { Home, ClipboardList, BookOpen, Settings, LogOut, User, Users, Sun, Moon, Search, Printer, Save, Eye, Trash2, PlayCircle, CheckCircle, AlertTriangle, FileText, HelpCircle, RefreshCw } = Icons;
 
 const TestGeneration = () => {
   const { user, logout, isAdmin } = useAuth();
@@ -83,6 +208,63 @@ const TestGeneration = () => {
     return '-';
   };
 
+  const normalizeAnswerChoice = (value) => {
+    if (value === null || value === undefined) return '';
+    const normalized = String(value).trim().toUpperCase();
+    return ['A', 'B', 'C', 'D'].includes(normalized) ? normalized : '';
+  };
+
+  const applyCorrectAnswerForGeneratedExam = (question, answerChoice) => {
+    if (!question) return question;
+    const normalizedChoice = normalizeAnswerChoice(answerChoice);
+    if (!normalizedChoice) return question;
+
+    const optionList = question.options || question.Options || question.choices || [];
+    const normalizedOptions = Array.isArray(optionList) ? optionList : [];
+    if (normalizedOptions.length === 0) return question;
+
+    const targetIndex = normalizedChoice.charCodeAt(0) - 65;
+    if (targetIndex < 0 || targetIndex >= normalizedOptions.length) {
+      return question;
+    }
+
+    let currentCorrectIndex = normalizedOptions.findIndex(isOptionMarkedCorrect);
+    if (currentCorrectIndex < 0) {
+      const fallbackIndex = normalizeAnswerChoice(getCorrectAnswerLetter(question));
+      if (fallbackIndex) {
+        currentCorrectIndex = fallbackIndex.charCodeAt(0) - 65;
+      }
+    }
+
+    if (currentCorrectIndex < 0 || currentCorrectIndex >= normalizedOptions.length) {
+      currentCorrectIndex = targetIndex;
+    }
+
+    const reorderedOptions = [...normalizedOptions];
+    if (currentCorrectIndex !== targetIndex) {
+      const temp = reorderedOptions[targetIndex];
+      reorderedOptions[targetIndex] = reorderedOptions[currentCorrectIndex];
+      reorderedOptions[currentCorrectIndex] = temp;
+    }
+
+    const updatedOptions = reorderedOptions.map((option, index) => {
+      const isCorrect = index === targetIndex;
+      return {
+        ...option,
+        isCorrect,
+        IsCorrect: isCorrect
+      };
+    });
+
+    return {
+      ...question,
+      options: updatedOptions,
+      correctAnswer: normalizedChoice,
+      correctAnswerLetter: normalizedChoice,
+      answerKey: normalizedChoice
+    };
+  };
+
   // Helper function to convert image URL to base64 data URL - using fetch to avoid CORS
   const convertImageToDataURL = async (imageUrl) => {
     try {
@@ -116,6 +298,10 @@ const TestGeneration = () => {
     }
   }, []);
 
+  const asHtml = React.useCallback((rawContent) => ({
+    __html: rawContent === undefined || rawContent === null ? '' : String(rawContent)
+  }), []);
+
   // Helper function to determine semester based on current date
   const getAutoSemester = () => {
     const month = new Date().getMonth() + 1;
@@ -140,12 +326,35 @@ const TestGeneration = () => {
   const [selectedDepartment, setSelectedDepartment] = useState(''); // Department ID
   const [selectedCourse, setSelectedCourse] = useState(''); // Program ID
   const [selectedSubject, setSelectedSubject] = useState(''); // Subject ID
-  const [examType, setExamType] = useState('Prelim'); // Midterm, Prelim, Finals
-  const [semester, setSemester] = useState(getAutoSemester()); // 1st, 2nd, Summer
+  const [examType, setExamType] = useState(''); // Midterm, Prelim, Finals
+  const [semester, setSemester] = useState(''); // 1st, 2nd, Summer
   const [schoolYear] = useState(getAutoSchoolYear()); // YYYYYYYY format
   const [totalExamItems, setTotalExamItems] = useState(''); // Total exam items
   const [manualTotalItems, setManualTotalItems] = useState(false);
   const [specOverrides, setSpecOverrides] = useState({});
+  const [totalExamItemsInput, setTotalExamItemsInput] = useState('');
+  const hasCommittedTotalExamItems = React.useMemo(() => {
+    const parsed = parseInt(totalExamItems, 10);
+    return Number.isFinite(parsed) && parsed > 0;
+  }, [totalExamItems]);
+  const isTotalExamItemsInputValid = React.useMemo(() => {
+    const parsed = parseInt(totalExamItemsInput, 10);
+    return Number.isFinite(parsed) && parsed > 0;
+  }, [totalExamItemsInput]);
+  const isTotalExamItemsDirty = React.useMemo(() => {
+    if (!hasCommittedTotalExamItems) return false;
+    return String(totalExamItemsInput || '').trim() !== String(totalExamItems || '').trim();
+  }, [hasCommittedTotalExamItems, totalExamItemsInput, totalExamItems]);
+  const isTableUnlocked = hasCommittedTotalExamItems && !isTotalExamItemsDirty;
+  const canConfirmTotalExamItems = React.useMemo(() => {
+    if (!selectedSubject) return false;
+    if (!isTotalExamItemsInputValid) return false;
+    return true;
+  }, [selectedSubject, isTotalExamItemsInputValid]);
+  const [questionEditModal, setQuestionEditModal] = useState(DEFAULT_QUESTION_EDIT_STATE);
+  const [replacementCandidates, setReplacementCandidates] = useState([]);
+  const [isLoadingReplacementCandidates, setIsLoadingReplacementCandidates] = useState(false);
+  const [replacementError, setReplacementError] = useState('');
 
   const handleSpecOverrideChange = (overrideKey, field, value) => {
     setSpecOverrides(prev => ({
@@ -156,6 +365,45 @@ const TestGeneration = () => {
       }
     }));
   };
+
+  React.useEffect(() => {
+    setTotalExamItemsInput(totalExamItems);
+  }, [totalExamItems]);
+
+  const resetGeneratedArtifacts = React.useCallback(() => {
+    setGeneratedSpec(null);
+    setSampleExam(null);
+    setActiveExamMeta(null);
+    setIsSampleExamVisible(false);
+    setShowAnswerSheet(false);
+    setSaveConfirmation(null);
+    setGenerationWarnings([]);
+    setInsufficientItemsWarning('');
+    setExcessItemsWarning('');
+    setLastSavedSignature('');
+    setQuestionEditModal(DEFAULT_QUESTION_EDIT_STATE);
+    setReplacementCandidates([]);
+    setReplacementError('');
+    setIsLoadingReplacementCandidates(false);
+  }, []);
+
+  useEffect(() => {
+    if (isTotalExamItemsDirty && hasCommittedTotalExamItems && !totalItemsDirtyRef.current) {
+      resetGeneratedArtifacts();
+    }
+    if (!isTotalExamItemsDirty) {
+      totalItemsDirtyRef.current = false;
+      return;
+    }
+    totalItemsDirtyRef.current = true;
+  }, [isTotalExamItemsDirty, hasCommittedTotalExamItems, resetGeneratedArtifacts]);
+
+  const handleTotalExamItemsCommit = React.useCallback(() => {
+    const parsed = parseInt(totalExamItemsInput, 10);
+    const normalized = Number.isFinite(parsed) && parsed > 0 ? String(parsed) : '';
+    setTotalExamItems(normalized);
+    setManualTotalItems(true);
+  }, [totalExamItemsInput]);
 
   const handleDepartmentChange = (deptId) => {
     setSelectedDepartment(deptId);
@@ -184,6 +432,27 @@ const TestGeneration = () => {
   const [subjects, setSubjects] = useState([]);
   const [topics, setTopics] = useState([]);
   const [questionsByTopic, setQuestionsByTopic] = useState({}); // Store questions by topicId
+  const fetchQuestionsForTopic = React.useCallback(async (topicId) => {
+    if (!topicId) return [];
+    const topicKey = String(topicId);
+    const cached = questionsByTopic[topicKey];
+    if (Array.isArray(cached) && cached.length > 0) {
+      return cached;
+    }
+    try {
+      const response = await apiService.getQuestionsByTopic(topicId);
+      const normalized = normalizeApiArray(response);
+      setQuestionsByTopic((prev) => ({
+        ...prev,
+        [topicKey]: normalized
+      }));
+      return normalized;
+    } catch (err) {
+      console.error('Failed to load questions for topic:', err);
+      setError('Failed to load questions for the selected topic.');
+      return [];
+    }
+  }, [questionsByTopic, normalizeApiArray]);
   const [isLoadingDepartments, setIsLoadingDepartments] = useState(false);
   const [isLoadingCourses, setIsLoadingCourses] = useState(false);
   const [isLoadingSubjects, setIsLoadingSubjects] = useState(false);
@@ -193,6 +462,7 @@ const TestGeneration = () => {
   const [saveNameError, setSaveNameError] = useState('');
   const [isSavingExam, setIsSavingExam] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState({ show: false, rowId: null });
+  const [cancelReviewConfirmation, setCancelReviewConfirmation] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [showPrintRequestModal, setShowPrintRequestModal] = useState(false);
   const [printRequestCopies, setPrintRequestCopies] = useState(1);
@@ -219,6 +489,7 @@ const TestGeneration = () => {
   const requestSyncRef = useRef(false);
   const skipSpecRecalcRef = useRef(false);
   const autoReadyRef = useRef({ requestId: null, marked: false });
+  const totalItemsDirtyRef = useRef(false);
   const [myPrintRequests, setMyPrintRequests] = useState([]);
   const [isLoadingMyRequests, setIsLoadingMyRequests] = useState(false);
   const [myRequestsError, setMyRequestsError] = useState('');
@@ -325,7 +596,7 @@ const TestGeneration = () => {
       setQuestionsByTopic(questionMap);
     } catch (err) {
       console.error('Failed to load questions for subject:', err);
-      setError('Failed to load questions for this subject.');
+      setError('Failed to load questions for this course.');
       const emptyMap = {};
       topicList.forEach((topic) => {
         emptyMap[topic.id] = [];
@@ -476,11 +747,11 @@ const TestGeneration = () => {
         
         if (list.length === 0) {
           console.warn('No subjects found for courseId:', courseId);
-          setError('No subjects found for this program.');
+          setError('No courses found for this program.');
         }
       } catch (err) {
         console.error('Failed to load subjects:', err);
-        setError(`Failed to load subjects: ${err.message || 'Unknown error'}`);
+        setError(`Failed to load courses: ${err.message || 'Unknown error'}`);
         setSubjects([]);
       } finally {
         setIsLoadingSubjects(false);
@@ -533,7 +804,7 @@ const TestGeneration = () => {
 
         if (list.length === 0) {
           console.warn('No topics found for subjectId:', subjectId);
-          setError('No topics found for this subject. Please check that topics have been created and linked to this subject.');
+          setError('No topics found for this course. Please check that topics have been created and linked to this course.');
           setQuestionsByTopic({});
         } else {
           console.log('Found', list.length, 'topics');
@@ -556,6 +827,10 @@ const TestGeneration = () => {
       setIsLogoutModalOpen(true);
     } else if (action === 'Activity Logs') {
       navigate('/activity-logs');
+    } else if (action === 'Need Help') {
+      if (typeof window !== 'undefined') {
+        window.open(HELP_CENTER_URL, '_blank', 'noopener,noreferrer');
+      }
     } else {
       console.log('Navigate to', action);
     }
@@ -590,6 +865,40 @@ const TestGeneration = () => {
       
       return updated;
     });
+  };
+
+  const isTopicSelectedInOtherRow = (rowId, topicId) => {
+    if (!topicId) return false;
+    return topicRows.some(row => row.id !== rowId && String(row.topicId) === String(topicId));
+  };
+
+  const getSelectedTopicIdsForOtherRows = (rowId) => {
+    return new Set(
+      topicRows
+        .filter(row => row.id !== rowId && row.topicId)
+        .map(row => String(row.topicId))
+    );
+  };
+
+  const handleTopicSelection = (rowId, topicId, topicName) => {
+    if (!topicId) return;
+
+    if (isTopicSelectedInOtherRow(rowId, topicId)) {
+      showToast({ message: 'This topic is already selected in another row. Please choose a different topic.', type: 'error' });
+      setError('Duplicate topic selection is not allowed.');
+      return;
+    }
+
+    const selectedTopicObj = topics.find(t => String(t.id) === String(topicId));
+    console.log('[TOPIC SELECT] Selected topic object:', selectedTopicObj);
+    const hours = selectedTopicObj?.allocatedHours || 0;
+    console.log('[TOPIC SELECT] Extracted hours:', hours);
+
+    handleTopicRowChange(rowId, 'topicId', topicId);
+    handleTopicRowChange(rowId, 'topicName', topicName);
+    handleTopicRowChange(rowId, 'topic', topicName);
+    handleTopicRowChange(rowId, 'hours', String(hours));
+    setError('');
   };
 
 // Handle delete row - show confirmation first
@@ -914,14 +1223,20 @@ const TestGeneration = () => {
           const questionId = Number(rawQuestionId);
           if (!Number.isInteger(questionId)) return null;
 
+          const normalizedCorrectAnswer = normalizeAnswerChoice(getCorrectAnswerLetter(question));
           const options = (question.options || question.Options || question.choices || [])
             .map((option, optIdx) => {
               const rawOptionId = option?.optionId ?? option?.OptionId ?? option?.id ?? option?.Id;
               const optionId = Number(rawOptionId);
               if (!Number.isInteger(optionId)) return null;
+              const optionLetter = String.fromCharCode(65 + optIdx);
+              const isCorrect = normalizedCorrectAnswer
+                ? optionLetter === normalizedCorrectAnswer
+                : isOptionMarkedCorrect(option);
               return {
                 optionId,
-                displayOrder: optIdx
+                displayOrder: optIdx,
+                isCorrect
               };
             })
             .filter(Boolean);
@@ -1008,6 +1323,122 @@ const TestGeneration = () => {
     return subjects.find(s => s.id === parseInt(selectedSubject, 10)) || null;
   }, [selectedSubject, subjects]);
 
+  const buildDraftPrintRequestExamData = React.useCallback(() => {
+    const departmentId = Number(selectedDepartment);
+    const courseId = Number(selectedCourse);
+    const subjectId = Number(selectedSubject);
+
+    if (!Number.isInteger(departmentId) || !Number.isInteger(courseId) || !Number.isInteger(subjectId)) {
+      return null;
+    }
+
+    const { ordered } = questionsPayload;
+    if (!Array.isArray(ordered) || ordered.length === 0) {
+      return null;
+    }
+
+    const sampleQuestions = Array.isArray(sampleExam?.questions) ? sampleExam.questions : [];
+    const sampleById = new Map(
+      sampleQuestions
+        .map((question) => {
+          const questionId = Number(getQuestionIdentifier(question));
+          if (!Number.isInteger(questionId)) return null;
+          return [questionId, question];
+        })
+        .filter(Boolean)
+    );
+
+    const questions = ordered.map((entry, index) => {
+      const questionId = Number(entry?.questionId);
+      const sourceQuestion = sampleById.get(questionId);
+      const sourceOptions = Array.isArray(sourceQuestion?.options)
+        ? sourceQuestion.options
+        : Array.isArray(sourceQuestion?.Options)
+          ? sourceQuestion.Options
+          : [];
+      const sourceImage = sourceQuestion?.image || sourceQuestion?.Image || null;
+
+      const options = (entry?.options || [])
+        .map((option, optIdx) => {
+          const optionId = Number(option?.optionId);
+          if (!Number.isInteger(optionId)) return null;
+
+          const sourceOption = sourceOptions.find((candidate) => {
+            const candidateId = Number(candidate?.optionId ?? candidate?.OptionId ?? candidate?.id ?? candidate?.Id);
+            return Number.isInteger(candidateId) && candidateId === optionId;
+          });
+
+          const isCorrect = typeof option?.isCorrect === 'boolean'
+            ? option.isCorrect
+            : isOptionMarkedCorrect(sourceOption);
+
+          return {
+            optionId,
+            displayOrder: Number.isInteger(option?.displayOrder) ? option.displayOrder : optIdx,
+            content: sourceOption?.content || sourceOption?.Content || sourceOption?.optionText || sourceOption?.text || '',
+            isCorrect,
+          };
+        })
+        .filter(Boolean);
+
+      const imagePath = sourceImage?.imagePath || sourceImage?.ImagePath || null;
+      const widthPercentage = Number(sourceImage?.widthPercentage ?? sourceImage?.WidthPercentage);
+
+      return {
+        questionId,
+        displayOrder: Number.isInteger(entry?.displayOrder) ? entry.displayOrder : index,
+        content: sourceQuestion?.content || sourceQuestion?.Content || null,
+        bloomLevel: (() => {
+          const raw = sourceQuestion?.bloomLevel ?? sourceQuestion?.BloomLevel;
+          const numeric = Number(raw);
+          return Number.isNaN(numeric) ? null : numeric;
+        })(),
+        points: (() => {
+          const raw = sourceQuestion?.points ?? sourceQuestion?.Points;
+          const numeric = Number(raw);
+          return Number.isNaN(numeric) ? null : numeric;
+        })(),
+        image: imagePath
+          ? {
+              imagePath,
+              widthPercentage: Number.isNaN(widthPercentage) ? null : widthPercentage,
+              alignment: sourceImage?.alignment || sourceImage?.Alignment || null,
+            }
+          : null,
+        options,
+      };
+    });
+
+    return {
+      departmentId,
+      courseId,
+      subjectId,
+      title: activeExamMeta?.setLabel || `${examType} ${semester} ${schoolYear} Draft`,
+      description: `${examType} Exam - ${semester} ${schoolYear}`,
+      instructions: null,
+      examType,
+      semester,
+      schoolYear,
+      durationMinutes: 60,
+      totalPoints: ordered.length,
+      specificationSnapshot: generatedSpec ? JSON.stringify(generatedSpec) : null,
+      generationNotes: generationWarnings?.join('\n') || null,
+      questions,
+    };
+  }, [
+    selectedDepartment,
+    selectedCourse,
+    selectedSubject,
+    questionsPayload,
+    sampleExam,
+    activeExamMeta,
+    examType,
+    semester,
+    schoolYear,
+    generatedSpec,
+    generationWarnings,
+  ]);
+
   const loadSavedExamSets = React.useCallback(async () => {
     if (!selectedSubject) {
       setSavedExamSets([]);
@@ -1068,21 +1499,113 @@ const TestGeneration = () => {
     return copy.slice(0, n);
   };
 
-  const bloomCategoryFromQuestion = (q) => {
-    // Accept various shapes returned by backend
+  const bloomCategoryFromQuestion = (q = {}) => {
+    const coarseMatchFromString = (value) => {
+      if (value === undefined || value === null) return null;
+      const normalized = String(value).trim().toLowerCase();
+      if (!normalized) return null;
+      if (normalized.includes('remember') || normalized.includes('understand')) return 'remembering';
+      if (normalized.includes('apply') || normalized.includes('analy')) return 'applying';
+      if (normalized.includes('evaluate') || normalized.includes('create') || normalized.includes('synthesize')) return 'evaluating';
+      return null;
+    };
+
+    const directLevel = coarseMatchFromString(
+      q.level ??
+      q.Level ??
+      q.bloomCategory ??
+      q.BloomCategory ??
+      q.cognitiveLevel ??
+      q.CognitiveLevel ??
+      q.cognitiveCategory ??
+      q.CognitiveCategory ??
+      q.cognitive ??
+      q.Cognitive ??
+      null
+    );
+    if (directLevel) return directLevel;
+
     const bloom = q.BloomLevel ?? q.bloomLevel ?? q.bloom ?? null;
     if (bloom != null) {
       const b = Number(bloom);
-      if (b <= 2) return 'remembering';
-      if (b <= 4) return 'applying';
-      return 'evaluating';
+      if (!Number.isNaN(b)) {
+        if (b <= 2) return 'remembering';
+        if (b <= 4) return 'applying';
+        return 'evaluating';
+      }
+      const coarse = coarseMatchFromString(bloom);
+      if (coarse) return coarse;
     }
-    // Fallback: try to infer from textual type
+
     const type = (q.type || q.questionType || '').toString().toLowerCase();
-    if (type.includes('remember')) return 'remembering';
+    if (type.includes('remember') || type.includes('understand')) return 'remembering';
     if (type.includes('apply') || type.includes('analy')) return 'applying';
+    if (type.includes('evaluate') || type.includes('create') || type.includes('synth')) return 'evaluating';
+
     return 'evaluating';
   };
+
+  const formatBloomDisplayLabel = (question) => {
+    const keyFromQuestion = (() => {
+      const raw = question?.level ?? question?.Level ?? null;
+      if (raw !== null && raw !== undefined) {
+        const normalized = String(raw).trim().toLowerCase();
+        if (normalized) return normalized;
+      }
+      return bloomCategoryFromQuestion(question || {});
+    })();
+
+    if (keyFromQuestion && BLOOM_DISPLAY_LABELS[keyFromQuestion]) {
+      return BLOOM_DISPLAY_LABELS[keyFromQuestion];
+    }
+
+    const fallbackRaw = question?.bloomLevel ?? question?.BloomLevel ?? question?.bloom ?? question?.Bloom ?? null;
+    if (fallbackRaw !== null && fallbackRaw !== undefined && String(fallbackRaw).trim()) {
+      return String(fallbackRaw).trim();
+    }
+
+    return '—';
+  };
+
+  const validateBloomDistribution = React.useCallback((questions, expectedCounts) => {
+    const counts = { remembering: 0, applying: 0, evaluating: 0 };
+    const mismatches = [];
+
+    questions.forEach((question, index) => {
+      const category = bloomCategoryFromQuestion(question);
+      if (!BLOOM_KEYS.includes(category)) {
+        mismatches.push({ index, category: category ?? 'unclassified', questionId: getQuestionIdentifier(question) });
+        return;
+      }
+      counts[category] += 1;
+    });
+
+    const missingLevels = BLOOM_KEYS.filter((key) => counts[key] !== (expectedCounts[key] || 0));
+    const isValid = mismatches.length === 0 && missingLevels.length === 0;
+
+    return { isValid, counts, mismatches, missingLevels };
+  }, [bloomCategoryFromQuestion]);
+
+  const normalizeQuestionForSampleExam = React.useCallback((question, overrides = {}) => {
+    if (!question) return null;
+    const topicId = overrides.topicId ?? getQuestionTopicId(question);
+    const topicFromQuestion = overrides.topicName
+      ?? question.topicName
+      ?? question.TopicName
+      ?? question.topic?.name
+      ?? question.Topic?.Name
+      ?? question.topicTitle
+      ?? question.TopicTitle;
+    const topicObj = topics.find((t) => String(t.id) === String(topicId));
+    const resolvedTopicName = topicFromQuestion || topicObj?.title || topicObj?.name || (topicId ? `Topic ${topicId}` : 'Topic');
+    return {
+      ...question,
+      topicId,
+      topicName: resolvedTopicName,
+      level: bloomCategoryFromQuestion(question),
+      correctAnswer: getCorrectAnswerLetter(question)
+    };
+  }, [topics]);
 
   const questionBankSummary = React.useMemo(() => {
     if (!selectedSubject) return null;
@@ -1103,16 +1626,120 @@ const TestGeneration = () => {
     });
 
     const total = flattened.length;
-    const toPercent = (count) => (total > 0 ? ((count / total) * 100).toFixed(1) : '0.0');
     const bloomData = [
-      { level: 'Lower Order (Remember/Understand)', count: counts.lower, achieved: toPercent(counts.lower), target: 30 },
-      { level: 'Middle Order (Apply/Analyze)', count: counts.middle, achieved: toPercent(counts.middle), target: 30 },
-      { level: 'Higher Order (Evaluate/Create)', count: counts.higher, achieved: toPercent(counts.higher), target: 40 }
+      { key: 'remember', title: 'Remember / Understand', descriptor: 'Lower Order Skills', count: counts.lower },
+      { key: 'apply', title: 'Apply / Analyze', descriptor: 'Middle Order Skills', count: counts.middle },
+      { key: 'evaluate', title: 'Evaluate / Create', descriptor: 'Higher Order Skills', count: counts.higher }
     ];
     const loadedTopicCount = Object.values(questionsByTopic || {}).filter((list) => Array.isArray(list) && list.length > 0).length;
 
     return { totalQuestions: total, bloomData, loadedTopicCount };
   }, [questionsByTopic, selectedSubject]);
+
+  const syncSpecWithExamQuestions = React.useCallback((questions) => {
+    if (!Array.isArray(questions) || questions.length === 0) return;
+
+    setGeneratedSpec((prevSpec) => {
+      const createBucket = () => ({ count: 0, placements: [], questions: [] });
+      const baseSpec = prevSpec && prevSpec.specs
+        ? JSON.parse(JSON.stringify(prevSpec))
+        : { specs: [], totals: { low: 0, middle: 0, high: 0, grand: 0 }, totalItems: 0 };
+
+      const specMap = new Map();
+      const specOrder = [];
+
+      if (Array.isArray(baseSpec.specs)) {
+        baseSpec.specs.forEach((spec) => {
+          const key = String(spec.topicId ?? spec.topic ?? '');
+          if (!key) return;
+          spec.cognitive = spec.cognitive || {};
+          ['low', 'middle', 'high'].forEach((levelKey) => {
+            if (!spec.cognitive[levelKey]) {
+              spec.cognitive[levelKey] = createBucket();
+            } else {
+              spec.cognitive[levelKey].placements = [];
+              spec.cognitive[levelKey].questions = [];
+              spec.cognitive[levelKey].count = 0;
+            }
+          });
+          specOrder.push(key);
+          specMap.set(key, spec);
+        });
+      } else {
+        baseSpec.specs = [];
+      }
+
+      topicRows.forEach((row) => {
+        const topicId = parseInt(row.topicId) || parseInt(row.topic);
+        if (!topicId) return;
+        const key = String(topicId);
+        if (!specMap.has(key)) {
+          const entry = {
+            topicId,
+            topicName: row.topicName || row.topic || `Topic ${topicId}`,
+            topic: row.topic,
+            hours: row.hours,
+            percentage: row.percentage || '0',
+            overrideKey: `${topicId}-${row.hours || ''}`,
+            cognitive: {
+              low: createBucket(),
+              middle: createBucket(),
+              high: createBucket()
+            },
+            total: 0
+          };
+          specOrder.push(key);
+          specMap.set(key, entry);
+        }
+      });
+
+      questions.forEach((question, index) => {
+        const topicId = getQuestionTopicId(question);
+        if (!topicId) return;
+        const specEntry = specMap.get(String(topicId));
+        if (!specEntry) return;
+        const bloom = question.level || bloomCategoryFromQuestion(question);
+        const levelKey = getLevelKeyFromBloom(bloom);
+        if (!levelKey) return;
+        const bucket = specEntry.cognitive[levelKey] || createBucket();
+        specEntry.cognitive[levelKey] = bucket;
+        const placementNumber = index + 1;
+        bucket.placements.push(placementNumber);
+        bucket.questions.push({
+          ...question,
+          placement: placementNumber
+        });
+      });
+
+      const totals = { low: 0, middle: 0, high: 0 };
+      const nextSpecs = specOrder
+        .map((key) => specMap.get(key))
+        .filter(Boolean)
+        .map((specEntry) => {
+          ['low', 'middle', 'high'].forEach((levelKey) => {
+            const bucket = specEntry.cognitive[levelKey];
+            bucket.placements.sort((a, b) => a - b);
+            bucket.count = bucket.questions.length;
+          });
+          specEntry.total = specEntry.cognitive.low.count + specEntry.cognitive.middle.count + specEntry.cognitive.high.count;
+          totals.low += specEntry.cognitive.low.count;
+          totals.middle += specEntry.cognitive.middle.count;
+          totals.high += specEntry.cognitive.high.count;
+          return specEntry;
+        });
+
+      totals.grand = totals.low + totals.middle + totals.high;
+
+      return {
+        ...baseSpec,
+        specs: nextSpecs,
+        totals,
+        totalItems: questions.length,
+        insufficientWarning: '',
+        excessWarning: ''
+      };
+    });
+  }, [topicRows, bloomCategoryFromQuestion, setGeneratedSpec]);
 
   // New exam generation: distribute Bloom levels across selected topics and fetch per-topic questions
   const handleGenerateSample = async () => {
@@ -1137,6 +1764,11 @@ const TestGeneration = () => {
       const rememberTotal = Math.floor(total * 0.30);
       const applyTotal = Math.floor(total * 0.30);
       const evaluateTotal = total - rememberTotal - applyTotal; // ensure exact total
+      const expectedBloomTotals = {
+        remembering: rememberTotal,
+        applying: applyTotal,
+        evaluating: evaluateTotal
+      };
 
       const topicsCount = selectedTopicIds.length;
 
@@ -1217,31 +1849,6 @@ const TestGeneration = () => {
         finalQuestions.push(...pickRemember, ...pickApply, ...pickEvaluate);
       }
 
-      // FIRST FALLBACK: intra-topic - pull remaining needed from other levels within the same topic
-      for (let t = 0; t < topicsCount; t++) {
-        const topicId = selectedTopicIds[t];
-        const poolObj = topicPools.find(p => String(p.topicId) === String(topicId));
-        const pools = poolObj?.pools || { remembering: [], applying: [], evaluating: [] };
-
-        for (const level of ['remembering', 'applying', 'evaluating']) {
-          let need = deficits[t][level];
-          if (!need) continue;
-          // look into other pools in the same topic, prefer pools with largest available
-          const otherLevels = ['remembering','applying','evaluating'].filter(l => l !== level).sort((a,b) => pools[b].length - pools[a].length);
-          for (const ol of otherLevels) {
-            if (need <= 0) break;
-            if (!pools[ol] || pools[ol].length === 0) continue;
-            const take = Math.min(need, pools[ol].length);
-            const taken = takeFromPool(pools[ol], take);
-            // mark these taken items as belonging to this topic/level (we will label by original bloom later)
-            finalQuestions.push(...taken);
-            need -= taken.length;
-            warnings.push(`Filled ${taken.length} items for topic ${topicId} (level ${level}) from same-topic level ${ol}`);
-          }
-          deficits[t][level] = need; // remaining
-        }
-      }
-
       // SECOND FALLBACK: inter-topic same-level - borrow from other topics' pools for that level
       for (let t = 0; t < topicsCount; t++) {
         for (const level of ['remembering','applying','evaluating']) {
@@ -1312,21 +1919,26 @@ const TestGeneration = () => {
         }
       }
 
-      // Final check: if still missing, try to take any remaining questions from subject pool regardless of bloom
-      if (finalQuestions.length < total) {
-        const subjectData2 = await apiService.getQuestions({ subjectId: selectedSubject, pageSize: 2000 });
-        const subjectList2 = Array.isArray(subjectData2) ? subjectData2 : (subjectData2?.items && Array.isArray(subjectData2.items) ? subjectData2.items : (subjectData2?.data && Array.isArray(subjectData2.data) ? subjectData2.data : []));
-        const usedIds = new Set(finalQuestions.map(q => String(q.id)));
-        const pool = subjectList2.filter(q => !usedIds.has(String(q.id)));
-        const need = total - finalQuestions.length;
-        const sampled = sampleRandom(pool, need);
-        finalQuestions.push(...sampled);
-        if (sampled.length > 0) warnings.push(`Filled ${sampled.length} remaining items from subject pool (any level)`);
+      if (finalQuestions.length > total) {
+        setError(`Internal allocation error: generated ${finalQuestions.length} questions but expected exactly ${total}. Please adjust your specification and try again.`);
+        return;
       }
 
       // If still not enough, show error
       if (finalQuestions.length < total) {
-        setError(`Not enough questions in the database to generate ${total} items across selected topics.`);
+        setError(`Not enough questions in the database to generate ${total} items across selected topics while honoring Bloom levels.`);
+        return;
+      }
+
+      const distributionCheck = validateBloomDistribution(finalQuestions, expectedBloomTotals);
+      if (!distributionCheck.isValid) {
+        const describe = (counts) => `R/U: ${counts.remembering || 0}, A/A: ${counts.applying || 0}, E/C: ${counts.evaluating || 0}`;
+        const mismatchDetail = distributionCheck.missingLevels.length > 0
+          ? `Missing counts for ${distributionCheck.missingLevels.join(', ')}`
+          : distributionCheck.mismatches.length > 0
+            ? `Unclassified questions: ${distributionCheck.mismatches.length}`
+            : 'Unknown mismatch.';
+        setError(`Bloom distribution mismatch. Expected ${describe(expectedBloomTotals)} but got ${describe(distributionCheck.counts)}. ${mismatchDetail}`);
         return;
       }
 
@@ -1339,12 +1951,17 @@ const TestGeneration = () => {
       // STEP 4: shuffle and set sample exam
       shuffleArray(finalQuestions);
 
-      const enriched = finalQuestions.slice(0, total).map(q => ({
-        ...q,
-        topicName: topics.find(t => String(t.id) === String(q.topicId) || String(t.id) === String(q.topic))?.title || topics.find(t => String(t.id) === String(q.topicId))?.title || '',
-        level: bloomCategoryFromQuestion(q),
-        correctAnswer: getCorrectAnswerLetter(q)
-      }));
+      const enriched = finalQuestions.map((q) => {
+        const bloomLevel = bloomCategoryFromQuestion(q);
+        return {
+          ...q,
+          topicName: topics.find(t => String(t.id) === String(q.topicId) || String(t.id) === String(q.topic))?.title || topics.find(t => String(t.id) === String(q.topicId))?.title || '',
+          level: bloomLevel,
+          bloomLevel,
+          bloomGroup: getBloomGroupKey(bloomLevel),
+          correctAnswer: getCorrectAnswerLetter(q)
+        };
+      });
 
       setSampleExam({
         questions: enriched,
@@ -1357,6 +1974,7 @@ const TestGeneration = () => {
           setLabel: null
         }
       });
+      syncSpecWithExamQuestions(enriched);
       setActiveExamMeta(null);
       setIsSampleExamVisible(false);
       setShowAnswerSheet(false);
@@ -1366,6 +1984,179 @@ const TestGeneration = () => {
       setError('Failed to generate sample exam. See console for details.');
     }
   };
+
+  const closeQuestionEditModal = React.useCallback(() => {
+    setQuestionEditModal(DEFAULT_QUESTION_EDIT_STATE);
+    setReplacementCandidates([]);
+    setReplacementError('');
+    setIsLoadingReplacementCandidates(false);
+  }, []);
+
+  const handleOpenQuestionEditModal = React.useCallback(async (question, index) => {
+    if (!question) return;
+    const topicId = getQuestionTopicId(question);
+    if (!topicId) {
+      setError('Unable to edit this question because its topic information is missing.');
+      return;
+    }
+    const level = bloomCategoryFromQuestion(question);
+    const topicObj = topics.find((t) => String(t.id) === String(topicId));
+    const topicName = question.topicName || topicObj?.title || topicObj?.name || `Topic ${topicId}`;
+    const currentQuestionId = getQuestionIdentifier(question);
+    const questionCourseId = getQuestionCourseId(question);
+    const questionSubjectId = getQuestionSubjectId(question);
+    const normalizedCourseId = questionCourseId != null
+      ? String(questionCourseId)
+      : (selectedCourse ? String(selectedCourse) : null);
+    const normalizedSubjectId = questionSubjectId != null
+      ? String(questionSubjectId)
+      : (selectedSubject ? String(selectedSubject) : null);
+    const levelGroup = getBloomGroupKey(level);
+    setQuestionEditModal({
+      isOpen: true,
+      questionIndex: index,
+      topicId,
+      topicName,
+      level,
+      levelGroup,
+      currentQuestionId,
+      courseId: normalizedCourseId,
+      subjectId: normalizedSubjectId,
+      selectedAnswer: normalizeAnswerChoice(getCorrectAnswerLetter(question))
+    });
+    setReplacementCandidates([]);
+    setReplacementError('');
+    setIsLoadingReplacementCandidates(true);
+    try {
+      const pool = await fetchQuestionsForTopic(topicId);
+      const usedIds = new Set(
+        (sampleExam?.questions || [])
+          .map((q) => getQuestionIdentifier(q))
+          .filter(Boolean)
+          .map((id) => String(id))
+      );
+        const filtered = pool.filter((candidate) => {
+        const candidateTopicId = getQuestionTopicId(candidate);
+        if (candidateTopicId != null && String(candidateTopicId) !== String(topicId)) return false;
+        const candidateLevel = bloomCategoryFromQuestion(candidate);
+          const candidateGroup = getBloomGroupKey(candidateLevel);
+          if (levelGroup) {
+            if (!candidateGroup || candidateGroup !== levelGroup) return false;
+          } else if (candidateLevel !== level) {
+            return false;
+          }
+        if (normalizedCourseId) {
+          const candidateCourseId = getQuestionCourseId(candidate);
+          if (candidateCourseId != null && String(candidateCourseId) !== normalizedCourseId) return false;
+        }
+        if (normalizedSubjectId) {
+          const candidateSubjectId = getQuestionSubjectId(candidate);
+          if (candidateSubjectId != null && String(candidateSubjectId) !== normalizedSubjectId) return false;
+        }
+        const candidateId = getQuestionIdentifier(candidate);
+        if (!candidateId) return false;
+        if (String(candidateId) === String(currentQuestionId)) return true;
+        return !usedIds.has(String(candidateId));
+      });
+      setReplacementCandidates(filtered);
+      if (!filtered.length) {
+        setReplacementError('No alternative questions found for this topic and cognitive level.');
+      }
+    } catch (err) {
+      console.error('Failed to load replacement questions:', err);
+      setReplacementError('Failed to load questions. Please try again.');
+    } finally {
+      setIsLoadingReplacementCandidates(false);
+    }
+  }, [fetchQuestionsForTopic, sampleExam, selectedCourse, selectedSubject, topics]);
+
+  const handleSelectReplacementQuestion = React.useCallback((candidate) => {
+    if (!candidate || !sampleExam || !questionEditModal.isOpen || questionEditModal.questionIndex === null) {
+      return;
+    }
+    const candidateLevel = bloomCategoryFromQuestion(candidate);
+    const candidateTopicId = getQuestionTopicId(candidate);
+    const candidateCourseId = getQuestionCourseId(candidate);
+    const candidateSubjectId = getQuestionSubjectId(candidate);
+    const normalizedTopicId = questionEditModal.topicId != null ? String(questionEditModal.topicId) : null;
+    const normalizedCourseId = questionEditModal.courseId != null ? String(questionEditModal.courseId) : null;
+    const normalizedSubjectId = questionEditModal.subjectId != null ? String(questionEditModal.subjectId) : null;
+    const candidateTopicIdStr = candidateTopicId != null ? String(candidateTopicId) : '';
+    const candidateCourseIdStr = candidateCourseId != null ? String(candidateCourseId) : '';
+    const candidateSubjectIdStr = candidateSubjectId != null ? String(candidateSubjectId) : '';
+    const requiredGroup = questionEditModal.levelGroup || getBloomGroupKey(questionEditModal.level);
+    const candidateGroup = getBloomGroupKey(candidateLevel);
+    const levelMismatch = requiredGroup ? (!candidateGroup || candidateGroup !== requiredGroup) : (candidateLevel !== questionEditModal.level);
+    const topicMismatch = normalizedTopicId && candidateTopicIdStr !== normalizedTopicId;
+    const courseMismatch = normalizedCourseId && candidateCourseIdStr && candidateCourseIdStr !== normalizedCourseId;
+    const subjectMismatch = normalizedSubjectId && candidateSubjectIdStr && candidateSubjectIdStr !== normalizedSubjectId;
+
+    if (levelMismatch || topicMismatch || courseMismatch || subjectMismatch) {
+      const mismatchReasons = [];
+      if (levelMismatch) mismatchReasons.push('Bloom level');
+      if (topicMismatch) mismatchReasons.push('topic');
+      if (courseMismatch) mismatchReasons.push('course');
+      if (subjectMismatch) mismatchReasons.push('subject');
+      const reasonText = mismatchReasons.join(', ');
+      setReplacementError('Replacement questions must match the original Bloom grouping, course, and topic.');
+      showToast({
+        message: `Cannot edit question because the selected item does not match the required ${reasonText}.`,
+        type: 'error'
+      });
+      return;
+    }
+    const normalized = normalizeQuestionForSampleExam(candidate, {
+      topicId: questionEditModal.topicId,
+      topicName: questionEditModal.topicName
+    });
+    setSampleExam((prev) => {
+      if (!prev) return prev;
+      const updatedQuestions = [...prev.questions];
+      updatedQuestions[questionEditModal.questionIndex] = normalized;
+      return {
+        ...prev,
+        questions: updatedQuestions
+      };
+    });
+    setGenerationWarnings((prev) => [...prev, `Question ${questionEditModal.questionIndex + 1} manually edited (replacement).`]);
+    showToast({ message: `Question ${questionEditModal.questionIndex + 1} replaced in generated exam`, type: 'success' });
+    closeQuestionEditModal();
+  }, [questionEditModal, sampleExam, normalizeQuestionForSampleExam, closeQuestionEditModal, showToast]);
+
+  const handleSelectEditedCorrectAnswer = React.useCallback((answerChoice) => {
+    const normalizedChoice = normalizeAnswerChoice(answerChoice);
+    if (!normalizedChoice || !questionEditModal.isOpen || questionEditModal.questionIndex === null) {
+      return;
+    }
+
+    setSampleExam((prev) => {
+      if (!prev || !Array.isArray(prev.questions)) return prev;
+      const updatedQuestions = [...prev.questions];
+      const currentQuestion = updatedQuestions[questionEditModal.questionIndex];
+      if (!currentQuestion) return prev;
+      updatedQuestions[questionEditModal.questionIndex] = applyCorrectAnswerForGeneratedExam(currentQuestion, normalizedChoice);
+      return {
+        ...prev,
+        questions: updatedQuestions
+      };
+    });
+
+    setQuestionEditModal((prev) => ({
+      ...prev,
+      selectedAnswer: normalizedChoice
+    }));
+
+    setGenerationWarnings((prev) => {
+      const message = `Question ${questionEditModal.questionIndex + 1} answer key shuffled to ${normalizedChoice} while preserving the original correct value.`;
+      if (prev.includes(message)) return prev;
+      return [...prev, message];
+    });
+
+    showToast({
+      message: `Question ${questionEditModal.questionIndex + 1} correct option moved to ${normalizedChoice}`,
+      type: 'success'
+    });
+  }, [questionEditModal, showToast]);
 
   // Print request handling (Admin)
   const loadPrintRequests = React.useCallback(async () => {
@@ -1474,6 +2265,8 @@ const TestGeneration = () => {
 
       setExamType(exam.examType || 'Prelim');
       setSemester(exam.semester || '1st');
+
+      let didHydrateTosFromSpec = false;
       
       if (exam.specificationSnapshot) {
         try {
@@ -1495,8 +2288,12 @@ const TestGeneration = () => {
               highPlacements: (s.cognitive?.high?.placements || []).join(', ')
             }));
             setTopicRows(reconstructedRows);
+            didHydrateTosFromSpec = true;
           }
-          setTotalExamItems(spec.totals?.grand?.toString() || '');
+          const specTotal = spec.totals?.grand?.toString() || '';
+          setTotalExamItems(specTotal);
+          setTotalExamItemsInput(specTotal);
+          setManualTotalItems(true);
         } catch (parseErr) {
           console.error('Failed to parse specification:', parseErr);
         }
@@ -1519,6 +2316,86 @@ const TestGeneration = () => {
             const orderB = Number.isFinite(b.displayOrder) ? b.displayOrder : 0;
             return orderA - orderB;
           });
+
+        if (!didHydrateTosFromSpec) {
+          const topicSummaries = new Map();
+
+          normalizedQuestions.forEach((question, idx) => {
+            const rawTopicId = getQuestionTopicId(question);
+            const topicId = Number(rawTopicId);
+            const topicKey = Number.isFinite(topicId)
+              ? String(topicId)
+              : (rawTopicId ? String(rawTopicId) : '');
+            if (!topicKey) return;
+
+            const matchedTopic = topicsList.find((t) => String(t.id) === topicKey);
+            const topicName =
+              question.topicName ||
+              question.topic ||
+              matchedTopic?.title ||
+              matchedTopic?.name ||
+              `Topic ${topicKey}`;
+
+            const rawHours = matchedTopic?.allocatedHours ?? matchedTopic?.hours ?? 1;
+            const parsedHours = Number(rawHours);
+            const hours = Number.isFinite(parsedHours) && parsedHours > 0 ? String(parsedHours) : '1';
+
+            if (!topicSummaries.has(topicKey)) {
+              topicSummaries.set(topicKey, {
+                topicId: topicKey,
+                topicName,
+                topic: topicName,
+                hours,
+                lowCount: 0,
+                middleCount: 0,
+                highCount: 0,
+                lowPlacements: [],
+                middlePlacements: [],
+                highPlacements: []
+              });
+            }
+
+            const summary = topicSummaries.get(topicKey);
+            const level = bloomCategoryFromQuestion(question);
+            const placement = String((Number.isFinite(question.displayOrder) ? question.displayOrder : idx) + 1);
+
+            if (level === 'remembering') {
+              summary.lowCount += 1;
+              summary.lowPlacements.push(placement);
+            } else if (level === 'applying') {
+              summary.middleCount += 1;
+              summary.middlePlacements.push(placement);
+            } else {
+              summary.highCount += 1;
+              summary.highPlacements.push(placement);
+            }
+          });
+
+          const reconstructedRows = Array.from(topicSummaries.values()).map((summary, idx) => ({
+            id: idx + 1,
+            topicId: summary.topicId,
+            topicName: summary.topicName,
+            topic: summary.topic,
+            hours: summary.hours,
+            lowCount: summary.lowCount || '',
+            middleCount: summary.middleCount || '',
+            highCount: summary.highCount || '',
+            lowPlacements: summary.lowPlacements.join(', '),
+            middlePlacements: summary.middlePlacements.join(', '),
+            highPlacements: summary.highPlacements.join(', ')
+          }));
+
+          if (reconstructedRows.length > 0) {
+            setTopicRows(reconstructedRows);
+          }
+
+          const fallbackTotal = String(normalizedQuestions.length || '');
+          setTotalExamItems(fallbackTotal);
+          setTotalExamItemsInput(fallbackTotal);
+          setManualTotalItems(true);
+          setGeneratedSpec(null);
+        }
+
         setSampleExam({
           questions: normalizedQuestions,
           date: new Date(exam.createdAt || Date.now()).toLocaleDateString(),
@@ -1562,21 +2439,13 @@ const TestGeneration = () => {
   };
 
   const handleClearGeneration = () => {
-    setGeneratedSpec(null);
-    setSampleExam(null);
-    setActiveExamMeta(null);
-    setIsSampleExamVisible(false);
-    setShowAnswerSheet(false);
+    resetGeneratedArtifacts();
     setTopicRows(getInitialTopicRows());
     setTotalExamItems('');
+    setTotalExamItemsInput('');
     setManualTotalItems(false);
     setSpecOverrides({});
-    setInsufficientItemsWarning('');
-    setExcessItemsWarning('');
-    setGenerationWarnings([]);
     setQuestionsByTopic({});
-    setSaveConfirmation(null);
-    setLastSavedSignature('');
     setError('');
     setIsHydratingRequest(false);
     requestSyncRef.current = false;
@@ -1618,11 +2487,18 @@ const TestGeneration = () => {
   };
 
   const handleCancelPrintRequestReview = () => {
-    if (window.confirm('Cancel reviewing this print request? Any unsaved changes will be lost.')) {
-      setActivePrintRequest(null);
-      handleClearGeneration();
-      setViewMode('printrequests');
-    }
+    setCancelReviewConfirmation(true);
+  };
+
+  const confirmCancelPrintRequestReview = () => {
+    setCancelReviewConfirmation(false);
+    setActivePrintRequest(null);
+    handleClearGeneration();
+    setViewMode('printrequests');
+  };
+
+  const closeCancelPrintRequestReview = () => {
+    setCancelReviewConfirmation(false);
   };
 
   const autoMarkRequestReady = async (contextNote = 'Exam printed and ready for pickup') => {
@@ -1670,12 +2546,6 @@ const TestGeneration = () => {
       return;
     }
     
-    // Check if exam has been saved (required for print requests)
-    if (!user?.isAdmin && !activeExamMeta?.id) {
-      setError('Please save the exam before requesting to print.');
-      return;
-    }
-    
     if (user?.isAdmin) {
       setShowPrintModal(true);
     } else {
@@ -1688,12 +2558,23 @@ const TestGeneration = () => {
   // Handle print request submission (for non-admin users)
   const handleSubmitPrintRequest = async (notes, copies) => {
     try {
-      if (!activeExamMeta?.id) {
-        setError('Exam must be saved before requesting print');
-        return;
+      if (activeExamMeta?.id) {
+        await apiService.submitPrintRequest(activeExamMeta.id, notes, copies);
+      } else {
+        const examData = buildDraftPrintRequestExamData();
+        if (!examData) {
+          setError('Unable to submit print request. Generate a sample exam first.');
+          return;
+        }
+
+        await apiService.submitPrintRequest({
+          notes,
+          copiesRequested: copies,
+          isDraft: true,
+          examData,
+        });
       }
-      
-      await apiService.submitPrintRequest(activeExamMeta.id, notes, copies);
+
       setShowPrintRequestModal(false);
       setError('');
       showToast({ message: 'Print request submitted successfully. An admin will process your request.', type: 'success' });
@@ -1711,12 +2592,30 @@ const TestGeneration = () => {
 
     try {
       setMyRequestsError('');
-      await apiService.updatePrintRequestStatus(request.printRequestId, 'Completed', 'Teacher confirmed receipt');
+      await apiService.updatePrintRequestStatus(request.printRequestId, 'Completed', null);
       showToast({ message: 'Thank you! This request is now marked as completed.', type: 'success' });
       await loadMyPrintRequests();
     } catch (err) {
       console.error('Failed to mark request as received:', err);
       setMyRequestsError('Unable to mark this request as received. Please try again.');
+    }
+  };
+
+  const handleDeletePrintRequest = async (request) => {
+    if (!request?.printRequestId) return;
+
+    const confirmDelete = window.confirm('Delete this print request? This cannot be undone.');
+
+    if (!confirmDelete) return;
+
+    try {
+      setMyRequestsError('');
+      await apiService.deletePrintRequest(request.printRequestId);
+      showToast({ message: 'Print request deleted.', type: 'success' });
+      await loadMyPrintRequests();
+    } catch (err) {
+      console.error('Failed to delete print request:', err);
+      setMyRequestsError('Unable to delete this print request. Please try again.');
     }
   };
 
@@ -1727,7 +2626,7 @@ const TestGeneration = () => {
       return;
     }
     if (!selectedDepartment || !selectedCourse || !selectedSubject) {
-      setError('Select a department, program, and subject before saving.');
+      setError('Select a department, program, and course before saving.');
       return;
     }
     if (!canSaveExam) {
@@ -1753,7 +2652,7 @@ const TestGeneration = () => {
     const subjectId = parseInt(selectedSubject);
 
     if (!departmentId || !courseId || !subjectId) {
-      setError('Select a department, program, and subject before saving.');
+      setError('Select a department, program, and course before saving.');
       return;
     }
 
@@ -1881,6 +2780,17 @@ const TestGeneration = () => {
 
           <div className="nav-center">
             <NavItem icon={Home} label="Home" isActive={activeTab === 'Home'} onClick={() => { setActiveTab('Home'); navigate('/'); }} />
+            {user?.isAdmin && (
+              <NavItem
+                icon={Users}
+                label="Users"
+                isActive={activeTab === 'User Management'}
+                onClick={() => {
+                  setActiveTab('User Management');
+                  navigate('/admin', { state: { openUsers: true } });
+                }}
+              />
+            )}
             <DropdownNavItem
               icon={ClipboardList}
               label="Data Entry"
@@ -1932,6 +2842,7 @@ const TestGeneration = () => {
                     <button onClick={() => handleUserAction('Activity Logs')}><FileText /> Activity Logs</button>
                   </>
                 )}
+                <button onClick={() => handleUserAction('Need Help')}><HelpCircle /> Need Help</button>
                 <button onClick={() => handleUserAction('Edit Account')}><User /> Edit Account</button>
                 <button className="logout-btn" onClick={() => handleUserAction('Logout')}><LogOut /> Logout</button>
               </div>
@@ -1948,33 +2859,32 @@ const TestGeneration = () => {
         </div>
 
         {/* Test Generation Container */}
-        <div className="main-card">
+        <div className="main-card" style={{ marginTop: '-40px' }}>
           {/* Mode Switcher for Admins */}
           {user?.isAdmin && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px', borderBottom: '2px solid var(--border-color)', paddingBottom: '10px' }}>
-              <div style={{ display: 'flex', gap: '10px' }}>
+              <div className="report-mode-switch-row" style={{ display: 'flex', gap: '10px' }}>
                 <button
-                  className={`btn ${viewMode === 'generation' ? 'btn-primary' : 'btn-secondary'}`}
+                  className={`btn report-mode-switch-btn ${viewMode === 'generation' ? 'btn-primary' : 'btn-secondary'}`}
                   disabled={isViewSwitchLocked}
                   onClick={() => {
                     if (isViewSwitchLocked) return;
                     setViewMode('generation');
                     setActivePrintRequest(null);
                   }}
-                  style={{ flex: '1' }}
                   title={isViewSwitchLocked ? 'Finish or cancel the current review before switching modes.' : undefined}
                 >
                   <BookOpen size={16} style={{ marginRight: '6px', verticalAlign: 'text-bottom' }} />
                   Test Generation
                 </button>
                 <button
-                  className={`btn ${viewMode === 'printrequests' ? 'btn-primary' : 'btn-secondary'}`}
+                  className={`btn report-mode-switch-btn ${viewMode === 'printrequests' ? 'btn-primary' : 'btn-secondary'}`}
                   disabled={isViewSwitchLocked}
                   onClick={() => {
                     if (isViewSwitchLocked) return;
                     setViewMode('printrequests');
                   }}
-                  style={{ flex: '1', position: 'relative' }}
+                  style={{ position: 'relative' }}
                   title={isViewSwitchLocked ? 'Finish or cancel the current review before switching modes.' : undefined}
                 >
                   <Printer size={16} style={{ marginRight: '6px', verticalAlign: 'text-bottom' }} />
@@ -2003,7 +2913,7 @@ const TestGeneration = () => {
                     <span style={{ background: statusColorMap[activeRequestStatus] || '#1d4ed8', padding: '4px 10px', borderRadius: '999px', fontWeight: 600 }}>
                       Status: {activeRequestStatus.replace(/([A-Z])/g, ' $1').trim()}
                     </span>
-                    {isHydratingRequest && <span style={{ fontSize: '0.9rem', opacity: 0.85 }}>Syncing program/subject/topic data...</span>}
+                    {isHydratingRequest && <span style={{ fontSize: '0.9rem', opacity: 0.85 }}>Syncing program/course/topic data...</span>}
                     {!isActiveRequestHandled && (
                       <span style={{ fontSize: '0.9rem', opacity: 0.85 }}>Finish printing or update the status before leaving this review.</span>
                     )}
@@ -2117,6 +3027,7 @@ const TestGeneration = () => {
                 id="department"
                 value={selectedDepartment}
                 onChange={(e) => handleDepartmentChange(e.target.value)}
+                className={!selectedDepartment ? 'unselected-placeholder' : ''}
                 disabled={isLoadingDepartments}
               >
                 <option value="">Select Department</option>
@@ -2135,6 +3046,7 @@ const TestGeneration = () => {
               <select 
                 value={selectedCourse} 
                 onChange={(e) => setSelectedCourse(e.target.value)}
+                className={!selectedCourse ? 'unselected-placeholder' : ''}
                 disabled={!selectedDepartment || isLoadingCourses}
               >
                 <option value="">Select Program</option>
@@ -2151,17 +3063,17 @@ const TestGeneration = () => {
             </div>
 
             <div className="field-container">
-              <label>Subject</label>
+              <label>Course</label>
               <select 
                 value={selectedSubject} 
                 onChange={(e) => setSelectedSubject(e.target.value)}
                 disabled={!selectedCourse || isLoadingSubjects}
               >
-                <option value="">Select Subject</option>
+                <option value="">Select Course</option>
                 {isLoadingSubjects ? (
-                  <option disabled>Loading subjects...</option>
+                  <option disabled>Loading courses...</option>
                 ) : subjects.length === 0 ? (
-                  <option disabled>No subjects found</option>
+                  <option disabled>No courses found</option>
                 ) : (
                   subjects.map(subject => (
                     <option key={subject.id} value={subject.id}>{(subject.code ? `${subject.code} - ` : '') + subject.name}</option>
@@ -2175,7 +3087,9 @@ const TestGeneration = () => {
               <select 
                 value={examType}
                 onChange={(e) => setExamType(e.target.value)}
+                className={!examType ? 'unselected-placeholder' : ''}
               >
+                <option value="" disabled>Select Exam Period</option>
                 <option value="Prelim">Prelim</option>
                 <option value="Midterm">Midterm</option>
                 <option value="Finals">Finals</option>
@@ -2187,7 +3101,9 @@ const TestGeneration = () => {
               <select 
                 value={semester}
                 onChange={(e) => setSemester(e.target.value)}
+                className={!semester ? 'unselected-placeholder' : ''}
               >
+                <option value="" disabled>Select Semester</option>
                 <option value="1st">1st Sem</option>
                 <option value="2nd">2nd Sem</option>
                 <option value="Summer">Summer</option>
@@ -2196,67 +3112,78 @@ const TestGeneration = () => {
 
             <div className="field-container">
               <label>Total Exam Items</label>
-              <input
-                type="number"
-                value={totalExamItems}
-                onChange={(e) => { setTotalExamItems(e.target.value); setManualTotalItems(true); }}
-                placeholder="e.g., 50"
-                min="1"
-                disabled={!selectedSubject}
-              />
+              <div className="total-items-control">
+                <input
+                  type="number"
+                  value={totalExamItemsInput}
+                  onChange={(e) => setTotalExamItemsInput(e.target.value)}
+                  placeholder="e.g., 50"
+                  min="1"
+                  disabled={!selectedSubject}
+                />
+                <button
+                  type="button"
+                  className="total-items-confirm-btn"
+                  onClick={handleTotalExamItemsCommit}
+                  disabled={!canConfirmTotalExamItems}
+                >
+                  Confirm
+                </button>
+              </div>
             </div>
           </div>
 
-          {selectedSubject && questionBankSummary && questionBankSummary.totalQuestions > 0 && (
-            <div className="data-summary-block separate-blooms-view">
-              <h3 className="data-summary-heading">
-                Question Bank Overview — {selectedSubjectDetails?.name || 'Selected Subject'}
-              </h3>
-              <div className="summary-details-grid three-col-blooms">
-                <div className="summary-card total-stats">
-                  <h4>Subject Coverage</h4>
-                  <p>
-                    Total Encoded Questions: <span style={{ fontWeight: 'bold' }}>{questionBankSummary.totalQuestions}</span>
-                  </p>
-                  <div className="total-bar-check">
-                    Topics With Questions: <span style={{ fontWeight: 'bold' }}>{questionBankSummary.loadedTopicCount}</span>
-                  </div>
-                </div>
-                {questionBankSummary.bloomData.map((data, index) => (
-                  <div key={data.level} className={`summary-card bloom-card color-${index + 1}`}>
-                    <h4 className="bloom-card-title">{data.level}</h4>
-                    <p className="bloom-card-count">
-                      <span style={{ fontWeight: 'bold' }}>{data.count}</span> Questions
+          {
+            false && selectedSubject && questionBankSummary && questionBankSummary.totalQuestions > 0 && (
+              <div className="data-summary-block separate-blooms-view">
+                <h3 className="data-summary-heading">
+                  Question Bank Overview — {selectedSubjectDetails?.name || 'Selected Course'}
+                </h3>
+                <div className="summary-details-grid three-col-blooms">
+                  <div className="summary-card total-stats">
+                    <h4>Course Coverage</h4>
+                    <p>
+                      Total Encoded Questions: <span style={{ fontWeight: 'bold' }}>{questionBankSummary.totalQuestions}</span>
                     </p>
-                    <div className="bloom-progress-info">
-                      <span className="achieved-percent">
-                        Achieved: <span style={{ fontWeight: 'bold' }}>{data.achieved}%</span>
-                      </span>
-                      <span className="target-percent">Target: {data.target}%</span>
-                    </div>
-                    <div className="aesthetic-progress-bar-container compact">
-                      <div
-                        className={`aesthetic-progress-fill color-${index + 1}`}
-                        style={{ width: `${Math.min(parseFloat(data.achieved), 100)}%` }}
-                      ></div>
+                    <div className="total-bar-check">
+                      Topics With Questions: <span style={{ fontWeight: 'bold' }}>{questionBankSummary.loadedTopicCount}</span>
                     </div>
                   </div>
-                ))}
+                  {questionBankSummary.bloomData.map((data, index) => (
+                    <div key={data.key} className={`summary-card bloom-card color-${index + 1}`}>
+                      <h4 className="bloom-card-title">{data.title}</h4>
+                      <p className="bloom-card-count" style={{ marginBottom: '0.35rem' }}>
+                        <span style={{ fontWeight: 'bold', fontSize: '1.5rem' }}>{data.count}</span> total encoded questions
+                      </p>
+                      <p className="bloom-card-descriptor" style={{ opacity: 0.8, fontSize: '0.9rem' }}>{data.descriptor}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )
+          }
 
           {selectedSubject && questionBankSummary && questionBankSummary.totalQuestions === 0 && (
             <div className="info-message" style={{ marginTop: '1rem' }}>
               <span className="info-icon">ℹ️</span>
               <span className="info-text">
-                No encoded questions were found for the selected subject yet. Add questions in Test Encoding to populate the databank.
+                No encoded questions were found for the selected course yet. Add questions in Test Encoding to populate the databank.
+              </span>
+            </div>
+          )}
+
+          {selectedSubject && !isTableUnlocked && (
+            <div className="info-message" style={{ marginTop: '1rem' }}>
+              <span className="info-icon">ℹ️</span>
+              <span className="info-text">
+                Enter the Total Exam Items above and click Confirm to unlock topic selection.
+                {hasCommittedTotalExamItems && isTotalExamItemsDirty && ' You changed the value—confirm again to reload the Table of Specification.'}
               </span>
             </div>
           )}
 
           {/* Topics Table */}
-          {selectedSubject && (
+          {selectedSubject && isTableUnlocked && (
             <div className="table-section">
               <h3>Table of Specifications</h3>
               
@@ -2294,6 +3221,7 @@ const TestGeneration = () => {
                         {generatedSpec.specs.map((spec, idx) => {
                           const correspondingRow = topicRows.find(r => parseInt(r.topicId) === spec.topicId && parseFloat(r.hours) === parseFloat(spec.hours));
                           const rowId = correspondingRow?.id;
+                          const selectedTopicIdsInOtherRows = rowId ? getSelectedTopicIdsForOtherRows(rowId) : new Set();
                           const overrideKey = spec.overrideKey || `${spec.topicId}-${spec.hours}`;
                           const override = specOverrides[overrideKey] || {};
                           return (
@@ -2306,22 +3234,17 @@ const TestGeneration = () => {
                                     const topicName = selectedOption ? selectedOption.text : '';
                                     const topicId = e.target.value;
                                     if (rowId && topicId) {
-                                      const selectedTopicObj = topics.find(t => t.id === parseInt(topicId));
-                                      console.log('[SPEC VIEW] Selected topic object:', selectedTopicObj);
-                                      const hours = selectedTopicObj?.allocatedHours || 0;
-                                      console.log('[SPEC VIEW] Extracted hours:', hours);
-                                      handleTopicRowChange(rowId, 'topicId', topicId);
-                                      handleTopicRowChange(rowId, 'topicName', topicName);
-                                      handleTopicRowChange(rowId, 'topic', topicName);
-                                      handleTopicRowChange(rowId, 'hours', String(hours));
+                                      handleTopicSelection(rowId, topicId, topicName);
                                     }
                                   }}
-                                  disabled={isLoadingTopics || topics.length === 0}
+                                    disabled={isLoadingTopics || topics.length === 0 || !isTableUnlocked}
                                 >
                                   <option value="">Select topic</option>
-                                  {topics.map(topic => (
-                                    <option key={topic.id} value={topic.id}>{topic.title}</option>
-                                  ))}
+                                  {topics
+                                    .filter(topic => !selectedTopicIdsInOtherRows.has(String(topic.id)))
+                                    .map(topic => (
+                                      <option key={topic.id} value={topic.id}>{topic.title}</option>
+                                    ))}
                                 </select>
                               </td>
                               <td>
@@ -2372,7 +3295,9 @@ const TestGeneration = () => {
                           );
                         })}
                         {/* Show remaining empty input rows */}
-                        {topicRows.filter(row => !row.topic || !row.hours).map((row) => (
+                        {topicRows.filter(row => !row.topic || !row.hours).map((row) => {
+                          const selectedTopicIdsInOtherRows = getSelectedTopicIdsForOtherRows(row.id);
+                          return (
                           <tr key={`input-${row.id}`}>
                             <td>
                               <select
@@ -2382,22 +3307,17 @@ const TestGeneration = () => {
                                   const topicName = selectedOption ? selectedOption.text : '';
                                   const topicId = e.target.value;
                                   if (topicId) {
-                                    const selectedTopicObj = topics.find(t => t.id === parseInt(topicId));
-                                    console.log('[INPUT VIEW] Selected topic object:', selectedTopicObj);
-                                    const hours = selectedTopicObj?.allocatedHours || 0;
-                                    console.log('[INPUT VIEW] Extracted hours:', hours);
-                                    handleTopicRowChange(row.id, 'topicId', topicId);
-                                    handleTopicRowChange(row.id, 'topicName', topicName);
-                                    handleTopicRowChange(row.id, 'topic', topicName);
-                                    handleTopicRowChange(row.id, 'hours', String(hours));
+                                    handleTopicSelection(row.id, topicId, topicName);
                                   }
                                 }}
-                                disabled={isLoadingTopics || topics.length === 0}
+                                disabled={isLoadingTopics || topics.length === 0 || !isTableUnlocked}
                               >
                                 <option value="">Select topic</option>
-                                {topics.map(topic => (
-                                  <option key={topic.id} value={topic.id}>{topic.title}</option>
-                                ))}
+                                {topics
+                                  .filter(topic => !selectedTopicIdsInOtherRows.has(String(topic.id)))
+                                  .map(topic => (
+                                    <option key={topic.id} value={topic.id}>{topic.title}</option>
+                                  ))}
                               </select>
                             </td>
                             <td>
@@ -2414,11 +3334,14 @@ const TestGeneration = () => {
                               </button>
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </>
                     ) : (
                       // Show all input rows
-                      topicRows.map((row) => (
+                      topicRows.map((row) => {
+                        const selectedTopicIdsInOtherRows = getSelectedTopicIdsForOtherRows(row.id);
+                        return (
                         <tr key={row.id}>
                           <td>
                             <select
@@ -2428,22 +3351,17 @@ const TestGeneration = () => {
                                 const topicName = selectedOption ? selectedOption.text : '';
                                 const topicId = e.target.value;
                                 if (topicId) {
-                                  const selectedTopicObj = topics.find(t => t.id === parseInt(topicId));
-                                  console.log('[ALL ROWS VIEW] Selected topic object:', selectedTopicObj);
-                                  const hours = selectedTopicObj?.allocatedHours || 0;
-                                  console.log('[ALL ROWS VIEW] Extracted hours:', hours);
-                                  handleTopicRowChange(row.id, 'topicId', topicId);
-                                  handleTopicRowChange(row.id, 'topicName', topicName);
-                                  handleTopicRowChange(row.id, 'topic', topicName);
-                                  handleTopicRowChange(row.id, 'hours', String(hours));
+                                  handleTopicSelection(row.id, topicId, topicName);
                                 }
                               }}
-                              disabled={isLoadingTopics || topics.length === 0}
+                              disabled={isLoadingTopics || topics.length === 0 || !isTableUnlocked}
                             >
                               <option value="">Select topic</option>
-                              {topics.map(topic => (
-                                <option key={topic.id} value={topic.id}>{topic.title}</option>
-                              ))}
+                              {topics
+                                .filter(topic => !selectedTopicIdsInOtherRows.has(String(topic.id)))
+                                .map(topic => (
+                                  <option key={topic.id} value={topic.id}>{topic.title}</option>
+                                ))}
                             </select>
                           </td>
                           <td>
@@ -2460,8 +3378,9 @@ const TestGeneration = () => {
                             </button>
                           </td>
                         </tr>
-                      )))
-                    }
+                        );
+                      })
+                    )}
                     {totalExamItems && topicRows.some(row => row.topic && row.hours) && (
                       <tr className="totals-row">
                         <td><strong>TOTALS</strong></td>
@@ -2497,51 +3416,42 @@ const TestGeneration = () => {
                 </div>
               )}
 
-              {/* Generation warnings panel (intra-topic, inter-topic, subject fills, final fallback) */}
-              {generationWarnings && generationWarnings.length > 0 && (
-                <div className="generation-warnings-panel">
-                  <h4>Generation Warnings</h4>
-                  <p className="warning-note">The generator relaxed strict Bloom/topic constraints to satisfy the requested total. Details below:</p>
-
-                  {generationWarnings.filter(w=>/same-topic/i.test(w)).length > 0 && (
-                    <div className="warning-group">
-                      <strong>Intra-topic borrow events</strong>
-                      <ul>
-                        {generationWarnings.filter(w=>/same-topic/i.test(w)).map((w,i)=>(<li key={`intra-${i}`}>{w}</li>))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {generationWarnings.filter(w=>/borrowed/i.test(w)).length > 0 && (
-                    <div className="warning-group">
-                      <strong>Inter-topic borrow events</strong>
-                      <ul>
-                        {generationWarnings.filter(w=>/borrowed/i.test(w)).map((w,i)=>(<li key={`inter-${i}`}>{w}</li>))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {generationWarnings.filter(w=>/subject pool/i.test(w)).length > 0 && (
-                    <div className="warning-group">
-                      <strong>Subject-level fills</strong>
-                      <ul>
-                        {generationWarnings.filter(w=>/subject pool/i.test(w)).map((w,i)=>(<li key={`sub-${i}`}>{w}</li>))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {generationWarnings.filter(w=>/remaining items/i.test(w) || /any level/i.test(w)).length > 0 && (
-                    <div className="warning-group">
-                      <strong>Final fallback usage</strong>
-                      <ul>
-                        {generationWarnings.filter(w=>/remaining items/i.test(w) || /any level/i.test(w)).map((w,i)=>(<li key={`final-${i}`}>{w}</li>))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           )}
+
+          {/* Action Buttons */}
+          <div className="action-buttons" style={{ marginTop: '20px' }}>
+            <button 
+              className="btn btn-secondary"
+              onClick={handleGenerateSample}
+              disabled={!generatedSpec}
+            >
+              <PlayCircle size={16} /> Generate Sample Exam
+            </button>
+            <button 
+              className="btn btn-secondary"
+              onClick={handleToggleSampleExamVisibility}
+              disabled={!sampleExam}
+            >
+              <Eye size={16} /> {isSampleExamVisible ? 'Hide Sample Exam' : 'Show Sample Exam'}
+            </button>
+            <button 
+              className="btn btn-secondary"
+              onClick={handlePrint}
+              disabled={!generatedSpec}
+            >
+              <Printer size={16} /> {user?.isAdmin ? 'Print Options' : 'Request Print'}
+            </button>
+            {!(user?.isAdmin && activePrintRequest) && (
+              <button 
+                className="btn btn-success"
+                onClick={handleSaveExam}
+                disabled={!generatedSpec}
+              >
+                <Save size={16} /> Save Exam
+              </button>
+            )}
+          </div>
 
           {/* Show Sample Exam */}
           {sampleExam && isSampleExamVisible && (
@@ -2563,7 +3473,8 @@ const TestGeneration = () => {
                       return `${examType}_${semester}_${schoolYear}_${courseCode}_${date}_${time}`;
                     })()}</p>
                     <p className="program-info">{(selectedCourse && (() => { const course = courses.find(c => c.id === parseInt(selectedCourse)); return course ? `${course.name} (${course.code})` : 'Program Name'; })()) || 'Program Name'}</p>
-                    <p>{selectedSubjectDetails?.name || 'Subject Name'}</p>
+                    <p>{selectedSubjectDetails?.name || 'Course Name'}</p>
+                    
                   </div>
                 </div>
 
@@ -2581,7 +3492,7 @@ const TestGeneration = () => {
 
                 {/* Instructions/Reminders */}
                 <div className="exam-instructions">
-                  <p><strong>REMINDER:</strong> Cheating, borrowing, or lending examination permits are punishable under university policy.</p>
+                  <p><strong>REMINDER: CHEATING during examinations, BORROWING and LENDING of examination permit fall under Major offenses and are punishable under the existing University Policy</strong></p>
                   <p><strong>Direction:</strong> Multiple Choice - Choose the letter of the correct answer.</p>
                 </div>
 
@@ -2593,10 +3504,26 @@ const TestGeneration = () => {
                       const questionText = q.content || q.Content || q.question || 'Question text not available';
                       const options = q.options || q.Options || q.choices || [];
                       const image = q.image || q.Image || null;
+                      const questionHtml = asHtml(questionText);
                       // preview debug logs removed for production
                       return (
                         <div key={idx} className="exam-question-item">
-                          <div className="question-number-text"><strong>{idx + 1}.) {questionText}</strong></div>
+                          <div className="question-number-text">
+                            <strong>{idx + 1}.) </strong>
+                            <span className="question-html" dangerouslySetInnerHTML={questionHtml} />
+                          </div>
+                          {getQuestionTopicId(q) && (
+                            <div className="question-actions">
+                              <button
+                                type="button"
+                                className="replace-question-btn"
+                                onClick={() => { void handleOpenQuestionEditModal(q, idx); }}
+                              >
+                                <RefreshCw size={14} />
+                                <span>Edit Question</span>
+                              </button>
+                            </div>
+                          )}
                           {image && (
                             <div className="question-image-wrapper" style={{ 
                               textAlign: image.alignment?.toLowerCase() || 'center', 
@@ -2626,10 +3553,11 @@ const TestGeneration = () => {
                             {options.map((option, optIdx) => {
                               const letter = String.fromCharCode(65 + optIdx);
                               const optionText = option.content || option.Content || option.optionText || option.text || option || '';
+                              const optionHtml = asHtml(optionText);
                               return (
                                 <div key={optIdx} className="option-line">
                                   <span className="option-letter">{letter}.</span>
-                                  <span className="option-text">{optionText}</span>
+                                  <span className="option-text" dangerouslySetInnerHTML={optionHtml} />
                                 </div>
                               );
                             })}
@@ -2654,7 +3582,7 @@ const TestGeneration = () => {
                           {sampleExam.questions.map((q, idx) => {
                             const questionText = q.content || q.Content || q.question || 'N/A';
                             const correctAnswer = q.correctAnswer || '-';
-                            const bloomLevel = q.bloomLevel || q.BloomLevel || '-';
+                            const bloomLevel = formatBloomDisplayLabel(q);
                             return (
                               <tr key={idx} style={{ borderBottom: '1px solid #ddd' }}>
                                 <td style={{ padding: '8px' }}>{idx + 1}</td>
@@ -2715,40 +3643,6 @@ const TestGeneration = () => {
             </div>
           )}
 
-          {/* Action Buttons */}
-          <div className="action-buttons">
-            <button 
-              className="btn btn-secondary"
-              onClick={handleGenerateSample}
-              disabled={!generatedSpec}
-            >
-              <PlayCircle size={16} /> Generate Sample Exam
-            </button>
-            <button 
-              className="btn btn-secondary"
-              onClick={handleToggleSampleExamVisibility}
-              disabled={!sampleExam}
-            >
-              <Eye size={16} /> {isSampleExamVisible ? 'Hide Sample Exam' : 'Show Sample Exam'}
-            </button>
-            <button 
-              className="btn btn-secondary"
-              onClick={handlePrint}
-              disabled={!generatedSpec}
-            >
-              <Printer size={16} /> {user?.isAdmin ? 'Print Options' : 'Request Print'}
-            </button>
-            {!(user?.isAdmin && activePrintRequest) && (
-              <button 
-                className="btn btn-success"
-                onClick={handleSaveExam}
-                disabled={!generatedSpec}
-              >
-                <Save size={16} /> Save Exam
-              </button>
-            )}
-          </div>
-
           {!user?.isAdmin && (
             <div style={{ marginTop: '30px', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '20px', background: 'var(--card-bg, #fff)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
@@ -2771,7 +3665,7 @@ const TestGeneration = () => {
                 <div style={{ textAlign: 'center', padding: '30px' }}>Loading your requests...</div>
               ) : myPrintRequests.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
-                  <p>No print requests yet. Save and request a master set to see it here.</p>
+                  <p>No print requests yet. Request a master set from any generated exam to see it here.</p>
                 </div>
               ) : (
                 <div style={{ overflowX: 'auto', marginTop: '15px' }}>
@@ -2804,13 +3698,25 @@ const TestGeneration = () => {
                             <td style={{ padding: '10px' }}>{req.updatedAt ? new Date(req.updatedAt).toLocaleString() : '—'}</td>
                             <td style={{ padding: '10px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>{req.notes || '—'}</td>
                             <td style={{ padding: '10px', textAlign: 'center' }}>
-                              {statusLabel === 'ReadyForPickup' ? (
-                                <button
-                                  className="btn btn-sm btn-primary"
-                                  onClick={() => handleTeacherAcknowledgeRequest(req)}
-                                >
-                                  Mark as Received
-                                </button>
+                              {statusLabel === 'ReadyForPickup' || statusLabel === 'Pending' || statusLabel === 'Rejected' ? (
+                                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                                  {statusLabel === 'ReadyForPickup' && (
+                                    <button
+                                      className="btn btn-sm btn-primary"
+                                      onClick={() => handleTeacherAcknowledgeRequest(req)}
+                                    >
+                                      Mark as Received
+                                    </button>
+                                  )}
+                                  {(statusLabel === 'Pending' || statusLabel === 'Rejected') && (
+                                    <button
+                                      className="btn btn-sm btn-danger"
+                                      onClick={() => handleDeletePrintRequest(req)}
+                                    >
+                                      Delete
+                                    </button>
+                                  )}
+                                </div>
                               ) : (
                                 <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>—</span>
                               )}
@@ -2862,7 +3768,7 @@ const TestGeneration = () => {
               </div>
               <ul className="exam-modal-list">
                 <li>Program: {selectedCourseDetails?.name || 'N/A'}</li>
-                <li>Subject: {selectedSubjectDetails?.name || 'N/A'}</li>
+                <li>Course: {selectedSubjectDetails?.name || 'N/A'}</li>
                 <li>{examType} · {semester} Semester · SY {schoolYear}</li>
                 <li>{questionsPayload.ordered.length} total questions</li>
               </ul>
@@ -2872,6 +3778,68 @@ const TestGeneration = () => {
               <button className="modal-btn modal-btn-primary" onClick={confirmSaveExam} disabled={isSavingExam}>
                 {isSavingExam ? 'Saving...' : 'Save Exam'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {questionEditModal.isOpen && (
+        <div className="modal-overlay" onClick={closeQuestionEditModal}>
+          <div className="modal-dialog question-edit-modal" onClick={(e) => e.stopPropagation()}>
+            <h3 className="question-edit-title">Edit Question</h3>
+            <p className="question-edit-subtitle">
+              Topic: <strong>{questionEditModal.topicName || 'N/A'}</strong> · Cognitive Level: <strong>{(questionEditModal.level || '').replace(/\b\w/g, (c) => c.toUpperCase()) || 'N/A'}</strong>
+            </p>
+            <div className="question-edit-answer-controls">
+              <p className="question-edit-answer-label">Correct answer for this generated exam</p>
+              <div className="question-edit-answer-buttons">
+                {['A', 'B', 'C', 'D'].map((choice) => (
+                  <button
+                    key={choice}
+                    type="button"
+                    className={`question-edit-answer-btn${questionEditModal.selectedAnswer === choice ? ' active' : ''}`}
+                    onClick={() => handleSelectEditedCorrectAnswer(choice)}
+                  >
+                    {choice}
+                  </button>
+                ))}
+              </div>
+              <small className="question-edit-answer-help">This updates only the generated exam/session answer key and does not change the question bank record.</small>
+            </div>
+            {isLoadingReplacementCandidates ? (
+              <p>Loading available questions…</p>
+            ) : replacementCandidates.length > 0 ? (
+              <div className="replacement-candidate-list">
+                {replacementCandidates.map((candidate, candidateIndex) => {
+                  const candidateId = getQuestionIdentifier(candidate);
+                  const candidateKey = candidateId ? `candidate-${candidateId}` : `candidate-${questionEditModal.topicId}-${candidateIndex}`;
+                  const candidateHtml = asHtml(candidate.content || candidate.Content || candidate.question || '');
+                  return (
+                    <div key={candidateKey} className="replacement-candidate-card">
+                      <div className="replacement-candidate-body">
+                        <div className="replacement-candidate-text" dangerouslySetInnerHTML={candidateHtml} />
+                        <div className="candidate-meta">
+                          <span>ID: {candidateId}</span>
+                          <span>Level: {bloomCategoryFromQuestion(candidate)}</span>
+                        </div>
+                      </div>
+                      <div className="candidate-actions">
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => handleSelectReplacementQuestion(candidate)}
+                        >
+                          Use as Replacement
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p>{replacementError || 'No alternative questions found for this topic and cognitive level.'}</p>
+            )}
+            <div className="question-edit-actions">
+              <button className="btn btn-secondary" onClick={closeQuestionEditModal}>Cancel</button>
             </div>
           </div>
         </div>
@@ -3449,7 +4417,7 @@ const TestGeneration = () => {
               <p>Request a Master Set of this exam to be printed by an administrator.</p>
               <div className="exam-modal-meta">
                 <p><strong>Exam:</strong> {activeExamMeta?.setLabel || 'Current Exam'}</p>
-                <p><strong>Subject:</strong> {selectedSubjectDetails?.name || 'N/A'}</p>
+                <p><strong>Course:</strong> {selectedSubjectDetails?.name || 'N/A'}</p>
               </div>
               
               <div className="exam-modal-field">
@@ -3499,19 +4467,29 @@ const TestGeneration = () => {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
-      {deleteConfirmation.show && (
-        <div className="modal-overlay">
-          <div className="modal-dialog confirmation-modal">
-            <h3>Confirm Delete</h3>
-            <p>Are you sure you want to delete this row?</p>
-            <div className="modal-buttons">
-              <button className="btn btn-secondary" onClick={cancelDeleteRow}>Cancel</button>
-              <button className="btn btn-danger" onClick={confirmDeleteRow}>Delete</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmationModal
+        isOpen={deleteConfirmation.show}
+        title="Confirm Delete"
+        message="Are you sure you want to delete this row?"
+        onCancel={cancelDeleteRow}
+        onConfirm={confirmDeleteRow}
+        cancelText="Cancel"
+        confirmText="Delete"
+        isDarkMode={isDarkMode}
+        isDanger={true}
+      />
+
+      <ConfirmationModal
+        isOpen={cancelReviewConfirmation}
+        title="Confirm Cancel Review"
+        message="Cancel reviewing this print request? Any unsaved changes will be lost."
+        onCancel={closeCancelPrintRequestReview}
+        onConfirm={confirmCancelPrintRequestReview}
+        cancelText="Keep Reviewing"
+        confirmText="Cancel Review"
+        isDarkMode={isDarkMode}
+        isDanger={true}
+      />
 
       {/* Logout Modal */}
       <LogoutModal

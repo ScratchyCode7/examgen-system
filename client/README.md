@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Databank Frontend
 
 React + TypeScript frontend for the Databank Test Management System.
@@ -57,3 +58,6 @@ The frontend will be available at `http://localhost:5173`
 - Build for production: `npm run build`
 - Preview production build: `npm run preview`
 - Lint code: `npm run lint`
+=======
+# Frontend-TDB
+>>>>>>> 0fcb97b80ded000f533479947c936d0864a4043d

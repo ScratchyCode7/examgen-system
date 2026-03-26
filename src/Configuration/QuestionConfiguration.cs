@@ -19,7 +19,7 @@ public sealed class QuestionConfiguration : IEntityTypeConfiguration<Question>
 
         builder.Property(x => x.Content)
             .IsRequired()
-            .HasMaxLength(3000);
+            .HasColumnType("text");
 
         builder.Property(x => x.QuestionType)
             .IsRequired()

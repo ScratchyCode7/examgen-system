@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search, Grid, List } from 'lucide-react';
+import { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search, Grid, List, HelpCircle } from 'lucide-react';
 import NavItem from '../components/NavItem';
 import DropdownNavItem from '../components/DropdownNavItem';
+import LogoutModal from '../components/LogoutModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import '../styles/Dashboard.css';
@@ -11,6 +12,7 @@ import TDBLogo from '../assets/TDB logo.png';
 import UPHSL from '../assets/uphsl.png';
 import { apiService } from '../services/api';
 import DEPARTMENT_LOGOS from '../constants/departmentLogos';
+import { HELP_CENTER_URL } from '../constants/helpLinks';
 
 const Dashboard = () => {
   const { user, logout, isAdmin } = useAuth();
@@ -20,6 +22,7 @@ const Dashboard = () => {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [programView, setProgramView] = useState('grid');
+  const [searchText, setSearchText] = useState('');
   const [departments, setDepartments] = useState([]);
   const [isLoadingDepartments, setIsLoadingDepartments] = useState(false);
   const [departmentsError, setDepartmentsError] = useState('');
@@ -68,8 +71,15 @@ const Dashboard = () => {
 
   const handleUserAction = (action) => {
     setIsUserMenuOpen(false);
-    if (action === 'Logout') setIsLogoutModalOpen(true);
-    else console.log('Navigate to', action);
+    if (action === 'Logout') {
+      setIsLogoutModalOpen(true);
+    } else if (action === 'Need Help') {
+      if (typeof window !== 'undefined') {
+        window.open(HELP_CENTER_URL, '_blank', 'noopener,noreferrer');
+      }
+    } else {
+      console.log('Navigate to', action);
+    }
   };
 
   const handleConfirmLogout = () => {
@@ -80,6 +90,22 @@ const Dashboard = () => {
 
   const dataEntryItems = ["Program - Topic", "Test Encoding", "Test Question Editing"];
   const isDataEntryActive = dataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
+
+  const normalizedSearchText = searchText.trim().toLowerCase();
+  const filteredDepartments = departments.filter((department) => {
+    if (!normalizedSearchText) return true;
+    const departmentName = (department.name || '').toLowerCase();
+    const departmentCode = (department.code || '').toLowerCase();
+    return departmentName.includes(normalizedSearchText) || departmentCode.includes(normalizedSearchText);
+  });
+
+  const handleSearchNavigate = () => {
+    if (!normalizedSearchText) return;
+    const firstMatch = filteredDepartments[0];
+    if (firstMatch?.code) {
+      navigate(`/course-topic/${firstMatch.code}`);
+    }
+  };
 
   return (
     <div className={`dashboard ${isDarkMode ? 'dark' : ''}`}>
@@ -132,6 +158,7 @@ const Dashboard = () => {
                 {isAdmin && (
                   <button onClick={() => handleUserAction('User Management')}><Settings /> User Management</button>
                 )}
+                <button onClick={() => handleUserAction('Need Help')}><HelpCircle /> Need Help</button>
                 <button onClick={() => handleUserAction('Edit Account')}><User /> Edit Account</button>
                 <button className="logout-btn" onClick={() => handleUserAction('Logout')}><LogOut /> Logout</button>
               </div>
@@ -139,18 +166,36 @@ const Dashboard = () => {
           </div>
         </nav>
 
-        <div className="main-card">
+        <div className="spacer" />
+
+        <div className="search-region">
+          <div className="search-bar">
+            <Search className="search-icon" onClick={handleSearchNavigate} />
+            <input
+              type="text"
+              placeholder="Search..."
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  handleSearchNavigate();
+                }
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="spacer" />
+
+        <div className="main-card home-card">
           <div className="welcome-card">
             <h2>Welcome {displayName},</h2>
             <p>To the new and improved Test Data Bank System 2.0! You are now logged in. This updated version offers a faster, more organized, and user-friendly experience for managing exams and test items.</p>
           </div>
 
-          <div className="search-and-view">
-            <div className="search-bar">
-              <Search className="search-icon" />
-              <input type="text" placeholder="Search Programs..." />
-            </div>
-
+          <div className="program-header">
+            <h3>Your Departments</h3>
             <div className="view-toggle">
               <button className={programView === 'grid' ? 'active' : ''} onClick={() => setProgramView('grid')} title="Logo View">
                 <Grid />
@@ -161,16 +206,16 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <h3>Your Departments</h3>
-
           {programView === 'grid' ? (
             <div className="program-grid">
               {isLoadingDepartments ? (
                 <p>Loading departments...</p>
+              ) : filteredDepartments.length === 0 ? (
+                <p>No matching departments found.</p>
               ) : departments.length === 0 ? (
                 <p>{departmentsError || 'You have not been assigned to any departments. Please contact your administrator.'}</p>
               ) : (
-                departments.map((d) => {
+                filteredDepartments.map((d) => {
                   const logo = DEPARTMENT_LOGOS[d.code] || null;
                   return (
                     <div
@@ -180,7 +225,14 @@ const Dashboard = () => {
                       style={{ cursor: 'pointer' }}
                     >
                       {logo ? (
-                        <img src={logo} alt={d.name} onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/96x96/FFFFFF/1C4DA1?text=LOGO'; }} />
+                        <img
+                          src={logo}
+                          alt={d.name}
+                          onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = 'https://placehold.co/96x96/FFFFFF/1C4DA1?text=LOGO';
+                          }}
+                        />
                       ) : (
                         <div className="dept-icon">{d.code?.charAt(0) ?? 'D'}</div>
                       )}
@@ -194,10 +246,12 @@ const Dashboard = () => {
             <div className="program-list">
               {isLoadingDepartments ? (
                 <p>Loading departments...</p>
+              ) : filteredDepartments.length === 0 ? (
+                <p>No matching departments found.</p>
               ) : departments.length === 0 ? (
                 <p>{departmentsError || 'You have not been assigned to any departments. Please contact your administrator.'}</p>
               ) : (
-                departments.map((d) => (
+                filteredDepartments.map((d) => (
                   <div key={d.id} className="program-list-item" onClick={() => navigate(`/course-topic/${d.code}`)} style={{cursor: 'pointer'}}>
                     <p>{d.name}</p>
                   </div>
@@ -208,19 +262,12 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Logout Modal */}
-      {isLogoutModalOpen && (
-        <div className="logout-overlay">
-          <div className={`logout-modal ${isDarkMode ? 'dark' : ''}`}>
-            <h2>Confirm Logout</h2>
-            <p>Are you sure you want to log out?</p>
-            <div className="logout-actions">
-              <button className="btn-cancel" onClick={() => setIsLogoutModalOpen(false)}>No</button>
-              <button className="btn-confirm" onClick={handleConfirmLogout}>Yes, logout</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <LogoutModal
+        isOpen={isLogoutModalOpen}
+        onClose={() => setIsLogoutModalOpen(false)}
+        onConfirm={handleConfirmLogout}
+        isDarkMode={isDarkMode}
+      />
     </div>
   );
 };

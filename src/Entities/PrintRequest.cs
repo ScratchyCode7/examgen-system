@@ -23,6 +23,8 @@ public class PrintRequest
     
     public string? Notes { get; set; }
     public int CopiesRequested { get; set; } = 1;
+    public bool IsDraftRequest { get; set; }
+    public string? ExamSnapshotJson { get; set; }
 }
 
 public enum PrintRequestStatus

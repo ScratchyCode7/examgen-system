@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search, Grid, List, Users, FileText } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search, Grid, List, Users, FileText, HelpCircle } from 'lucide-react';
 import NavItem from '../components/NavItem';
 import DropdownNavItem from '../components/DropdownNavItem';
+import LogoutModal from '../components/LogoutModal';
 import UserManagement from '../components/UserManagement';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -12,20 +13,20 @@ import TDBLogo from '../assets/TDB logo.png';
 import UPHSL from '../assets/uphsl.png';
 import { apiService } from '../services/api';
 import DEPARTMENT_LOGOS from '../constants/departmentLogos';
+import { HELP_CENTER_URL } from '../constants/helpLinks';
 
 const DashboardAdmin = () => {
   const { user, logout } = useAuth();
   const { isDarkMode, toggleDarkMode } = useTheme();
+  const location = useLocation();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('Home');
   const [activeView, setActiveView] = useState('home'); // 'home' or 'users'
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
-  const [showSecurityModal, setShowSecurityModal] = useState(false);
-  const [adminPassword, setAdminPassword] = useState('');
-  const [securityError, setSecurityError] = useState('');
-  const [isVerifyingPassword, setIsVerifyingPassword] = useState(false);
   const [programView, setProgramView] = useState('grid');
+  const [searchText, setSearchText] = useState('');
+  const [userSearchText, setUserSearchText] = useState('');
   const userMenuRef = useRef(null);
 
   const displayName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username : 'Admin User';
@@ -58,6 +59,15 @@ const DashboardAdmin = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    if (!location.state?.openUsers) {
+      return;
+    }
+
+    openUserManagementView();
+    navigate('/admin', { replace: true });
+  }, [location.state, navigate]);
+
   const handleUserAction = (action) => {
     setIsUserMenuOpen(false);
     if (action === 'Logout') {
@@ -66,6 +76,10 @@ const DashboardAdmin = () => {
       handleOpenUserManagement();
     } else if (action === 'Activity Logs') {
       navigate('/activity-logs');
+    } else if (action === 'Need Help') {
+      if (typeof window !== 'undefined') {
+        window.open(HELP_CENTER_URL, '_blank', 'noopener,noreferrer');
+      }
     }
   };
 
@@ -78,52 +92,7 @@ const DashboardAdmin = () => {
     if (activeView === 'users') {
       return;
     }
-    setAdminPassword('');
-    setSecurityError('');
-    setShowSecurityModal(true);
-  };
-
-  const handleCloseSecurityModal = () => {
-    if (isVerifyingPassword) return;
-    setShowSecurityModal(false);
-    setAdminPassword('');
-    setSecurityError('');
-  };
-
-  const handleVerifyAdminPassword = async (e) => {
-    e.preventDefault();
-    if (!adminPassword.trim()) {
-      setSecurityError('Please enter your password.');
-      return;
-    }
-
-    try {
-      setIsVerifyingPassword(true);
-      setSecurityError('');
-
-      const usernameOrEmail = user?.username || user?.email;
-      if (!usernameOrEmail) {
-        setSecurityError('Unable to verify your account. Please log in again.');
-        return;
-      }
-
-      await apiService.login({
-        username: usernameOrEmail,
-        password: adminPassword
-      });
-
-      setShowSecurityModal(false);
-      setAdminPassword('');
-      openUserManagementView();
-    } catch (err) {
-      const message =
-        err.response?.data?.message ||
-        err.response?.data?.error ||
-        'Password verification failed. Please try again.';
-      setSecurityError(message);
-    } finally {
-      setIsVerifyingPassword(false);
-    }
+    openUserManagementView();
   };
 
   const handleConfirmLogout = () => {
@@ -137,6 +106,28 @@ const DashboardAdmin = () => {
   
   const reportItems = ["Test Generation", "Saved Exam Sets"];
   const isReportsActive = reportItems.includes(activeTab) || activeTab === 'Reports';
+
+  const visibleDepartments = departments.filter((department) => {
+    const code = (department.code || '').toString().trim().toUpperCase();
+    const name = (department.name || '').toString().trim().toLowerCase();
+    return code !== 'IT' && !name.includes('information technology');
+  });
+
+  const normalizedSearchText = searchText.trim().toLowerCase();
+  const filteredDepartments = visibleDepartments.filter((department) => {
+    if (!normalizedSearchText) return true;
+    const departmentName = (department.name || '').toLowerCase();
+    const departmentCode = (department.code || '').toLowerCase();
+    return departmentName.includes(normalizedSearchText) || departmentCode.includes(normalizedSearchText);
+  });
+
+  const handleSearchNavigate = () => {
+    if (!normalizedSearchText) return;
+    const firstMatch = filteredDepartments[0];
+    if (firstMatch?.code) {
+      navigate(`/course-topic/${firstMatch.code}`);
+    }
+  };
 
   return (
     <div className={`dashboard ${isDarkMode ? 'dark' : ''}`}>
@@ -223,6 +214,7 @@ const DashboardAdmin = () => {
               <div className="user-dropdown show">
                 <button onClick={() => handleUserAction('User Management')}><Settings /> User Management</button>
                 <button onClick={() => handleUserAction('Activity Logs')}><FileText /> Activity Logs</button>
+                <button onClick={() => handleUserAction('Need Help')}><HelpCircle /> Need Help</button>
                 <button onClick={() => handleUserAction('Edit Account')}><User /> Edit Account</button>
                 <button className="logout-btn" onClick={() => handleUserAction('Logout')}><LogOut /> Logout</button>
               </div>
@@ -230,7 +222,45 @@ const DashboardAdmin = () => {
           </div>
         </nav>
 
-        <div className="main-card">
+        <div className="spacer" />
+
+        {activeView === 'home' ? (
+          <>
+            <div className="search-region">
+              <div className="search-bar">
+                <Search className="search-icon" onClick={handleSearchNavigate} />
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  value={searchText}
+                  onChange={(event) => setSearchText(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      handleSearchNavigate();
+                    }
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="spacer" />
+          </>
+        ) : (
+          <div className="search-and-view" style={{ maxWidth: '1140px', margin: '0 auto 20px auto' }}>
+            <div className="search-bar">
+              <Search className="search-icon" />
+              <input
+                type="text"
+                placeholder="Search users..."
+                value={userSearchText}
+                onChange={(event) => setUserSearchText(event.target.value)}
+              />
+            </div>
+          </div>
+        )}
+
+        <div className={`main-card ${activeView === 'home' ? 'home-card' : ''}`} style={activeView === 'users' ? { marginTop: '-40px' } : undefined}>
           {activeView === 'home' ? (
             <>
               <div className="welcome-card">
@@ -238,12 +268,8 @@ const DashboardAdmin = () => {
                 <p>To the new and improved Test Data Bank System 2.0! You are now logged in. This updated version offers a faster, more organized, and user-friendly experience for managing exams and test items.</p>
               </div>
 
-              <div className="search-and-view">
-                <div className="search-bar">
-                  <Search className="search-icon" />
-                  <input type="text" placeholder="Search Programs..." />
-                </div>
-
+              <div className="program-header">
+                <h3>Your Programs</h3>
                 <div className="view-toggle">
                   <button className={programView === 'grid' ? 'active' : ''} onClick={() => setProgramView('grid')} title="Logo View">
                     <Grid />
@@ -254,20 +280,12 @@ const DashboardAdmin = () => {
                 </div>
               </div>
 
-              <h3>Your Programs</h3>
-
               {programView === 'grid' ? (
                 <div className="program-grid" style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
                   {isLoadingDepartments ? (
                     <p>Loading departments...</p>
-                  ) : departments.length ? (
-                    departments
-                      .filter(d => {
-                        const code = (d.code || '').toString().trim().toUpperCase();
-                        const name = (d.name || '').toString().trim().toLowerCase();
-                        return code !== 'IT' && !name.includes('information technology');
-                      })
-                      .map((d) => {
+                  ) : filteredDepartments.length ? (
+                    filteredDepartments.map((d) => {
                         const logo = DEPARTMENT_LOGOS[d.code] || null;
                         return (
                           <div
@@ -285,6 +303,8 @@ const DashboardAdmin = () => {
                           </div>
                         );
                       })
+                  ) : normalizedSearchText ? (
+                    <p>No matching programs found.</p>
                   ) : (
                     <p>No departments available.</p>
                   )}
@@ -293,12 +313,14 @@ const DashboardAdmin = () => {
                 <div className="program-list">
                   {isLoadingDepartments ? (
                     <p>Loading departments...</p>
-                  ) : departments.length ? (
-                    departments.map(d => (
+                  ) : filteredDepartments.length ? (
+                    filteredDepartments.map(d => (
                       <div key={d.id} className="program-list-item" style={{cursor: 'pointer'}} onClick={() => navigate(`/course-topic/${d.code}`)}>
                         <p>{d.name}</p>
                       </div>
                     ))
+                  ) : normalizedSearchText ? (
+                    <p>No matching programs found.</p>
                   ) : (
                     <p>No departments available.</p>
                   )}
@@ -306,68 +328,19 @@ const DashboardAdmin = () => {
               )}
             </>
           ) : activeView === 'users' ? (
-            <UserManagement />
+            <UserManagement searchQuery={userSearchText} />
           ) : null}
         </div>
       </div>
 
-      {/* Logout Modal */}
-      {isLogoutModalOpen && (
-        <div className="logout-overlay">
-          <div className={`logout-modal ${isDarkMode ? 'dark' : ''}`}>
-            <h2>Confirm Logout</h2>
-            <p>Are you sure you want to log out?</p>
-            <div className="logout-actions">
-              <button className="btn-cancel" onClick={() => setIsLogoutModalOpen(false)}>No</button>
-              <button className="btn-confirm" onClick={handleConfirmLogout}>Yes, logout</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <LogoutModal
+        isOpen={isLogoutModalOpen}
+        onClose={() => setIsLogoutModalOpen(false)}
+        onConfirm={handleConfirmLogout}
+        isDarkMode={isDarkMode}
+      />
 
-      {showSecurityModal && (
-        <div className="logout-overlay">
-          <div className={`logout-modal ${isDarkMode ? 'dark' : ''}`}>
-            <h2>Security Check</h2>
-            <p>Re-enter your admin password to open User Management.</p>
-
-            <form onSubmit={handleVerifyAdminPassword} style={{ marginTop: '16px' }}>
-              <input
-                type="password"
-                value={adminPassword}
-                onChange={(event) => {
-                  setAdminPassword(event.target.value);
-                  if (securityError) setSecurityError('');
-                }}
-                placeholder="Enter your password"
-                autoFocus
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--border-color)',
-                  background: 'var(--bg-card)',
-                  color: 'var(--text-primary)',
-                  marginBottom: '8px'
-                }}
-              />
-
-              {securityError && (
-                <p style={{ color: '#dc2626', fontSize: '0.9rem', margin: '0 0 8px 0' }}>{securityError}</p>
-              )}
-
-              <div className="logout-actions">
-                <button type="button" className="btn-cancel" onClick={handleCloseSecurityModal} disabled={isVerifyingPassword}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn-confirm" disabled={isVerifyingPassword}>
-                  {isVerifyingPassword ? 'Verifying...' : 'Verify'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* security modal removed */}
     </div>
   );
 };
