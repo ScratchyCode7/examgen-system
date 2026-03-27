@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { apiService } from '../services/api';
 import { useToast } from './ToastContext';
+import { persistLastProfileImagePath } from '../utils/userDisplay';
 
 const AuthContext = createContext(null);
 const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
@@ -23,6 +24,7 @@ export const AuthProvider = ({ children }) => {
         const userData = JSON.parse(savedUser);
         setUser(userData);
         setIsAuthenticated(true);
+        persistLastProfileImagePath(userData?.profileImagePath);
       } catch (error) {
         console.error('Error parsing saved user:', error);
         localStorage.removeItem('token');
@@ -86,6 +88,7 @@ export const AuthProvider = ({ children }) => {
       
       localStorage.setItem('token', accessToken);
       localStorage.setItem('user', JSON.stringify(userData));
+      persistLastProfileImagePath(userData?.profileImagePath);
       
       setUser(userData);
       setIsAuthenticated(true);
@@ -119,6 +122,7 @@ export const AuthProvider = ({ children }) => {
       };
 
       localStorage.setItem('user', JSON.stringify(nextUser));
+      persistLastProfileImagePath(nextUser?.profileImagePath);
       return nextUser;
     });
   }, []);

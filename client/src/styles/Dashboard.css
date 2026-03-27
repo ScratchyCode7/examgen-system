@@ -218,12 +218,19 @@
   height: 48px;
   border-radius: 50%;
   background: #ddd;
+  overflow: hidden;
   display: flex;
   justify-content: center;
   align-items: center;
   color: #1C4DA1;
   font-weight: bold;
   font-size: 1.2rem;
+}
+
+.user-pic img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 /* User dropdown */

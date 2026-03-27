@@ -22,6 +22,7 @@ import { useToast } from '../contexts/ToastContext';
 import { apiService } from '../services/api';
 import DEPARTMENT_LOGOS from '../constants/departmentLogos';
 import { HELP_CENTER_URL } from '../constants/helpLinks';
+import { getUserDisplayName, getUserProfileImageUrl } from '../utils/userDisplay';
 import '../styles/TestEncodingAndEditing.css';
 
 // Assets
@@ -264,6 +265,8 @@ const TestEncodingAndEditing = () => {
     const [pendingDeleteQuestionId, setPendingDeleteQuestionId] = useState(null);
     const [isDeletingQuestion, setIsDeletingQuestion] = useState(false);
     const userMenuRef = useRef(null);
+    const displayName = getUserDisplayName(user, 'User');
+    const profileImageUrl = getUserProfileImageUrl(user?.profileImagePath);
 
     // Backend data state
     const [departments, setDepartments] = useState([]);
@@ -1680,8 +1683,14 @@ const TestEncodingAndEditing = () => {
                             <div className="circle">{isDarkMode?<Moon size={16}/>:<Sun size={16}/>}</div>
                         </button>
                         <button onClick={()=>setIsUserMenuOpen(!isUserMenuOpen)} className={`user-btn ${isUserMenuOpen?'active':''}`}>
-                            <div className="user-pic">{user ? user.username.charAt(0).toUpperCase() : 'U'}</div>
-                            <span className="user-name">{user ? user.username : 'User'}</span>
+                            <div className="user-pic">
+                                {profileImageUrl ? (
+                                    <img src={profileImageUrl} alt="User profile" />
+                                ) : (
+                                    displayName.charAt(0).toUpperCase()
+                                )}
+                            </div>
+                            <span className="user-name">{displayName}</span>
                         </button>
                         {isUserMenuOpen && (
                             <div className="user-dropdown show">

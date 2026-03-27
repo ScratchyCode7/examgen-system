@@ -154,6 +154,7 @@ const AccountSettings = () => {
       updateCurrentUser({
         firstName: updated.firstName || user?.firstName || '',
         lastName: updated.lastName || user?.lastName || '',
+        username: updated.username || user?.username || '',
         email: updated.email || user?.email || '',
         profileImagePath: updated.profileImagePath || null,
       });

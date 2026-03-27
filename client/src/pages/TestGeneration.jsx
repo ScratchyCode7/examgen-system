@@ -16,6 +16,7 @@ import TDBLogo from '../assets/TDB logo.png';
 import UPHSL from '../assets/uphsl.png';
 import UPHSLLogo from '../assets/UPHSL Logo.png';
 import { HELP_CENTER_URL } from '../constants/helpLinks';
+import { getUserDisplayName, getUserProfileImageUrl } from '../utils/userDisplay';
 
 const DEFAULT_QUESTION_EDIT_STATE = {
   isOpen: false,
@@ -152,8 +153,11 @@ const TestGeneration = () => {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const userMenuRef = useRef(null);
+  const sampleExamSectionRef = useRef(null);
+  const tosSectionRef = useRef(null);
 
-  const displayName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username : 'User';
+  const displayName = getUserDisplayName(user, 'User');
+  const profileImageUrl = getUserProfileImageUrl(user?.profileImagePath);
 
   const createEmptyTopicRow = (id) => ({
     id,
@@ -178,7 +182,7 @@ const TestGeneration = () => {
     return [];
   }, []);
 
-  const isOptionMarkedCorrect = (option) => {
+  const isOptionMarkedCorrect = React.useCallback((option) => {
     if (!option) return false;
     const rawValue = option.isCorrect ?? option.IsCorrect ?? option.correct ?? option.is_correct ?? option.correctOption ?? option.answer ?? option.CorrectOption ?? option.Answer ?? null;
 
@@ -191,9 +195,9 @@ const TestGeneration = () => {
       if (['false', 'f', 'no', 'n'].includes(normalized)) return false;
     }
     return false;
-  };
+  }, []);
 
-  const getCorrectAnswerLetter = (question) => {
+  const getCorrectAnswerLetter = React.useCallback((question) => {
     const optionList = question?.options || question?.Options || question?.choices || [];
     const normalizedOptions = Array.isArray(optionList) ? optionList : [];
     const correctIndex = normalizedOptions.findIndex(isOptionMarkedCorrect);
@@ -206,15 +210,15 @@ const TestGeneration = () => {
       return fallback.trim().toUpperCase();
     }
     return '-';
-  };
+  }, [isOptionMarkedCorrect]);
 
-  const normalizeAnswerChoice = (value) => {
+  const normalizeAnswerChoice = React.useCallback((value) => {
     if (value === null || value === undefined) return '';
     const normalized = String(value).trim().toUpperCase();
     return ['A', 'B', 'C', 'D'].includes(normalized) ? normalized : '';
-  };
+  }, []);
 
-  const applyCorrectAnswerForGeneratedExam = (question, answerChoice) => {
+  const applyCorrectAnswerForGeneratedExam = React.useCallback((question, answerChoice) => {
     if (!question) return question;
     const normalizedChoice = normalizeAnswerChoice(answerChoice);
     if (!normalizedChoice) return question;
@@ -263,7 +267,7 @@ const TestGeneration = () => {
       correctAnswerLetter: normalizedChoice,
       answerKey: normalizedChoice
     };
-  };
+  }, [normalizeAnswerChoice, isOptionMarkedCorrect, getCorrectAnswerLetter]);
 
   // Helper function to convert image URL to base64 data URL - using fetch to avoid CORS
   const convertImageToDataURL = async (imageUrl) => {
@@ -301,14 +305,6 @@ const TestGeneration = () => {
   const asHtml = React.useCallback((rawContent) => ({
     __html: rawContent === undefined || rawContent === null ? '' : String(rawContent)
   }), []);
-
-  // Helper function to determine semester based on current date
-  const getAutoSemester = () => {
-    const month = new Date().getMonth() + 1;
-    if (month >= 8 || month <= 12) return '1st'; // Aug-Dec
-    if (month >= 1 && month <= 5) return '2nd'; // Jan-May
-    return 'Summer'; // Jun-Jul
-  };
 
   // Helper function to get school year
   const getAutoSchoolYear = () => {
@@ -355,6 +351,32 @@ const TestGeneration = () => {
   const [replacementCandidates, setReplacementCandidates] = useState([]);
   const [isLoadingReplacementCandidates, setIsLoadingReplacementCandidates] = useState(false);
   const [replacementError, setReplacementError] = useState('');
+  const [questionEditSearchText, setQuestionEditSearchText] = useState('');
+  const [pendingReplacementCandidate, setPendingReplacementCandidate] = useState(null);
+
+  const filteredReplacementCandidates = React.useMemo(() => {
+    const normalizedSearch = String(questionEditSearchText || '').trim().toLowerCase();
+    if (!normalizedSearch) return replacementCandidates;
+
+    return replacementCandidates.filter((candidate) => {
+      const candidateId = String(getQuestionIdentifier(candidate) || '').toLowerCase();
+      const candidateLevel = String(
+        candidate?.bloomCategory ||
+        candidate?.bloomLevel ||
+        candidate?.BloomCategory ||
+        candidate?.BloomLevel ||
+        ''
+      ).toLowerCase();
+      const rawContent = String(candidate?.content || candidate?.Content || candidate?.question || '');
+      const contentText = rawContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+
+      return (
+        contentText.includes(normalizedSearch) ||
+        candidateId.includes(normalizedSearch) ||
+        candidateLevel.includes(normalizedSearch)
+      );
+    });
+  }, [questionEditSearchText, replacementCandidates]);
 
   const handleSpecOverrideChange = (overrideKey, field, value) => {
     setSpecOverrides(prev => ({
@@ -385,6 +407,8 @@ const TestGeneration = () => {
     setReplacementCandidates([]);
     setReplacementError('');
     setIsLoadingReplacementCandidates(false);
+    setQuestionEditSearchText('');
+    setPendingReplacementCandidate(null);
   }, []);
 
   useEffect(() => {
@@ -403,6 +427,16 @@ const TestGeneration = () => {
     const normalized = Number.isFinite(parsed) && parsed > 0 ? String(parsed) : '';
     setTotalExamItems(normalized);
     setManualTotalItems(true);
+
+    if (normalized) {
+      // Wait for state/render cycle, then guide user to the TOS section.
+      window.setTimeout(() => {
+        tosSectionRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start'
+        });
+      }, 120);
+    }
   }, [totalExamItemsInput]);
 
   const handleDepartmentChange = (deptId) => {
@@ -432,6 +466,16 @@ const TestGeneration = () => {
   const [subjects, setSubjects] = useState([]);
   const [topics, setTopics] = useState([]);
   const [questionsByTopic, setQuestionsByTopic] = useState({}); // Store questions by topicId
+
+  const hasPendingQuestionEditChanges = React.useMemo(() => {
+    if (!questionEditModal.isOpen || questionEditModal.questionIndex === null) return false;
+    const currentQuestion = sampleExam?.questions?.[questionEditModal.questionIndex];
+    const selectedChoice = normalizeAnswerChoice(questionEditModal.selectedAnswer);
+    const currentChoice = normalizeAnswerChoice(getCorrectAnswerLetter(currentQuestion));
+    const answerChanged = Boolean(selectedChoice) && selectedChoice !== currentChoice;
+    return Boolean(pendingReplacementCandidate) || answerChanged;
+  }, [questionEditModal, sampleExam, pendingReplacementCandidate, normalizeAnswerChoice, getCorrectAnswerLetter]);
+
   const fetchQuestionsForTopic = React.useCallback(async (topicId) => {
     if (!topicId) return [];
     const topicKey = String(topicId);
@@ -1301,7 +1345,7 @@ const TestGeneration = () => {
       .join('|');
 
     return { ordered, signature };
-  }, [sampleExam, generatedSpec]);
+  }, [sampleExam, generatedSpec, normalizeAnswerChoice, getCorrectAnswerLetter, isOptionMarkedCorrect]);
 
   const questionsPayload = React.useMemo(() => buildQuestionsPayload(), [buildQuestionsPayload]);
   const questionSignature = questionsPayload.signature;
@@ -1439,6 +1483,7 @@ const TestGeneration = () => {
     schoolYear,
     generatedSpec,
     generationWarnings,
+    isOptionMarkedCorrect,
   ]);
 
   const loadSavedExamSets = React.useCallback(async () => {
@@ -1501,7 +1546,7 @@ const TestGeneration = () => {
     return copy.slice(0, n);
   };
 
-  const bloomCategoryFromQuestion = (q = {}) => {
+  const bloomCategoryFromQuestion = React.useCallback((q = {}) => {
     const coarseMatchFromString = (value) => {
       if (value === undefined || value === null) return null;
       const normalized = String(value).trim().toLowerCase();
@@ -1545,7 +1590,7 @@ const TestGeneration = () => {
     if (type.includes('evaluate') || type.includes('create') || type.includes('synth')) return 'evaluating';
 
     return 'evaluating';
-  };
+  }, []);
 
   const formatBloomDisplayLabel = (question) => {
     const keyFromQuestion = (() => {
@@ -1607,7 +1652,7 @@ const TestGeneration = () => {
       level: bloomCategoryFromQuestion(question),
       correctAnswer: getCorrectAnswerLetter(question)
     };
-  }, [topics]);
+  }, [topics, bloomCategoryFromQuestion, getCorrectAnswerLetter]);
 
   const questionBankSummary = React.useMemo(() => {
     if (!selectedSubject) return null;
@@ -1636,7 +1681,7 @@ const TestGeneration = () => {
     const loadedTopicCount = Object.values(questionsByTopic || {}).filter((list) => Array.isArray(list) && list.length > 0).length;
 
     return { totalQuestions: total, bloomData, loadedTopicCount };
-  }, [questionsByTopic, selectedSubject]);
+  }, [questionsByTopic, selectedSubject, bloomCategoryFromQuestion]);
 
   const syncSpecWithExamQuestions = React.useCallback((questions) => {
     if (!Array.isArray(questions) || questions.length === 0) return;
@@ -1742,6 +1787,14 @@ const TestGeneration = () => {
       };
     });
   }, [topicRows, bloomCategoryFromQuestion, setGeneratedSpec]);
+
+  const scrollToSampleExamSection = React.useCallback(() => {
+    if (!sampleExamSectionRef.current) return;
+    sampleExamSectionRef.current.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start'
+    });
+  }, []);
 
   // New exam generation: distribute Bloom levels across selected topics and fetch per-topic questions
   const handleGenerateSample = async () => {
@@ -1978,9 +2031,14 @@ const TestGeneration = () => {
       });
       syncSpecWithExamQuestions(enriched);
       setActiveExamMeta(null);
-      setIsSampleExamVisible(false);
+      setIsSampleExamVisible(true);
       setShowAnswerSheet(false);
       setLastSavedSignature('');
+
+      // Ensure preview is visible and guide user directly to it after generation.
+      window.setTimeout(() => {
+        scrollToSampleExamSection();
+      }, 120);
     } catch (err) {
       console.error('Error generating sample exam', err);
       setError('Failed to generate sample exam. See console for details.');
@@ -1992,6 +2050,8 @@ const TestGeneration = () => {
     setReplacementCandidates([]);
     setReplacementError('');
     setIsLoadingReplacementCandidates(false);
+    setQuestionEditSearchText('');
+    setPendingReplacementCandidate(null);
   }, []);
 
   const handleOpenQuestionEditModal = React.useCallback(async (question, index) => {
@@ -2026,6 +2086,8 @@ const TestGeneration = () => {
       subjectId: normalizedSubjectId,
       selectedAnswer: normalizeAnswerChoice(getCorrectAnswerLetter(question))
     });
+    setQuestionEditSearchText('');
+    setPendingReplacementCandidate(null);
     setReplacementCandidates([]);
     setReplacementError('');
     setIsLoadingReplacementCandidates(true);
@@ -2070,10 +2132,10 @@ const TestGeneration = () => {
     } finally {
       setIsLoadingReplacementCandidates(false);
     }
-  }, [fetchQuestionsForTopic, sampleExam, selectedCourse, selectedSubject, topics]);
+  }, [fetchQuestionsForTopic, sampleExam, selectedCourse, selectedSubject, topics, bloomCategoryFromQuestion, normalizeAnswerChoice, getCorrectAnswerLetter]);
 
   const handleSelectReplacementQuestion = React.useCallback((candidate) => {
-    if (!candidate || !sampleExam || !questionEditModal.isOpen || questionEditModal.questionIndex === null) {
+    if (!candidate || !questionEditModal.isOpen || questionEditModal.questionIndex === null) {
       return;
     }
     const candidateLevel = bloomCategoryFromQuestion(candidate);
@@ -2107,23 +2169,9 @@ const TestGeneration = () => {
       });
       return;
     }
-    const normalized = normalizeQuestionForSampleExam(candidate, {
-      topicId: questionEditModal.topicId,
-      topicName: questionEditModal.topicName
-    });
-    setSampleExam((prev) => {
-      if (!prev) return prev;
-      const updatedQuestions = [...prev.questions];
-      updatedQuestions[questionEditModal.questionIndex] = normalized;
-      return {
-        ...prev,
-        questions: updatedQuestions
-      };
-    });
-    setGenerationWarnings((prev) => [...prev, `Question ${questionEditModal.questionIndex + 1} manually edited (replacement).`]);
-    showToast({ message: `Question ${questionEditModal.questionIndex + 1} replaced in generated exam`, type: 'success' });
-    closeQuestionEditModal();
-  }, [questionEditModal, sampleExam, normalizeQuestionForSampleExam, closeQuestionEditModal, showToast]);
+    setPendingReplacementCandidate(candidate);
+    setReplacementError('');
+  }, [questionEditModal, showToast, bloomCategoryFromQuestion]);
 
   const handleSelectEditedCorrectAnswer = React.useCallback((answerChoice) => {
     const normalizedChoice = normalizeAnswerChoice(answerChoice);
@@ -2131,34 +2179,122 @@ const TestGeneration = () => {
       return;
     }
 
+    setQuestionEditModal((prev) => ({
+      ...prev,
+      selectedAnswer: normalizedChoice
+    }));
+  }, [questionEditModal, normalizeAnswerChoice]);
+
+  const handleApplyQuestionEditChanges = React.useCallback(() => {
+    if (!sampleExam || !Array.isArray(sampleExam.questions) || !questionEditModal.isOpen || questionEditModal.questionIndex === null) {
+      return;
+    }
+
+    const currentQuestion = sampleExam.questions[questionEditModal.questionIndex];
+    if (!currentQuestion) {
+      showToast({ message: 'Unable to apply changes for this question.', type: 'error' });
+      return;
+    }
+
+    const selectedChoice = normalizeAnswerChoice(questionEditModal.selectedAnswer);
+    let updatedQuestion = currentQuestion;
+    let replacementApplied = false;
+    let answerApplied = false;
+
+    if (pendingReplacementCandidate) {
+      const candidateLevel = bloomCategoryFromQuestion(pendingReplacementCandidate);
+      const candidateTopicId = getQuestionTopicId(pendingReplacementCandidate);
+      const candidateCourseId = getQuestionCourseId(pendingReplacementCandidate);
+      const candidateSubjectId = getQuestionSubjectId(pendingReplacementCandidate);
+      const normalizedTopicId = questionEditModal.topicId != null ? String(questionEditModal.topicId) : null;
+      const normalizedCourseId = questionEditModal.courseId != null ? String(questionEditModal.courseId) : null;
+      const normalizedSubjectId = questionEditModal.subjectId != null ? String(questionEditModal.subjectId) : null;
+      const candidateTopicIdStr = candidateTopicId != null ? String(candidateTopicId) : '';
+      const candidateCourseIdStr = candidateCourseId != null ? String(candidateCourseId) : '';
+      const candidateSubjectIdStr = candidateSubjectId != null ? String(candidateSubjectId) : '';
+      const requiredGroup = questionEditModal.levelGroup || getBloomGroupKey(questionEditModal.level);
+      const candidateGroup = getBloomGroupKey(candidateLevel);
+      const levelMismatch = requiredGroup ? (!candidateGroup || candidateGroup !== requiredGroup) : (candidateLevel !== questionEditModal.level);
+      const topicMismatch = normalizedTopicId && candidateTopicIdStr !== normalizedTopicId;
+      const courseMismatch = normalizedCourseId && candidateCourseIdStr && candidateCourseIdStr !== normalizedCourseId;
+      const subjectMismatch = normalizedSubjectId && candidateSubjectIdStr && candidateSubjectIdStr !== normalizedSubjectId;
+
+      if (levelMismatch || topicMismatch || courseMismatch || subjectMismatch) {
+        const mismatchReasons = [];
+        if (levelMismatch) mismatchReasons.push('Bloom level');
+        if (topicMismatch) mismatchReasons.push('topic');
+        if (courseMismatch) mismatchReasons.push('course');
+        if (subjectMismatch) mismatchReasons.push('subject');
+        const reasonText = mismatchReasons.join(', ');
+        setReplacementError('Replacement questions must match the original Bloom grouping, course, and topic.');
+        showToast({
+          message: `Cannot apply replacement because the selected item does not match the required ${reasonText}.`,
+          type: 'error'
+        });
+        return;
+      }
+
+      updatedQuestion = normalizeQuestionForSampleExam(pendingReplacementCandidate, {
+        topicId: questionEditModal.topicId,
+        topicName: questionEditModal.topicName
+      });
+      replacementApplied = true;
+    }
+
+    const currentChoice = normalizeAnswerChoice(getCorrectAnswerLetter(updatedQuestion));
+    if (selectedChoice && selectedChoice !== currentChoice) {
+      updatedQuestion = applyCorrectAnswerForGeneratedExam(updatedQuestion, selectedChoice);
+      answerApplied = true;
+    }
+
+    if (!replacementApplied && !answerApplied) {
+      showToast({ message: 'No changes to apply.', type: 'error' });
+      return;
+    }
+
     setSampleExam((prev) => {
       if (!prev || !Array.isArray(prev.questions)) return prev;
       const updatedQuestions = [...prev.questions];
-      const currentQuestion = updatedQuestions[questionEditModal.questionIndex];
-      if (!currentQuestion) return prev;
-      updatedQuestions[questionEditModal.questionIndex] = applyCorrectAnswerForGeneratedExam(currentQuestion, normalizedChoice);
+      updatedQuestions[questionEditModal.questionIndex] = updatedQuestion;
       return {
         ...prev,
         questions: updatedQuestions
       };
     });
 
-    setQuestionEditModal((prev) => ({
-      ...prev,
-      selectedAnswer: normalizedChoice
-    }));
-
     setGenerationWarnings((prev) => {
-      const message = `Question ${questionEditModal.questionIndex + 1} answer key shuffled to ${normalizedChoice} while preserving the original correct value.`;
-      if (prev.includes(message)) return prev;
-      return [...prev, message];
+      const next = [...prev];
+      if (replacementApplied) {
+        next.push(`Question ${questionEditModal.questionIndex + 1} manually edited (replacement).`);
+      }
+      if (answerApplied) {
+        const message = `Question ${questionEditModal.questionIndex + 1} answer key shuffled to ${selectedChoice} while preserving the original correct value.`;
+        if (!next.includes(message)) next.push(message);
+      }
+      return next;
     });
 
-    showToast({
-      message: `Question ${questionEditModal.questionIndex + 1} correct option moved to ${normalizedChoice}`,
-      type: 'success'
-    });
-  }, [questionEditModal, showToast]);
+    if (replacementApplied && answerApplied) {
+      showToast({ message: `Question ${questionEditModal.questionIndex + 1} replacement and answer updates applied`, type: 'success' });
+    } else if (replacementApplied) {
+      showToast({ message: `Question ${questionEditModal.questionIndex + 1} replaced in generated exam`, type: 'success' });
+    } else {
+      showToast({ message: `Question ${questionEditModal.questionIndex + 1} correct option moved to ${selectedChoice}`, type: 'success' });
+    }
+
+    closeQuestionEditModal();
+  }, [
+    sampleExam,
+    questionEditModal,
+    pendingReplacementCandidate,
+    normalizeAnswerChoice,
+    getCorrectAnswerLetter,
+    applyCorrectAnswerForGeneratedExam,
+    bloomCategoryFromQuestion,
+    normalizeQuestionForSampleExam,
+    showToast,
+    closeQuestionEditModal
+  ]);
 
   // Print request handling (Admin)
   const loadPrintRequests = React.useCallback(async () => {
@@ -2753,6 +2889,33 @@ const TestGeneration = () => {
     });
   };
 
+  const handleShuffleSampleExamQuestions = React.useCallback(() => {
+    if (!sampleExam || !Array.isArray(sampleExam.questions) || sampleExam.questions.length < 2) {
+      return;
+    }
+
+    const shuffledQuestions = [...sampleExam.questions];
+    for (let i = shuffledQuestions.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledQuestions[i], shuffledQuestions[j]] = [shuffledQuestions[j], shuffledQuestions[i]];
+    }
+
+    setSampleExam((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        questions: shuffledQuestions,
+      };
+    });
+
+    syncSpecWithExamQuestions(shuffledQuestions);
+
+    showToast({
+      message: 'Sample exam questions shuffled successfully.',
+      type: 'success',
+    });
+  }, [sampleExam, showToast, syncSpecWithExamQuestions]);
+
   const dataEntryItems = ["Program - Topic", "Test Encoding", "Test Question Editing"];
   const reportItems = ["Test Generation", "Saved Exam Sets"];
   const isDataEntryActive = dataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
@@ -2832,7 +2995,13 @@ const TestGeneration = () => {
             </button>
 
             <button onClick={() => setIsUserMenuOpen(!isUserMenuOpen)} className={`user-btn ${isUserMenuOpen ? 'active' : ''}`}>
-              <div className="user-pic">{displayName.charAt(0).toUpperCase()}</div>
+              <div className="user-pic">
+                {profileImageUrl ? (
+                  <img src={profileImageUrl} alt="User profile" />
+                ) : (
+                  displayName.charAt(0).toUpperCase()
+                )}
+              </div>
               <span className="user-name">{displayName}</span>
             </button>
 
@@ -3186,7 +3355,7 @@ const TestGeneration = () => {
 
           {/* Topics Table */}
           {selectedSubject && isTableUnlocked && (
-            <div className="table-section">
+            <div className="table-section" ref={tosSectionRef}>
               <h3>Table of Specifications</h3>
               
               <div className="table-wrapper">
@@ -3430,6 +3599,13 @@ const TestGeneration = () => {
             >
               <PlayCircle size={16} /> Generate Sample Exam
             </button>
+            <button
+              className="btn btn-secondary"
+              onClick={handleShuffleSampleExamQuestions}
+              disabled={!sampleExam || !Array.isArray(sampleExam.questions) || sampleExam.questions.length < 2}
+            >
+              <RefreshCw size={16} /> Shuffle Exam Questions
+            </button>
             <button 
               className="btn btn-secondary"
               onClick={handleToggleSampleExamVisibility}
@@ -3457,7 +3633,7 @@ const TestGeneration = () => {
 
           {/* Show Sample Exam */}
           {sampleExam && isSampleExamVisible && (
-            <div className="sample-exam">
+            <div className="sample-exam" ref={sampleExamSectionRef}>
               <h3>Sample Exam Preview</h3>
               <div className="sample-content exam-paper">
                 {/* Exam Paper Header */}
@@ -3792,56 +3968,95 @@ const TestGeneration = () => {
             <p className="question-edit-subtitle">
               Topic: <strong>{questionEditModal.topicName || 'N/A'}</strong> · Cognitive Level: <strong>{(questionEditModal.level || '').replace(/\b\w/g, (c) => c.toUpperCase()) || 'N/A'}</strong>
             </p>
-            <div className="question-edit-answer-controls">
-              <p className="question-edit-answer-label">Correct answer for this generated exam</p>
-              <div className="question-edit-answer-buttons">
-                {['A', 'B', 'C', 'D'].map((choice) => (
+            <div className="question-edit-layout">
+              <aside className="question-edit-sidebar">
+                <div className="question-edit-answer-controls">
+                  <p className="question-edit-answer-label">Correct answer for this generated exam</p>
+                  <div className="question-edit-answer-buttons">
+                    {['A', 'B', 'C', 'D'].map((choice) => (
+                      <button
+                        key={choice}
+                        type="button"
+                        className={`question-edit-answer-btn${questionEditModal.selectedAnswer === choice ? ' active' : ''}`}
+                        onClick={() => handleSelectEditedCorrectAnswer(choice)}
+                      >
+                        {choice}
+                      </button>
+                    ))}
+                  </div>
+                  <small className="question-edit-answer-help">This updates only the generated exam/session answer key and does not change the question bank record.</small>
+                </div>
+
+                <div className="question-edit-actions">
+                  <button className="btn btn-secondary" onClick={closeQuestionEditModal}>Cancel</button>
                   <button
-                    key={choice}
-                    type="button"
-                    className={`question-edit-answer-btn${questionEditModal.selectedAnswer === choice ? ' active' : ''}`}
-                    onClick={() => handleSelectEditedCorrectAnswer(choice)}
+                    className="btn btn-primary"
+                    onClick={handleApplyQuestionEditChanges}
+                    disabled={!hasPendingQuestionEditChanges}
                   >
-                    {choice}
+                    Apply Changes
                   </button>
-                ))}
-              </div>
-              <small className="question-edit-answer-help">This updates only the generated exam/session answer key and does not change the question bank record.</small>
-            </div>
-            {isLoadingReplacementCandidates ? (
-              <p>Loading available questions…</p>
-            ) : replacementCandidates.length > 0 ? (
-              <div className="replacement-candidate-list">
-                {replacementCandidates.map((candidate, candidateIndex) => {
-                  const candidateId = getQuestionIdentifier(candidate);
-                  const candidateKey = candidateId ? `candidate-${candidateId}` : `candidate-${questionEditModal.topicId}-${candidateIndex}`;
-                  const candidateHtml = asHtml(candidate.content || candidate.Content || candidate.question || '');
-                  return (
-                    <div key={candidateKey} className="replacement-candidate-card">
-                      <div className="replacement-candidate-body">
-                        <div className="replacement-candidate-text" dangerouslySetInnerHTML={candidateHtml} />
-                        <div className="candidate-meta">
-                          <span>ID: {candidateId}</span>
-                          <span>Level: {bloomCategoryFromQuestion(candidate)}</span>
-                        </div>
-                      </div>
-                      <div className="candidate-actions">
-                        <button
-                          className="btn btn-primary btn-sm"
-                          onClick={() => handleSelectReplacementQuestion(candidate)}
-                        >
-                          Use as Replacement
-                        </button>
-                      </div>
+                </div>
+              </aside>
+
+              <section className="question-edit-content">
+                {!isLoadingReplacementCandidates && replacementCandidates.length > 0 && (
+                  <>
+                    <div className="question-edit-search-row">
+                      <Search size={16} className="question-edit-search-icon" />
+                      <input
+                        type="text"
+                        className="question-edit-search-input"
+                        value={questionEditSearchText}
+                        onChange={(e) => setQuestionEditSearchText(e.target.value)}
+                        placeholder="Search replacement questions by content, ID, or level..."
+                      />
                     </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p>{replacementError || 'No alternative questions found for this topic and cognitive level.'}</p>
-            )}
-            <div className="question-edit-actions">
-              <button className="btn btn-secondary" onClick={closeQuestionEditModal}>Cancel</button>
+                    <div className="question-edit-search-summary">
+                      <span>{filteredReplacementCandidates.length} returned matches</span>
+                      <span>{replacementCandidates.length} replacement candidates</span>
+                    </div>
+                  </>
+                )}
+
+                {isLoadingReplacementCandidates ? (
+                  <p>Loading available questions…</p>
+                ) : replacementCandidates.length > 0 ? (
+                  <div className="replacement-candidate-list">
+                    {filteredReplacementCandidates.map((candidate, candidateIndex) => {
+                      const candidateId = getQuestionIdentifier(candidate);
+                      const candidateKey = candidateId ? `candidate-${candidateId}` : `candidate-${questionEditModal.topicId}-${candidateIndex}`;
+                      const selectedReplacementId = getQuestionIdentifier(pendingReplacementCandidate);
+                      const isSelectedReplacement = selectedReplacementId && String(candidateId) === String(selectedReplacementId);
+                      const candidateHtml = asHtml(candidate.content || candidate.Content || candidate.question || '');
+                      return (
+                        <div key={candidateKey} className="replacement-candidate-card">
+                          <div className="replacement-candidate-body">
+                            <div className="replacement-candidate-text" dangerouslySetInnerHTML={candidateHtml} />
+                            <div className="candidate-meta">
+                              <span>ID: {candidateId}</span>
+                              <span>Level: {bloomCategoryFromQuestion(candidate)}</span>
+                            </div>
+                          </div>
+                          <div className="candidate-actions">
+                            <button
+                              className={`btn btn-primary btn-sm${isSelectedReplacement ? ' selected' : ''}`}
+                              onClick={() => handleSelectReplacementQuestion(candidate)}
+                            >
+                              {isSelectedReplacement ? 'Selected Replacement' : 'Select Replacement'}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {filteredReplacementCandidates.length === 0 && (
+                      <p className="question-edit-search-empty">No questions match your search.</p>
+                    )}
+                  </div>
+                ) : (
+                  <p>{replacementError || 'No alternative questions found for this topic and cognitive level.'}</p>
+                )}
+              </section>
             </div>
           </div>
         </div>

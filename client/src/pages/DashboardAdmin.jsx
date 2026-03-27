@@ -14,6 +14,7 @@ import UPHSL from '../assets/uphsl.png';
 import { apiService } from '../services/api';
 import DEPARTMENT_LOGOS from '../constants/departmentLogos';
 import { HELP_CENTER_URL } from '../constants/helpLinks';
+import { getUserDisplayName, getUserProfileImageUrl } from '../utils/userDisplay';
 
 const DashboardAdmin = () => {
   const { user, logout } = useAuth();
@@ -29,7 +30,8 @@ const DashboardAdmin = () => {
   const [userSearchText, setUserSearchText] = useState('');
   const userMenuRef = useRef(null);
 
-  const displayName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username : 'Admin User';
+  const displayName = getUserDisplayName(user, 'Admin User');
+  const profileImageUrl = getUserProfileImageUrl(user?.profileImagePath);
 
   // departments are loaded from API and used directly
   const [departments, setDepartments] = useState([]);
@@ -208,7 +210,13 @@ const DashboardAdmin = () => {
             </button>
 
             <button onClick={() => setIsUserMenuOpen(!isUserMenuOpen)} className={`user-btn ${isUserMenuOpen ? 'active' : ''}`}>
-              <div className="user-pic">{displayName.charAt(0).toUpperCase()}</div>
+              <div className="user-pic">
+                {profileImageUrl ? (
+                  <img src={profileImageUrl} alt="User profile" />
+                ) : (
+                  displayName.charAt(0).toUpperCase()
+                )}
+              </div>
               <span className="user-name">{displayName}</span>
             </button>
 

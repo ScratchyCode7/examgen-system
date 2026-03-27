@@ -10,6 +10,7 @@ import { apiService } from '../services/api';
 import '../styles/Dashboard.css';
 import '../styles/ActivityLogs.css';
 import { HELP_CENTER_URL } from '../constants/helpLinks';
+import { getUserDisplayName, getUserProfileImageUrl } from '../utils/userDisplay';
 
 import TDBLogo from '../assets/TDB logo.png';
 import UPHSL from '../assets/uphsl.png';
@@ -23,7 +24,8 @@ const ActivityLogs = () => {
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const userMenuRef = useRef(null);
 
-  const displayName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username : 'Admin User';
+  const displayName = getUserDisplayName(user, 'Admin User');
+  const profileImageUrl = getUserProfileImageUrl(user?.profileImagePath);
 
   const [logs, setLogs] = useState([]);
   const [expandedDetails, setExpandedDetails] = useState({});
@@ -270,7 +272,13 @@ const ActivityLogs = () => {
             </button>
 
             <button onClick={() => setIsUserMenuOpen(!isUserMenuOpen)} className={`user-btn ${isUserMenuOpen ? 'active' : ''}`}>
-              <div className="user-pic">{displayName.charAt(0).toUpperCase()}</div>
+              <div className="user-pic">
+                {profileImageUrl ? (
+                  <img src={profileImageUrl} alt="User profile" />
+                ) : (
+                  displayName.charAt(0).toUpperCase()
+                )}
+              </div>
               <span className="user-name">{displayName}</span>
             </button>
 

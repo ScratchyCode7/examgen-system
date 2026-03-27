@@ -92,7 +92,6 @@ const Login = () => {
     return () => window.clearInterval(intervalId);
   }, [cooldownRemaining]);
 
-  const hasAnyInput = username.trim().length > 0 || password.trim().length > 0;
   const isFormComplete = username.trim().length > 0 && password.trim().length > 0;
   const isCooldownActive = cooldownRemaining > 0;
 

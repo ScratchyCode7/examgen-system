@@ -17,6 +17,7 @@ import '../styles/CourseTopic.css';
 import TDBLogo from '../assets/TDB logo.png';
 import UPHSL from '../assets/uphsl.png';
 import DEPARTMENT_LOGOS from '../constants/departmentLogos';
+import { getUserDisplayName, getUserProfileImageUrl } from '../utils/userDisplay';
 const dataEntryItems = ["Program - Topic", "Test Encoding", "Test Question Editing"];
 
 const CourseTopic = () => {
@@ -30,7 +31,8 @@ const CourseTopic = () => {
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const userMenuRef = useRef(null);
 
-  const displayName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username : 'User';
+  const displayName = getUserDisplayName(user, 'User');
+  const profileImageUrl = getUserProfileImageUrl(user?.profileImagePath);
 
   const reportItems = ["Test Generation", "Saved Exam Sets"];
 
@@ -431,7 +433,13 @@ const CourseTopic = () => {
             </button>
 
             <button onClick={() => setIsUserMenuOpen(!isUserMenuOpen)} className={`user-btn ${isUserMenuOpen ? 'active' : ''}`}>
-              <div className="user-pic">{displayName.charAt(0).toUpperCase()}</div>
+              <div className="user-pic">
+                {profileImageUrl ? (
+                  <img src={profileImageUrl} alt="User profile" />
+                ) : (
+                  displayName.charAt(0).toUpperCase()
+                )}
+              </div>
               <span className="user-name">{displayName}</span>
             </button>
 

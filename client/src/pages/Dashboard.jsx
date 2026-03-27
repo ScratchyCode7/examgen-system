@@ -13,6 +13,7 @@ import UPHSL from '../assets/uphsl.png';
 import { apiService } from '../services/api';
 import DEPARTMENT_LOGOS from '../constants/departmentLogos';
 import { HELP_CENTER_URL } from '../constants/helpLinks';
+import { getUserDisplayName, getUserProfileImageUrl } from '../utils/userDisplay';
 
 const Dashboard = () => {
   const { user, logout, isAdmin } = useAuth();
@@ -59,7 +60,8 @@ const Dashboard = () => {
     void loadDepartments();
   }, [isAdmin, navigate, user?.userId]);
 
-  const displayName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username : 'User';
+  const displayName = getUserDisplayName(user, 'User');
+  const profileImageUrl = getUserProfileImageUrl(user?.profileImagePath);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -151,7 +153,13 @@ const Dashboard = () => {
             </button>
 
             <button onClick={() => setIsUserMenuOpen(!isUserMenuOpen)} className={`user-btn ${isUserMenuOpen ? 'active' : ''}`}>
-              <div className="user-pic">{displayName.charAt(0).toUpperCase()}</div>
+              <div className="user-pic">
+                {profileImageUrl ? (
+                  <img src={profileImageUrl} alt="User profile" />
+                ) : (
+                  displayName.charAt(0).toUpperCase()
+                )}
+              </div>
               <span className="user-name">{displayName}</span>
             </button>
 

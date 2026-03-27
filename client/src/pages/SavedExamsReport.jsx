@@ -16,6 +16,7 @@ import TDBLogo from '../assets/TDB logo.png';
 import UPHSL from '../assets/uphsl.png';
 import UPHSLLogo from '../assets/UPHSL Logo.png';
 import { HELP_CENTER_URL } from '../constants/helpLinks';
+import { getUserDisplayName, getUserProfileImageUrl } from '../utils/userDisplay';
 
 const { Home, ClipboardList, BookOpen, Settings, LogOut, User, Users, Sun, Moon, Search, Printer, Eye, Trash2, RefreshCcw, FileText, HelpCircle } = Icons;
 
@@ -80,7 +81,8 @@ const SavedExamsReport = () => {
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const userMenuRef = useRef(null);
 
-  const displayName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username : 'User';
+  const displayName = getUserDisplayName(user, 'User');
+  const profileImageUrl = getUserProfileImageUrl(user?.profileImagePath);
 
   // Filters
   const [selectedDepartment, setSelectedDepartment] = useState('');
@@ -966,7 +968,13 @@ const SavedExamsReport = () => {
             </button>
 
             <button onClick={() => setIsUserMenuOpen(!isUserMenuOpen)} className={`user-btn ${isUserMenuOpen ? 'active' : ''}`}>
-              <div className="user-pic">{displayName.charAt(0).toUpperCase()}</div>
+              <div className="user-pic">
+                {profileImageUrl ? (
+                  <img src={profileImageUrl} alt="User profile" />
+                ) : (
+                  displayName.charAt(0).toUpperCase()
+                )}
+              </div>
               <span className="user-name">{displayName}</span>
             </button>
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Search } from 'lucide-react';
+import { Search, Edit2, Trash2, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { apiService } from '../services/api';
 
 const BLOOM_FILTERS = [
@@ -132,6 +132,17 @@ const BM25QuestionSearch = ({
           placeholder="Search questions with BM25 ranking..."
           className={isDarkMode ? 'dark' : ''}
         />
+        {query && (
+          <button
+            type="button"
+            className="bm25-clear-search"
+            onClick={() => setQuery('')}
+            aria-label="Clear search query"
+            title="Clear search"
+          >
+            <X size={16} />
+          </button>
+        )}
       </div>
 
       <div className="bm25-filter-grid">
@@ -194,17 +205,49 @@ const BM25QuestionSearch = ({
                       <span>{item.questionType}</span>
                     </div>
                     <div className="bm25-result-actions">
-                      <button type="button" className="action-edit" onClick={() => onEditQuestion?.(item)}>Edit</button>
-                      <button type="button" className="action-delete" onClick={() => onDeleteQuestion?.(item.id)}>Delete</button>
+                      <button
+                        type="button"
+                        className="action-edit"
+                        onClick={() => onEditQuestion?.(item)}
+                        aria-label="Edit question"
+                        title="Edit question"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        className="action-delete"
+                        onClick={() => onDeleteQuestion?.(item.id)}
+                        aria-label="Delete question"
+                        title="Delete question"
+                      >
+                        <Trash2 size={16} />
+                      </button>
                     </div>
                   </article>
                 ))}
               </div>
 
               <div className="bm25-pagination">
-                <button type="button" onClick={() => setPage((prev) => Math.max(1, prev - 1))} disabled={page <= 1}>Previous</button>
+                <button
+                  type="button"
+                  onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                  disabled={page <= 1}
+                  aria-label="Previous page"
+                  title="Previous page"
+                >
+                  <ChevronLeft size={16} />
+                </button>
                 <span>Page {page} of {totalPages}</span>
-                <button type="button" onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))} disabled={page >= totalPages}>Next</button>
+                <button
+                  type="button"
+                  onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                  disabled={page >= totalPages}
+                  aria-label="Next page"
+                  title="Next page"
+                >
+                  <ChevronRight size={16} />
+                </button>
               </div>
             </>
           )}
@@ -215,3 +258,4 @@ const BM25QuestionSearch = ({
 };
 
 export default BM25QuestionSearch;
+    
