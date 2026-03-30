@@ -1,6 +1,9 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using Databank.Abstract;
 using Databank.Database;
 using Databank.Entities;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,7 +16,8 @@ public sealed record UpdateUserRequest(
     string Email,
     bool? IsAdmin,
     bool? IsActive,
-    string? Password
+    string? Password,
+    string? AdminPasswordVerification
 );
 
 public sealed class UpdateUserEndpoint : IEndpoint
@@ -25,6 +29,7 @@ public sealed class UpdateUserEndpoint : IEndpoint
                 UpdateUserRequest request,
                 AppDbContext dbContext,
                 IPasswordHasher<User> passwordHasher,
+                HttpContext httpContext,
                 CancellationToken ct) =>
         {
             var user = await dbContext.Users
@@ -88,9 +93,42 @@ public sealed class UpdateUserEndpoint : IEndpoint
                 user.IsActive = request.IsActive.Value;
             }
 
-            if (!string.IsNullOrWhiteSpace(request.Password))
+            var isPasswordChangeRequested = !string.IsNullOrWhiteSpace(request.Password);
+            if (isPasswordChangeRequested)
             {
-                user.Password = passwordHasher.HashPassword(user, request.Password);
+                if (string.IsNullOrWhiteSpace(request.AdminPasswordVerification))
+                {
+                    return TypedResults.BadRequest("Admin password verification is required before changing a user's password.");
+                }
+
+                var requesterIdValue = httpContext.User.FindFirstValue(JwtRegisteredClaimNames.Sub)
+                    ?? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (!Guid.TryParse(requesterIdValue, out var requesterId))
+                {
+                    return TypedResults.Unauthorized();
+                }
+
+                var requestingAdmin = await dbContext.Users
+                    .FirstOrDefaultAsync(u => u.UserId == requesterId, ct);
+
+                if (requestingAdmin is null)
+                {
+                    return TypedResults.Unauthorized();
+                }
+
+                var verificationResult = passwordHasher.VerifyHashedPassword(
+                    requestingAdmin,
+                    requestingAdmin.Password,
+                    request.AdminPasswordVerification);
+
+                if (verificationResult == PasswordVerificationResult.Failed)
+                {
+                    return TypedResults.Problem(
+                        "Admin identity verification failed. Please enter your current password to change a user's password.",
+                        statusCode: StatusCodes.Status403Forbidden);
+                }
+
+                user.Password = passwordHasher.HashPassword(user, request.Password!);
             }
 
             user.UpdatedAt = DateTime.UtcNow;

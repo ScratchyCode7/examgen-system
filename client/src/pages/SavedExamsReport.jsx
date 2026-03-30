@@ -82,7 +82,7 @@ const SavedExamsReport = () => {
   const userMenuRef = useRef(null);
 
   const displayName = getUserDisplayName(user, 'User');
-  const profileImageUrl = getUserProfileImageUrl(user?.profileImagePath);
+  const profileImageUrl = getUserProfileImageUrl(user?.profileImagePath, user?.userId);
 
   // Filters
   const [selectedDepartment, setSelectedDepartment] = useState('');
@@ -904,7 +904,8 @@ const SavedExamsReport = () => {
 
   const dataEntryItems = ['Program - Topic', 'Test Encoding', 'Test Question Editing'];
   const reportItems = ['Test Generation', 'Saved Exam Sets'];
-  const isDataEntryActive = dataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
+  const availableDataEntryItems = isAdmin ? ['Program - Topic'] : dataEntryItems;
+  const isDataEntryActive = availableDataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
   const isReportsActive = reportItems.includes(activeTab) || activeTab === 'Reports';
 
   return (
@@ -937,12 +938,15 @@ const SavedExamsReport = () => {
               icon={ClipboardList}
               label="Data Entry"
               isActive={isDataEntryActive}
-              dropdownItems={dataEntryItems}
+              dropdownItems={availableDataEntryItems}
               onSelect={(item) => {
                 setActiveTab(item);
                 const code = resolveDepartmentCode();
                 if (item === 'Program - Topic') navigate(`/course-topic/${code}`);
-                else if (item === 'Test Encoding' || item === 'Test Question Editing') navigate(`/test-encoding/${code}`);
+                else if (item === 'Test Encoding' || item === 'Test Question Editing') {
+                  const targetTab = item === 'Test Encoding' ? 'Test Question Encoding' : item;
+                  navigate(`/test-encoding/${code}`, { state: { activeTab: targetTab } });
+                }
               }}
             />
             <DropdownNavItem

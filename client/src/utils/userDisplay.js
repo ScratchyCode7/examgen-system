@@ -1,20 +1,42 @@
 import { API_BASE_URL } from '../services/api';
 
-const LAST_PROFILE_IMAGE_PATH_KEY = 'lastProfileImagePath';
+const LEGACY_LAST_PROFILE_IMAGE_PATH_KEY = 'lastProfileImagePath';
+const PROFILE_IMAGE_KEY_PREFIX = 'profileImagePath:';
 
-const readLastProfileImagePath = () => {
+const toScopedProfileKey = (userId) => {
+  if (!userId) return '';
+  return `${PROFILE_IMAGE_KEY_PREFIX}${String(userId)}`;
+};
+
+const readLastProfileImagePath = (userId) => {
+  const scopedKey = toScopedProfileKey(userId);
+  if (!scopedKey) return '';
+
   try {
-    return localStorage.getItem(LAST_PROFILE_IMAGE_PATH_KEY) || '';
+    return localStorage.getItem(scopedKey) || '';
   } catch {
     return '';
   }
 };
 
-export const persistLastProfileImagePath = (profileImagePath) => {
-  if (!profileImagePath) return;
+export const clearLegacyProfileImageCache = () => {
+  try {
+    localStorage.removeItem(LEGACY_LAST_PROFILE_IMAGE_PATH_KEY);
+  } catch {
+    // Ignore storage failures and keep runtime behavior stable.
+  }
+};
+
+export const persistLastProfileImagePath = (profileImagePath, userId) => {
+  const scopedKey = toScopedProfileKey(userId);
+  if (!scopedKey) return;
 
   try {
-    localStorage.setItem(LAST_PROFILE_IMAGE_PATH_KEY, String(profileImagePath));
+    if (profileImagePath) {
+      localStorage.setItem(scopedKey, String(profileImagePath));
+    } else {
+      localStorage.removeItem(scopedKey);
+    }
   } catch {
     // Ignore storage failures and keep runtime behavior stable.
   }
@@ -27,8 +49,8 @@ export const getUserDisplayName = (user, fallback = 'User') => {
   return fullName || user.username || fallback;
 };
 
-export const getUserProfileImageUrl = (profileImagePath) => {
-  const candidatePath = profileImagePath || readLastProfileImagePath();
+export const getUserProfileImageUrl = (profileImagePath, userId) => {
+  const candidatePath = profileImagePath || readLastProfileImagePath(userId);
   if (!candidatePath) return '';
   if (/^https?:\/\//i.test(candidatePath)) return candidatePath;
 

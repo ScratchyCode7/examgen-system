@@ -78,6 +78,29 @@ public sealed class SaveGeneratedExamEndpoint : IEndpoint
             }
 
             var questionIds = request.Questions.Select(q => q.QuestionId).ToList();
+            var duplicateQuestionId = questionIds
+                .GroupBy(id => id)
+                .Where(group => group.Count() > 1)
+                .Select(group => (int?)group.Key)
+                .FirstOrDefault();
+
+            if (duplicateQuestionId.HasValue)
+            {
+                return TypedResults.BadRequest($"Duplicate question detected in generated exam payload: {duplicateQuestionId.Value}. Please regenerate the exam.");
+            }
+
+            var duplicateDisplayOrder = request.Questions
+                .Select(q => q.DisplayOrder)
+                .GroupBy(order => order)
+                .Where(group => group.Count() > 1)
+                .Select(group => (int?)group.Key)
+                .FirstOrDefault();
+
+            if (duplicateDisplayOrder.HasValue)
+            {
+                return TypedResults.BadRequest($"Duplicate display order detected in generated exam payload: {duplicateDisplayOrder.Value}. Please regenerate the exam.");
+            }
+
             var questions = await dbContext.Questions
                 .Include(q => q.Topic)
                 .Include(q => q.Options)

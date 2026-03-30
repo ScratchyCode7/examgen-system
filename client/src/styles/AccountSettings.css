@@ -3,6 +3,16 @@
 /* Inherit dashboard styles */
 @import './Dashboard.css';
 
+.account-main-card {
+  max-width: 980px;
+  margin: 2.25rem auto 0;
+  padding: 1.6rem 2rem 2rem;
+}
+
+.dashboard.dark .account-main-card {
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.45);
+}
+
 .account-back-btn {
   display: inline-flex;
   align-items: center;
@@ -61,12 +71,13 @@
 .profile-image-wrapper {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 1.2rem;
+  padding: 0.2rem 0;
 }
 
 .profile-image {
-  width: 80px;
-  height: 80px;
+  width: 90px;
+  height: 90px;
   border-radius: 50%;
   overflow: hidden;
   border: 2px solid #d1d5db;
@@ -148,6 +159,10 @@
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+}
+
+.field-container-full-width {
+  grid-column: 1 / -1;
 }
 
 .field-container label {
@@ -305,6 +320,11 @@
 
 /* Mobile Responsive */
 @media (max-width: 640px) {
+  .account-main-card {
+    margin-top: 1.25rem;
+    padding: 1.15rem;
+  }
+
   .profile-section {
     flex-direction: column;
     align-items: flex-start;

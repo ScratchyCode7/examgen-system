@@ -1,5 +1,6 @@
 using Databank.Abstract;
 using Databank.Database;
+using Databank.Features.Questions;
 using Databank.Services;
 using Microsoft.EntityFrameworkCore;
 
@@ -24,6 +25,26 @@ public sealed class DeleteQuestionEndpoint : IEndpoint
                 return TypedResults.NotFound();
             }
 
+            var requesterId = QuestionPermissionResolver.GetCurrentUserId(httpContext.User);
+            if (!requesterId.HasValue)
+            {
+                return TypedResults.Problem("Unable to determine the current user.", statusCode: StatusCodes.Status401Unauthorized);
+            }
+
+            var permission = await QuestionPermissionResolver.ResolvePermissionsForUserAsync(
+                dbContext,
+                requesterId.Value,
+                new[] { id },
+                ct);
+
+            var canDelete = permission.TryGetValue(id, out var perms) && perms.CanDelete;
+            if (!canDelete)
+            {
+                return TypedResults.Problem(
+                    "You do not have permission to delete this question. Request delete permission from the owner.",
+                    statusCode: StatusCodes.Status403Forbidden);
+            }
+
             var questionContent = question.Content;
             
             dbContext.Questions.Remove(question);
@@ -39,12 +60,11 @@ public sealed class DeleteQuestionEndpoint : IEndpoint
             }
 
             // Log activity
-            var userId = httpContext.User.FindFirst("sub")?.Value ?? httpContext.User.FindFirst("userId")?.Value;
-            await loggingService.LogActivityAsync(userId, "Questions", "Deleted", "Question", id,
+            await loggingService.LogActivityAsync(requesterId.Value.ToString(), "Questions", "Deleted", "Question", id,
                 $"Deleted question: {questionContent?.Substring(0, Math.Min(50, questionContent?.Length ?? 0))}...");
 
             return TypedResults.NoContent();
-        }).RequireAuthorization("AdminOnly");
+        }).RequireAuthorization();
     }
 }
 

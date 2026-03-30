@@ -765,23 +765,6 @@
   }
 }
 
-/* Error Message */
-.error-message {
-  background: #FEE;
-  border: 2px solid #F88;
-  color: #C33;
-  padding: 1rem;
-  border-radius: 8px;
-  margin-bottom: 2rem;
-  font-weight: 500;
-}
-
-.dashboard.dark .error-message {
-  background: #7A2C2C;
-  border-color: #A84A4A;
-  color: #FF9999;
-}
-
 /* Test Summary */
 .test-summary {
   background: #F0F4F8;
@@ -1907,6 +1890,99 @@
 
 .dashboard.dark .modal-btn-primary {
   background: linear-gradient(135deg, #2f65c8 0%, #2350a8 100%);
+}
+
+.warning-popup-modal {
+  max-width: 640px;
+  width: min(94vw, 640px);
+  border: 2px solid #dc2626;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fff5f5 0%, #ffffff 100%);
+  box-shadow: 0 20px 48px rgba(127, 29, 29, 0.38);
+}
+
+.dashboard.dark .warning-popup-modal {
+  border-color: #f87171;
+  background: linear-gradient(180deg, #2f1116 0%, #1f121f 100%);
+  box-shadow: 0 20px 48px rgba(2, 6, 23, 0.72);
+}
+
+.warning-popup-header {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(220, 38, 38, 0.35);
+}
+
+.warning-popup-title {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #b91c1c;
+  font-size: 1.2rem;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.dashboard.dark .warning-popup-title {
+  color: #fecaca;
+}
+
+.warning-popup-title svg {
+  color: #dc2626;
+}
+
+.dashboard.dark .warning-popup-title svg {
+  color: #f87171;
+}
+
+.warning-popup-body {
+  max-height: min(48vh, 330px);
+  overflow-y: auto;
+  padding-right: 0.3rem;
+}
+
+.warning-popup-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: #7f1d1d;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.warning-popup-list li + li {
+  margin-top: 0.5rem;
+}
+
+.dashboard.dark .warning-popup-list {
+  color: #fecaca;
+}
+
+.warning-popup-actions {
+  margin-top: 1.3rem;
+}
+
+.warning-popup-actions .modal-btn-primary {
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.warning-popup-actions .modal-btn-primary:hover {
+  background: #b91c1c;
+  box-shadow: 0 8px 18px rgba(185, 28, 28, 0.35);
+}
+
+.dashboard.dark .warning-popup-actions .modal-btn-primary {
+  background: #ef4444;
+  color: #111827;
+}
+
+.dashboard.dark .warning-popup-actions .modal-btn-primary:hover {
+  background: #f87171;
 }
 
 @media (max-width: 768px) {

@@ -17,6 +17,9 @@ public sealed class QuestionConfiguration : IEntityTypeConfiguration<Question>
         builder.Property(x => x.TopicId)
             .IsRequired();
 
+        builder.Property(x => x.CreatedByUserId)
+            .IsRequired(false);
+
         builder.Property(x => x.Content)
             .IsRequired()
             .HasColumnType("text");
@@ -61,6 +64,8 @@ public sealed class QuestionConfiguration : IEntityTypeConfiguration<Question>
             .WithOne(x => x.Question)
             .HasForeignKey(x => x.QuestionId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasIndex(x => x.CreatedByUserId);
     }
 }
 

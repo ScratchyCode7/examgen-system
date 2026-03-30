@@ -4,7 +4,7 @@
 // See README for full details.
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search, FileText } from 'lucide-react';
+import { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search, FileText, Users, HelpCircle } from 'lucide-react';
 import NavItem from '../components/NavItem';
 import DropdownNavItem from '../components/DropdownNavItem';
 import LogoutModal from '../components/LogoutModal';
@@ -17,6 +17,7 @@ import '../styles/CourseTopic.css';
 import TDBLogo from '../assets/TDB logo.png';
 import UPHSL from '../assets/uphsl.png';
 import DEPARTMENT_LOGOS from '../constants/departmentLogos';
+import { HELP_CENTER_URL } from '../constants/helpLinks';
 import { getUserDisplayName, getUserProfileImageUrl } from '../utils/userDisplay';
 const dataEntryItems = ["Program - Topic", "Test Encoding", "Test Question Editing"];
 
@@ -32,7 +33,7 @@ const CourseTopic = () => {
   const userMenuRef = useRef(null);
 
   const displayName = getUserDisplayName(user, 'User');
-  const profileImageUrl = getUserProfileImageUrl(user?.profileImagePath);
+  const profileImageUrl = getUserProfileImageUrl(user?.profileImagePath, user?.userId);
 
   const reportItems = ["Test Generation", "Saved Exam Sets"];
 
@@ -57,12 +58,14 @@ const CourseTopic = () => {
   const [selectedSubjectForTopic, setSelectedSubjectForTopic] = useState(null);
   const [topicCreating, setTopicCreating] = useState(false);
 
-  const isDataEntryActive = dataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
+  const availableDataEntryItems = isAdmin ? ['Program - Topic'] : dataEntryItems;
+
+  const isDataEntryActive = availableDataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
   const isReportsActive = reportItems.includes(activeTab) || activeTab === 'Reports';
 
   const resolveDepartmentCode = () => {
     if (departmentCode) return departmentCode;
-    const fallback = departments.find(d => (d.code || '').toUpperCase() !== 'IT') || departments[0];
+    const fallback = departments.find(d => !['IT', 'ITS'].includes((d.code || '').toUpperCase())) || departments[0];
     return fallback?.code || 'CCS';
   };
 
@@ -212,8 +215,14 @@ const CourseTopic = () => {
     setIsUserMenuOpen(false);
     if (action === 'Logout') {
       setIsLogoutModalOpen(true);
+    } else if (action === 'User Management') {
+      navigate('/admin', { state: { openUsers: true } });
     } else if (action === 'Activity Logs') {
       navigate('/activity-logs');
+    } else if (action === 'Need Help') {
+      if (typeof window !== 'undefined') {
+        window.open(HELP_CENTER_URL, '_blank', 'noopener,noreferrer');
+      }
     } else if (action === 'Edit Account') {
       navigate('/account/settings');
     } else {
@@ -384,29 +393,41 @@ const CourseTopic = () => {
       <div className="background" style={{ backgroundImage: `url(${UPHSL})` }} />
 
       <div className="main-container">
-        {/* Navbar (same as Dashboard.jsx) */}
+        {/* Role-aware navbar: matches admin/user entry points from dashboards */}
         <nav className={`navbar ${isDarkMode ? 'dark' : ''}`}>
           <div className="nav-left">
-            <button onClick={() => { setActiveTab('Home'); navigate(user?.isAdmin ? '/admin' : '/'); }} className="logo-btn">
+            <button onClick={() => { setActiveTab('Home'); navigate(isAdmin ? '/admin' : '/'); }} className="logo-btn">
               <img src={TDBLogo} alt="TDB Logo" className="logo" />
               <span className="logo-text">TEST DATABANK</span>
             </button>
           </div>
 
           <div className="nav-center">
-            <NavItem icon={Home} label="Home" isActive={activeTab === 'Home'} onClick={() => { setActiveTab('Home'); navigate(user?.isAdmin ? '/admin' : '/'); }} />
+            <NavItem icon={Home} label="Home" isActive={activeTab === 'Home'} onClick={() => { setActiveTab('Home'); navigate(isAdmin ? '/admin' : '/'); }} />
+            {isAdmin && (
+              <NavItem
+                icon={Users}
+                label="Users"
+                isActive={activeTab === 'User Management'}
+                onClick={() => {
+                  setActiveTab('User Management');
+                  navigate('/admin', { state: { openUsers: true } });
+                }}
+              />
+            )}
             <DropdownNavItem
               icon={ClipboardList}
               label="Data Entry"
               isActive={isDataEntryActive}
-              dropdownItems={dataEntryItems}
+              dropdownItems={availableDataEntryItems}
               onSelect={(item) => {
                 const targetCode = resolveDepartmentCode();
                 setActiveTab(item);
                 if (item === 'Program - Topic') {
                   navigate(`/course-topic/${targetCode}`);
                 } else if (item === 'Test Encoding' || item === 'Test Question Editing') {
-                  navigate(`/test-encoding/${targetCode}`);
+                  const targetTab = item === 'Test Encoding' ? 'Test Question Encoding' : item;
+                  navigate(`/test-encoding/${targetCode}`, { state: { activeTab: targetTab } });
                 }
               }}
             />
@@ -451,6 +472,7 @@ const CourseTopic = () => {
                     <button onClick={() => handleUserAction('Activity Logs')}><FileText /> Activity Logs</button>
                   </>
                 )}
+                <button onClick={() => handleUserAction('Need Help')}><HelpCircle /> Need Help</button>
                 <button onClick={() => handleUserAction('Edit Account')}><User /> Edit Account</button>
                 <button className="logout-btn" onClick={() => handleUserAction('Logout')}><LogOut /> Logout</button>
               </div>
@@ -475,20 +497,47 @@ const CourseTopic = () => {
             {isLoadingDepartments ? (
               <p>Loading department...</p>
             ) : (() => {
-              const dept = departments.find(d => d.code === departmentCode);
-              if (!dept) {
-                return <p>Department not found ({departmentCode})</p>;
+              const selectedCode = departmentCode || resolveDepartmentCode();
+              const selectedDepartment = departments.find((d) => d.code === selectedCode);
+              if (!selectedDepartment) {
+                return <p>Department not found ({selectedCode})</p>;
               }
-              const logo = dept.code ? (DEPARTMENT_LOGOS?.[dept.code] ?? null) : null;
+
               return (
-                <>
-                  {logo ? (
-                    <img src={logo} alt={dept.name} className="program-logo large-logo" onError={(e)=>{e.target.onerror=null; e.target.src='https://placehold.co/96x96/FFFFFF/1C4DA1?text=LOGO'}} />
-                  ) : (
-                    <div className="dept-icon large-logo">{dept.code?.charAt(0) ?? dept.name.charAt(0)}</div>
-                  )}
-                  <span className="program-name large-name">{dept.name}</span>
-                </>
+                <div className="program-header-content">
+                  <div className="program-grid department-selector-grid">
+                    {departments
+                      .filter((dept) => (dept.code || '').toUpperCase() !== 'ITS')
+                      .map((dept) => {
+                      const logo = dept.code ? (DEPARTMENT_LOGOS?.[dept.code] ?? null) : null;
+                      const isActive = dept.code === selectedCode;
+
+                      return (
+                        <button
+                          key={dept.id}
+                          type="button"
+                          className={`program-card department-selector-card ${isActive ? 'active-department-card' : ''}`}
+                          onClick={() => navigate(`/course-topic/${dept.code}`)}
+                          title={`${dept.code} - ${dept.name}`}
+                        >
+                          {logo ? (
+                            <img
+                              src={logo}
+                              alt={dept.name}
+                              onError={(e) => {
+                                e.target.onerror = null;
+                                e.target.src = 'https://placehold.co/64x64/FFFFFF/1C4DA1?text=LOGO';
+                              }}
+                            />
+                          ) : (
+                            <div className="dept-icon">{dept.code?.charAt(0) ?? dept.name.charAt(0)}</div>
+                          )}
+                          <p>{dept.name}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               );
             })()}
           </div>

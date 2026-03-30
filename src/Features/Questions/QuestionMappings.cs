@@ -5,7 +5,7 @@ namespace Databank.Features.Questions;
 
 public static class QuestionMappings
 {
-    public static QuestionResponse ToResponse(this Question question)
+    public static QuestionResponse ToResponse(this Question question, bool canEdit = false, bool canDelete = false)
     {
         QuestionImageDto? imageDto = null;
         if (question.QuestionImage != null)
@@ -28,7 +28,9 @@ public static class QuestionMappings
             question.DisplayOrder,
             question.IsActive,
             question.Options?.Select(o => o.ToResponse()).ToList(),
-            imageDto
+            imageDto,
+            canEdit,
+            canDelete
         );
     }
 }

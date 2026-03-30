@@ -4,7 +4,7 @@
 // - Implemented save/update/delete functionality with backend
 // - Uses Bloom's taxonomy levels from backend
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { 
     Home, ClipboardList, BookOpen, Settings, LogOut, User, Users, Sun, Moon, Search, 
     FileText, Plus, Edit2, Trash2, Save, HelpCircle,
@@ -82,6 +82,35 @@ const IMAGE_EDITOR_DEFAULT_CROP = {
     width: 76,
     height: 76,
 };
+
+const normalizePlainText = (value, { trimEdges = false } = {}) => {
+    const normalized = (value || '')
+        .normalize('NFKC')
+        .replace(/\r\n?/g, '\n')
+        .replace(/\u00a0/g, ' ')
+        .replace(/[ \t]+\n/g, '\n')
+        .replace(/\n{3,}/g, '\n\n');
+
+    return trimEdges ? normalized.trim() : normalized;
+};
+
+const htmlToPlainText = (value) => {
+    if (!value) return '';
+
+    const withLineBreaks = value
+        .replace(/<br\s*\/?\s*>/gi, '\n')
+        .replace(/<\/(div|p|li|h1|h2|h3|h4|h5|h6)>/gi, '\n');
+
+    const stripped = withLineBreaks.replace(/<[^>]*>/g, '');
+    const decoder = typeof window !== 'undefined' ? document.createElement('textarea') : null;
+    if (!decoder) {
+        return normalizePlainText(stripped);
+    }
+
+    decoder.innerHTML = stripped;
+    return normalizePlainText(decoder.value);
+};
+
 // -----------------
 
 
@@ -115,6 +144,39 @@ const MathSymbolPicker = ({ position, onSelect, onClose }) => {
             </div>
         </div>
     );
+};
+
+const resolveGroupedBloomValue = (incomingBloomLevel) => {
+    if (!incomingBloomLevel) return '';
+
+    const numericBloom = Number(incomingBloomLevel);
+    if (Number.isFinite(numericBloom) && numericBloom >= 1 && numericBloom <= 6) {
+        const byNumeric = {
+            1: 'Remember',
+            2: 'Understand',
+            3: 'Apply',
+            4: 'Analyze',
+            5: 'Evaluate',
+            6: 'Create',
+        };
+        const backendName = byNumeric[Math.trunc(numericBloom)];
+        const groupedFromNumeric = BLOOM_LEVELS.find((item) =>
+            item.backendValues.some((backendValue) => backendValue.toLowerCase() === backendName.toLowerCase())
+        );
+        if (groupedFromNumeric) return groupedFromNumeric.value;
+    }
+
+    const normalized = String(incomingBloomLevel).trim().toLowerCase();
+    if (!normalized) return '';
+
+    const directGroup = BLOOM_LEVELS.find((item) => item.value.toLowerCase() === normalized);
+    if (directGroup) return directGroup.value;
+
+    const byBackendValue = BLOOM_LEVELS.find((item) =>
+        item.backendValues.some((backendValue) => backendValue.toLowerCase() === normalized)
+    );
+
+    return byBackendValue ? byBackendValue.value : '';
 };
 // -----------------
 
@@ -230,19 +292,44 @@ const RichTextToolbar = ({ onFormat, onSaveRange, activeCommands, onImageEdit })
 
 
 // --- HeaderTitleBlock Component ---
-const HeaderTitleBlock = ({ activeTab, isDarkMode, selectedDepartment }) => {
-    const deptLogo = selectedDepartment?.code && DEPARTMENT_LOGOS[selectedDepartment.code] 
-        ? DEPARTMENT_LOGOS[selectedDepartment.code] 
-        : DEPARTMENT_LOGOS['CCS'];
-    const deptName = selectedDepartment?.name || 'College of Computer Studies';
-    
+const HeaderTitleBlock = ({ activeTab, isDarkMode, departments, selectedDepartmentCode, onDepartmentChange }) => {
     return (
         <div className="header-section">
             <h1 className="page-title">{activeTab}</h1> 
             <hr className="header-separator-line" /> 
             <div className={`college-title-block centered-only ${isDarkMode ? 'dark' : ''}`}>
-                <img src={deptLogo} alt={`${deptName} Logo`} className="dept-logo" /> 
-                <span className="college-text">{deptName}</span>
+                <div className="program-grid department-selector-grid">
+                    {departments
+                        .filter((dept) => (dept.code || '').toUpperCase() !== 'ITS')
+                        .map((dept) => {
+                        const logo = dept.code ? (DEPARTMENT_LOGOS?.[dept.code] ?? null) : null;
+                        const isActive = dept.code === selectedDepartmentCode;
+
+                        return (
+                            <button
+                                key={dept.id}
+                                type="button"
+                                className={`program-card department-selector-card ${isActive ? 'active-department-card' : ''}`}
+                                onClick={() => onDepartmentChange(String(dept.id))}
+                                title={`${dept.code} - ${dept.name}`}
+                            >
+                                {logo ? (
+                                    <img
+                                        src={logo}
+                                        alt={dept.name}
+                                        onError={(e) => {
+                                            e.target.onerror = null;
+                                            e.target.src = 'https://placehold.co/220x220/FFFFFF/1C4DA1?text=LOGO';
+                                        }}
+                                    />
+                                ) : (
+                                    <div className="dept-icon">{dept.code?.charAt(0) ?? dept.name.charAt(0)}</div>
+                                )}
+                                <p>{dept.name}</p>
+                            </button>
+                        );
+                    })}
+                </div>
             </div>
             <hr className="header-separator-line" />
         </div>
@@ -253,6 +340,7 @@ const HeaderTitleBlock = ({ activeTab, isDarkMode, selectedDepartment }) => {
 
 // --- Main Component ---
 const TestEncodingAndEditing = () => {
+    const location = useLocation();
     const navigate = useNavigate();
     const { departmentCode } = useParams();
     const { user, logout, isAdmin } = useAuth();
@@ -266,7 +354,7 @@ const TestEncodingAndEditing = () => {
     const [isDeletingQuestion, setIsDeletingQuestion] = useState(false);
     const userMenuRef = useRef(null);
     const displayName = getUserDisplayName(user, 'User');
-    const profileImageUrl = getUserProfileImageUrl(user?.profileImagePath);
+    const profileImageUrl = getUserProfileImageUrl(user?.profileImagePath, user?.userId);
 
     // Backend data state
     const [departments, setDepartments] = useState([]);
@@ -287,7 +375,7 @@ const TestEncodingAndEditing = () => {
         if (departmentCode) return departmentCode;
         const selectedDept = departments.find(d => d.id === Number(department));
         if (selectedDept?.code) return selectedDept.code;
-        const fallback = departments.find(d => (d.code || '').toUpperCase() !== 'IT') || departments[0];
+        const fallback = departments.find(d => !['IT', 'ITS'].includes((d.code || '').toUpperCase())) || departments[0];
         return fallback?.code || 'CCS';
     }, [departmentCode, departments, department]);
 
@@ -330,6 +418,22 @@ const TestEncodingAndEditing = () => {
     const [correctAnswer, setCorrectAnswer] = useState(''); 
 
     const [editingQuestion, setEditingQuestion] = useState(null); 
+    const [isEditRequestModalOpen, setIsEditRequestModalOpen] = useState(false);
+    const [editRequestTargetQuestion, setEditRequestTargetQuestion] = useState(null);
+    const [editRequestMessage, setEditRequestMessage] = useState('');
+    const [isSubmittingEditRequest, setIsSubmittingEditRequest] = useState(false);
+    const [inboxEditRequests, setInboxEditRequests] = useState([]);
+    const [sentEditRequests, setSentEditRequests] = useState([]);
+    const [permissionDrafts, setPermissionDrafts] = useState({});
+    const [isLoadingEditRequests, setIsLoadingEditRequests] = useState(false);
+    const [isResolvingEditRequest, setIsResolvingEditRequest] = useState(false);
+
+    useEffect(() => {
+        const requestedTab = location.state?.activeTab;
+        if (requestedTab === 'Test Question Editing' || requestedTab === 'Test Question Encoding') {
+            setActiveTab(requestedTab);
+        }
+    }, [location.state]);
     
 
     // --- Effects & Handlers ---
@@ -520,7 +624,7 @@ const TestEncodingAndEditing = () => {
     const handleDepartmentChange = (deptId) => {
         const dept = departments.find(d => d.id === Number(deptId));
         if (dept) {
-            navigate(`/test-encoding/${dept.code}`);
+            navigate(`/test-encoding/${dept.code}`, { state: { activeTab } });
             setDepartment(deptId);
             setCourse('');
             setSubject('');
@@ -1182,30 +1286,113 @@ const TestEncodingAndEditing = () => {
     };
 
 
-    const handleContentChange = (e, setter) => { setter(e.target.innerHTML); };
+    const handleNormalizeOnBlur = (e, setter) => {
+        // Keep rich-text formatting from toolbar (headings, lists, symbols, etc.).
+        setter(e.currentTarget.innerHTML);
+        handleSaveRange();
+    };
+
+    const handlePlainTextPaste = useCallback((event, setter) => {
+        event.preventDefault();
+
+        const pastedText = event.clipboardData?.getData('text/plain')
+            || window.clipboardData?.getData('Text')
+            || '';
+
+        const normalizedPaste = normalizePlainText(pastedText);
+        const editable = event.currentTarget;
+        editable.focus();
+
+        const selection = window.getSelection();
+        let rangeToUse = null;
+
+        if (selection?.rangeCount && editable.contains(selection.getRangeAt(0).startContainer)) {
+            rangeToUse = selection.getRangeAt(0).cloneRange();
+        } else if (savedRange && editable.contains(savedRange.startContainer)) {
+            rangeToUse = savedRange.cloneRange();
+        } else {
+            rangeToUse = document.createRange();
+            rangeToUse.selectNodeContents(editable);
+            rangeToUse.collapse(false);
+        }
+
+        if (!rangeToUse.collapsed) {
+            rangeToUse.deleteContents();
+        }
+
+        const textNode = document.createTextNode(normalizedPaste);
+        rangeToUse.insertNode(textNode);
+        rangeToUse.setStartAfter(textNode);
+        rangeToUse.collapse(true);
+
+        selection?.removeAllRanges();
+        selection?.addRange(rangeToUse);
+
+        setter(editable.innerHTML);
+        placeCaretAtEnd(editable);
+        handleSaveRange();
+    }, [handleSaveRange, savedRange]);
     
+    const applyQuestionContextFilters = async (question) => {
+        const topicIdFromQuestion = Number(question?.topicId || 0);
+        if (!topicIdFromQuestion) {
+            return;
+        }
+
+        try {
+            const topicDetails = await apiService.getTopicById(topicIdFromQuestion);
+            const subjectIdFromTopic = Number(topicDetails?.subjectId || 0);
+
+            let courseIdFromSubject = 0;
+            if (subjectIdFromTopic) {
+                const subjectDetails = await apiService.getSubject(subjectIdFromTopic);
+                courseIdFromSubject = Number(subjectDetails?.courseId || 0);
+            }
+
+            let departmentIdFromCourse = 0;
+            if (courseIdFromSubject) {
+                const courseDetails = await apiService.getCourseById(courseIdFromSubject);
+                departmentIdFromCourse = Number(courseDetails?.departmentId || 0);
+            }
+
+            if (departmentIdFromCourse) {
+                setDepartment(String(departmentIdFromCourse));
+            }
+            if (courseIdFromSubject) {
+                setCourse(String(courseIdFromSubject));
+            }
+            if (subjectIdFromTopic) {
+                setSubject(String(subjectIdFromTopic));
+            }
+
+            setTopic(String(topicIdFromQuestion));
+        } catch (error) {
+            console.warn('Failed to auto-fill selection filters from question context:', error);
+        }
+    };
+
     // Loads question data into input fields
-    const handleEditQuestion = (question) => {
+    const handleEditQuestion = async (question) => {
         // Clear content state first
         resetInputContent(); 
         
         // Switch to the 'Test Question Encoding' tab
         handleSetActiveTab('Test Question Encoding'); 
+
+        await applyQuestionContextFilters(question);
         
         // Set the question object currently being edited
         setEditingQuestion(question); 
         
-        // Map backend bloom level to grouped level
-        const backendBloomLevel = question.bloomLevel || '';
-        const groupedBloom = BLOOM_LEVELS.find(bl => bl.backendValues.includes(backendBloomLevel));
-        setBloomLevel(groupedBloom ? groupedBloom.value : ''); 
+        // Map bloom level to grouped selector value (supports backend/raw/grouped values)
+        setBloomLevel(resolveGroupedBloomValue(question.bloomLevel)); 
         
         // Populate the content fields with the question data
         setQuestionText(question.content || '');
         
         // Extract options (A, B, C, D) from question.options array
         if (question.options && Array.isArray(question.options)) {
-            const sortedOptions = question.options.sort((a, b) => a.displayOrder - b.displayOrder);
+            const sortedOptions = [...question.options].sort((a, b) => a.displayOrder - b.displayOrder);
             setChoiceA(sortedOptions[0]?.content || '');
             setChoiceB(sortedOptions[1]?.content || '');
             setChoiceC(sortedOptions[2]?.content || '');
@@ -1231,6 +1418,199 @@ const TestEncodingAndEditing = () => {
         setIsDeleteModalOpen(true);
     };
 
+    const openEditRequestModal = (question) => {
+        if (!question?.id) return;
+        setEditRequestTargetQuestion(question);
+        setEditRequestMessage('');
+        setIsEditRequestModalOpen(true);
+    };
+
+    const closeEditRequestModal = () => {
+        setIsEditRequestModalOpen(false);
+        setEditRequestTargetQuestion(null);
+        setEditRequestMessage('');
+    };
+
+    const loadEditRequests = useCallback(async () => {
+        if (!user?.userId) return;
+        try {
+            setIsLoadingEditRequests(true);
+            const [inbox, sent] = await Promise.all([
+                apiService.getQuestionEditRequests('inbox'),
+                apiService.getQuestionEditRequests('sent')
+            ]);
+
+            const inboxItems = Array.isArray(inbox) ? inbox : [];
+            const sentItems = Array.isArray(sent) ? sent : [];
+
+            setInboxEditRequests(inboxItems);
+            setSentEditRequests(sentItems);
+            setPermissionDrafts(
+                inboxItems.reduce((acc, request) => {
+                    acc[request.requestId] = {
+                        canEdit: request.permissionLevel === 'EditOnly' || request.permissionLevel === 'EditDelete',
+                        canDelete: request.permissionLevel === 'EditDelete',
+                    };
+                    return acc;
+                }, {})
+            );
+        } catch (err) {
+            console.error('Failed to load edit requests:', err);
+            showToast({ message: 'Failed to load edit requests.', type: 'error' });
+        } finally {
+            setIsLoadingEditRequests(false);
+        }
+    }, [showToast, user?.userId]);
+
+    const getPermissionDraft = (request) => (
+        permissionDrafts[request.requestId] ?? {
+            canEdit: request.permissionLevel === 'EditOnly' || request.permissionLevel === 'EditDelete',
+            canDelete: request.permissionLevel === 'EditDelete',
+        }
+    );
+
+    const buildNextPermissionDraft = (current, field, checked) => {
+        const next = { ...current };
+
+        if (field === 'canEdit') {
+            next.canEdit = checked;
+            if (!checked) {
+                next.canDelete = false;
+            }
+        }
+
+        if (field === 'canDelete') {
+            next.canDelete = checked;
+            if (checked) {
+                next.canEdit = true;
+            }
+        }
+
+        return next;
+    };
+
+    const updatePermissionDraft = async (request, field, checked) => {
+        if (isResolvingEditRequest) return;
+
+        const current = getPermissionDraft(request);
+        const next = buildNextPermissionDraft(current, field, checked);
+
+        setPermissionDrafts((prev) => ({ ...prev, [request.requestId]: next }));
+        await applyPermissionSelection(request, next);
+    };
+
+    const applyPermissionSelection = async (request, overrideDraft = null) => {
+        const draft = overrideDraft ?? getPermissionDraft(request);
+
+        try {
+            setIsResolvingEditRequest(true);
+
+            if (!draft.canEdit) {
+                if (request.status === 'Pending') {
+                    await apiService.resolveQuestionEditRequest(request.requestId, false, false, '');
+                    showToast({ message: 'Edit request rejected.', type: 'success' });
+                } else {
+                    await apiService.revokeQuestionEditPermission(request.requestId, 'Permission removed by owner.');
+                    showToast({ message: 'Permission removed.', type: 'success' });
+                }
+            } else {
+                await apiService.resolveQuestionEditRequest(request.requestId, true, draft.canDelete, '');
+                showToast({
+                    message: draft.canDelete ? 'Permission set to Edit + Delete.' : 'Permission set to Edit only.',
+                    type: 'success'
+                });
+            }
+
+            await loadEditRequests();
+        } catch (err) {
+            console.error('Failed to apply permission selection:', err);
+            const message = err?.response?.data?.message || 'Failed to update permission.';
+            showToast({ message, type: 'error' });
+        } finally {
+            setIsResolvingEditRequest(false);
+        }
+    };
+
+    const submitEditRequest = async () => {
+        if (!editRequestTargetQuestion?.id) return;
+
+        try {
+            setIsSubmittingEditRequest(true);
+            await apiService.createQuestionEditRequest(editRequestTargetQuestion.id, editRequestMessage);
+            showToast({ message: `Edit request sent for Question ID ${editRequestTargetQuestion.id}.`, type: 'success' });
+            closeEditRequestModal();
+            await loadEditRequests();
+        } catch (err) {
+            console.error('Failed to submit edit request:', err);
+            const message = err?.response?.data?.message || 'Failed to submit edit request.';
+            showToast({ message, type: 'error' });
+        } finally {
+            setIsSubmittingEditRequest(false);
+        }
+    };
+
+    const resolveEditRequest = async (requestId, approve, canDelete = false) => {
+        try {
+            setIsResolvingEditRequest(true);
+            await apiService.resolveQuestionEditRequest(requestId, approve, canDelete, '');
+            showToast({
+                message: approve
+                    ? (canDelete ? 'Edit and delete permission approved.' : 'Edit-only permission approved.')
+                    : 'Edit request rejected.',
+                type: 'success'
+            });
+            await loadEditRequests();
+        } catch (err) {
+            console.error('Failed to resolve edit request:', err);
+            const message = err?.response?.data?.message || 'Failed to resolve edit request.';
+            showToast({ message, type: 'error' });
+        } finally {
+            setIsResolvingEditRequest(false);
+        }
+    };
+
+    const deleteRequestForOwner = async (request) => {
+        try {
+            setIsResolvingEditRequest(true);
+
+            try {
+                await apiService.revokeQuestionEditPermission(request.requestId, 'Request deleted by owner. Access revoked.');
+            } catch (error) {
+                const statusCode = Number(error?.response?.status);
+                const apiMessage = String(error?.response?.data?.message || '').toLowerCase();
+                const alreadyRevoked = statusCode === 409 && apiMessage.includes('already revoked');
+                if (!alreadyRevoked) {
+                    throw error;
+                }
+            }
+
+            await apiService.dismissQuestionEditRequest(request.requestId);
+            setInboxEditRequests((prev) => prev.filter((item) => item.requestId !== request.requestId));
+            showToast({ message: 'Request deleted. Access revoked and card removed.', type: 'success' });
+        } catch (err) {
+            console.error('Failed to delete request:', err);
+            const message = err?.response?.data?.message || 'Failed to delete request.';
+            showToast({ message, type: 'error' });
+        } finally {
+            setIsResolvingEditRequest(false);
+        }
+    };
+
+    const dismissSentRequestCard = async (requestId) => {
+        try {
+            setIsResolvingEditRequest(true);
+            await apiService.dismissQuestionEditRequest(requestId);
+            setSentEditRequests((prev) => prev.filter((item) => item.requestId !== requestId));
+            showToast({ message: 'Request card removed.', type: 'success' });
+        } catch (err) {
+            console.error('Failed to remove request card:', err);
+            const message = err?.response?.data?.message || 'Failed to remove request card.';
+            showToast({ message, type: 'error' });
+        } finally {
+            setIsResolvingEditRequest(false);
+        }
+    };
+
     const handleCloseDeleteModal = () => {
         if (isDeletingQuestion) return;
         setIsDeleteModalOpen(false);
@@ -1239,6 +1619,8 @@ const TestEncodingAndEditing = () => {
 
     const handleConfirmDeleteQuestion = async () => {
         if (!pendingDeleteQuestionId) return;
+
+        const targetQuestion = questions.find(q => q.id === pendingDeleteQuestionId) || null;
 
         try {
             setIsDeletingQuestion(true);
@@ -1249,7 +1631,12 @@ const TestEncodingAndEditing = () => {
             setPendingDeleteQuestionId(null);
         } catch (err) {
             console.error('Failed to delete question:', err);
-            showToast({ message: 'Failed to delete question. Please try again.', type: 'error' });
+            const message = err?.response?.data?.detail || err?.response?.data?.message || 'Failed to delete question. Please try again.';
+            const isPermissionError = Number(err?.response?.status) === 403;
+            showToast({ message, type: 'error' });
+            if (isPermissionError && targetQuestion) {
+                openEditRequestModal(targetQuestion);
+            }
         } finally {
             setIsDeletingQuestion(false);
         }
@@ -1258,11 +1645,17 @@ const TestEncodingAndEditing = () => {
     // Handles both 'Add' and 'Save Edit' with backend API
     const handleAction = async () => { 
         // 1. Validation 
-        if (!topic || !bloomLevel || !questionText || !correctAnswer) { 
+        const normalizedQuestionText = normalizePlainText(htmlToPlainText(questionText), { trimEdges: true });
+        const normalizedChoiceA = normalizePlainText(htmlToPlainText(choiceA), { trimEdges: true });
+        const normalizedChoiceB = normalizePlainText(htmlToPlainText(choiceB), { trimEdges: true });
+        const normalizedChoiceC = normalizePlainText(htmlToPlainText(choiceC), { trimEdges: true });
+        const normalizedChoiceD = normalizePlainText(htmlToPlainText(choiceD), { trimEdges: true });
+
+        if (!topic || !bloomLevel || !normalizedQuestionText || !correctAnswer) { 
             showToast({ message: 'Fill all required fields (Topic, Bloom Level, Question Text, Answer).', type: 'error' }); 
             return; 
         }
-        if (!choiceA || !choiceB || !choiceC || !choiceD) {
+        if (!normalizedChoiceA || !normalizedChoiceB || !normalizedChoiceC || !normalizedChoiceD) {
             showToast({ message: 'All four choices (A, B, C, D) must be filled.', type: 'error' });
             return;
         }
@@ -1340,8 +1733,17 @@ const TestEncodingAndEditing = () => {
                 : '';
             
             showToast({ message: `Failed to save question:\n${errorMessage}${errorDetails}\n\nCheck console for full details.`, type: 'error' });
+
+            if (wasEditing && Number(err?.response?.status) === 403 && editingQuestion) {
+                openEditRequestModal(editingQuestion);
+            }
         }
     };
+
+    useEffect(() => {
+        if (activeTab !== 'Test Question Editing') return;
+        void loadEditRequests();
+    }, [activeTab, loadEditRequests]);
     
     // Filter questions - all questions are already filtered by topic from useEffect
     const filteredQuestions = questions;
@@ -1451,6 +1853,31 @@ const TestEncodingAndEditing = () => {
                 isDarkMode={isDarkMode}
                 isDanger={true}
             />
+
+            {isEditRequestModalOpen && (
+                <div className="edit-request-modal-overlay" onClick={closeEditRequestModal}>
+                    <div className={`edit-request-modal ${isDarkMode ? 'dark' : ''}`} onClick={(event) => event.stopPropagation()}>
+                        <h3>Request Edit Permission</h3>
+                        <p>
+                            Send a request to the question owner for Question ID <strong>{editRequestTargetQuestion?.id}</strong>.
+                        </p>
+                        <label htmlFor="edit-request-message">Message (optional)</label>
+                        <textarea
+                            id="edit-request-message"
+                            value={editRequestMessage}
+                            onChange={(event) => setEditRequestMessage(event.target.value)}
+                            placeholder="Write why you need to edit this question..."
+                            maxLength={1000}
+                        />
+                        <div className="edit-request-modal-actions">
+                            <button type="button" className="btn-cancel" onClick={closeEditRequestModal} disabled={isSubmittingEditRequest}>Cancel</button>
+                            <button type="button" className="btn-confirm" onClick={submitEditRequest} disabled={isSubmittingEditRequest}>
+                                {isSubmittingEditRequest ? 'Sending...' : 'Send Request'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {isImageEditorOpen && (
                 <div className="image-editor-overlay" role="dialog" aria-modal="true" aria-label="Image editor">
@@ -1658,7 +2085,7 @@ const TestEncodingAndEditing = () => {
                                 if (item === 'Program - Topic') {
                                     navigate(`/course-topic/${deptCode}`);
                                 } else if (item === 'Test Question Encoding' || item === 'Test Question Editing') {
-                                    navigate(`/test-encoding/${deptCode}`);
+                                    navigate(`/test-encoding/${deptCode}`, { state: { activeTab: item } });
                                 }
                             }}
                         />
@@ -1727,11 +2154,24 @@ const TestEncodingAndEditing = () => {
                     </div>
                 )}
 
+                {activeTab === 'Test Question Editing' && (
+                    <BM25QuestionSearch
+                        isDarkMode={isDarkMode}
+                        onEditQuestion={handleEditQuestion}
+                        onRequestEdit={openEditRequestModal}
+                        onDeleteQuestion={handleDeleteQuestion}
+                        onSearchStateChange={setIsBm25SearchActive}
+                        resultsMountId="bm25-results-anchor"
+                    />
+                )}
+
                 <div className="main-card" ref={searchScopeRef}>
                     <HeaderTitleBlock 
                         activeTab={activeTab} 
                         isDarkMode={isDarkMode} 
-                        selectedDepartment={departments.find(d => d.id === Number(department))}
+                        departments={departments}
+                        selectedDepartmentCode={getActiveDepartmentCode()}
+                        onDepartmentChange={handleDepartmentChange}
                     />
                     
                     {/* ###################################################### */}
@@ -1742,14 +2182,6 @@ const TestEncodingAndEditing = () => {
                             {/* Selection Fields for ENCODING (Department, Course, Subject, Topic, Bloom Level) */}
                             <div className="selection-fields encoding-filter-block">
                                 <div className="encoding-filter-row top-row">
-                                    {/* Department */}
-                                    <div className="input-group">
-                                        <label htmlFor="department">Department</label>
-                                        <select id="department" value={department} onChange={e=>handleDepartmentChange(e.target.value)}>
-                                            <option value="" disabled>Select Department</option>
-                                            {departments.map(d=><option key={d.id} value={d.id}>{d.code} - {d.name}</option>)}
-                                        </select>
-                                    </div>
                                     {/* Program */}
                                     <div className="input-group">
                                         <label htmlFor="course">Program</label>
@@ -1836,9 +2268,10 @@ const TestEncodingAndEditing = () => {
                                     contentEditable="true" 
                                     className={questionText?'content-editable-area':'content-editable-area placeholder-active'} 
                                     data-placeholder="Enter question text..." 
-                                    onBlur={e=>handleContentChange(e,setQuestionText)} 
+                                    onBlur={e=>handleNormalizeOnBlur(e,setQuestionText)} 
                                     onFocus={e=>handleFocus(e,setQuestionText)} 
                                     onClick={e=>handleEditableClick(e,setQuestionText)}
+                                    onPaste={e=>handlePlainTextPaste(e,setQuestionText)}
                                     onKeyUp={handleSaveRange} 
                                     onMouseUp={handleSaveRange} 
                                     dangerouslySetInnerHTML={{__html:questionText}}
@@ -1862,9 +2295,10 @@ const TestEncodingAndEditing = () => {
                                                 contentEditable="true" 
                                                 className={content?'content-editable-area':'content-editable-area placeholder-active'} 
                                                 data-placeholder={`Enter choice ${ch}...`} 
-                                                onBlur={e=>handleContentChange(e,setter)} 
+                                                onBlur={e=>handleNormalizeOnBlur(e,setter)} 
                                                 onFocus={e=>handleFocus(e,setter)} 
                                                 onClick={e=>handleEditableClick(e,setter)}
+                                                onPaste={e=>handlePlainTextPaste(e,setter)}
                                                 onKeyUp={handleSaveRange}
                                                 onMouseUp={handleSaveRange}
                                                 dangerouslySetInnerHTML={{__html:content}}
@@ -1905,9 +2339,10 @@ const TestEncodingAndEditing = () => {
                                         contentEditable="true" 
                                         className={explanation?'content-editable-area':'content-editable-area placeholder-active'} 
                                         data-placeholder="Answer Key Explanation..." 
-                                        onBlur={e=>handleContentChange(e,setExplanation)} 
+                                        onBlur={e=>handleNormalizeOnBlur(e,setExplanation)} 
                                         onFocus={e=>handleFocus(e,setExplanation)} 
                                         onClick={e=>handleEditableClick(e,setExplanation)}
+                                        onPaste={e=>handlePlainTextPaste(e,setExplanation)}
                                         onKeyUp={handleSaveRange}
                                         onMouseUp={handleSaveRange}
                                         dangerouslySetInnerHTML={{__html:explanation}}
@@ -1963,13 +2398,25 @@ const TestEncodingAndEditing = () => {
                                                                                 <small style={{color: '#666'}}>Answer: {correctLetter}</small>
                                                                             </td>
                                                                             <td className="actions-cell">
-                                                                                <button 
-                                                                                    className="action-edit" 
-                                                                                    title="Edit" 
-                                                                                    onClick={() => handleEditQuestion(q)}>
-                                                                                    <Edit2 size={16} />
-                                                                                </button>
-                                                                                <button className="action-delete" title="Delete" onClick={() => handleDeleteQuestion(q.id)}><Trash2 size={16} /></button>
+                                                                                    {q.canEdit && (
+                                                                                        <button
+                                                                                            className="action-edit"
+                                                                                            title="Edit"
+                                                                                            onClick={() => handleEditQuestion(q)}>
+                                                                                            <Edit2 size={16} />
+                                                                                        </button>
+                                                                                    )}
+                                                                                    {!q.canEdit && (
+                                                                                        <button
+                                                                                            className="action-request"
+                                                                                            title="Request Edit Permission"
+                                                                                            onClick={() => openEditRequestModal(q)}>
+                                                                                            <FileText size={16} />
+                                                                                        </button>
+                                                                                    )}
+                                                                                    {q.canDelete && (
+                                                                                        <button className="action-delete" title="Delete" onClick={() => handleDeleteQuestion(q.id)}><Trash2 size={16} /></button>
+                                                                                    )}
                                                                             </td>
                                                                         </tr>
                                                                     );
@@ -1996,13 +2443,6 @@ const TestEncodingAndEditing = () => {
                             {/* Selection Fields for FILTERING (Department, Course, Subject, Topic) */}
                             <div className="selection-fields two-col-filter filter-block-top">
                                 <div className="input-group">
-                                    <label htmlFor="department">Department</label>
-                                    <select id="department" value={department} onChange={e=>handleDepartmentChange(e.target.value)}>
-                                        <option value="" disabled>Select Department</option>
-                                        {departments.map(d=><option key={d.id} value={d.id}>{d.code} - {d.name}</option>)}
-                                    </select>
-                                </div>
-                                <div className="input-group">
                                     <label htmlFor="course">Program</label>
                                     <select id="course" value={course} onChange={e=>{setCourse(e.target.value); setSubject(''); setTopic(''); resetInputContent();}} disabled={!department || isLoadingCourses}>
                                         <option value="" disabled>{isLoadingCourses ? "Loading..." : department ? "Select Program" : "Select Department first"}</option>
@@ -2027,23 +2467,138 @@ const TestEncodingAndEditing = () => {
                             
                             <hr className="section-separator" />
 
-                            <BM25QuestionSearch
-                                isDarkMode={isDarkMode}
-                                subjects={subjects}
-                                topics={topics}
-                                selectedSubjectId={subject}
-                                selectedTopicId={topic}
-                                onEditQuestion={handleEditQuestion}
-                                onDeleteQuestion={handleDeleteQuestion}
-                                onSearchStateChange={setIsBm25SearchActive}
-                            />
-
                             <hr className="section-separator" />
+
+                            <div id="bm25-results-anchor" className="bm25-results-anchor" />
+
+                            <div className="edit-requests-panel">
+                                <div className="edit-requests-header">
+                                    <h3>Edit Requests</h3>
+                                    <button type="button" className="refresh-requests-btn" onClick={() => loadEditRequests()} disabled={isLoadingEditRequests || isResolvingEditRequest}>
+                                        {isLoadingEditRequests ? 'Loading...' : 'Refresh'}
+                                    </button>
+                                </div>
+
+                                <div className="edit-requests-grid">
+                                    <div className="edit-request-column">
+                                        <h4>Requests To You</h4>
+                                        {!inboxEditRequests.length ? (
+                                            <p className="edit-request-empty">No pending requests.</p>
+                                        ) : (
+                                            inboxEditRequests.map((request) => {
+                                                const draft = getPermissionDraft(request);
+
+                                                return (
+                                                    <div key={`inbox-${request.requestId}`} className="edit-request-card compact">
+                                                        <div className="request-card-header">
+                                                            <p className="request-card-title">Question #{request.questionId}</p>
+                                                            <div className="request-card-header-actions">
+                                                                <span className={`request-status-badge status-${String(request.status || '').toLowerCase()}`}>{request.status}</span>
+                                                                <button
+                                                                    type="button"
+                                                                    className="request-card-close-btn"
+                                                                    aria-label="Close request card"
+                                                                    title="Delete Request"
+                                                                    onClick={() => deleteRequestForOwner(request)}
+                                                                    disabled={isResolvingEditRequest}
+                                                                >
+                                                                    ×
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                        <div className="request-card-meta-row">
+                                                            <p><strong>From:</strong> {request.requesterName}</p>
+                                                            <p><strong>Requested:</strong> {new Date(request.requestedAt).toLocaleDateString()}</p>
+                                                        </div>
+                                                        {request.message && <p className="edit-request-message">{request.message}</p>}
+                                                        <div className="request-card-controls">
+                                                            <div className="permission-checkboxes">
+                                                                <label>
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={draft.canEdit}
+                                                                        onChange={(event) => updatePermissionDraft(request, 'canEdit', event.target.checked)}
+                                                                        disabled={isResolvingEditRequest}
+                                                                    />
+                                                                    Edit
+                                                                </label>
+                                                                <label>
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={draft.canDelete}
+                                                                        onChange={(event) => updatePermissionDraft(request, 'canDelete', event.target.checked)}
+                                                                        disabled={isResolvingEditRequest || !draft.canEdit}
+                                                                    />
+                                                                    Delete
+                                                                </label>
+                                                            </div>
+                                                            <div className="edit-request-actions">
+                                                                <button
+                                                                    type="button"
+                                                                    className="revoke-request-btn"
+                                                                    onClick={() => deleteRequestForOwner(request)}
+                                                                    disabled={isResolvingEditRequest}
+                                                                >
+                                                                    Delete Request
+                                                                </button>
+                                                                {request.status === 'Pending' && (
+                                                                    <button
+                                                                        type="button"
+                                                                        className="reject-request-btn"
+                                                                        onClick={() => resolveEditRequest(request.requestId, false)}
+                                                                        disabled={isResolvingEditRequest}
+                                                                    >
+                                                                        Reject
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })
+                                        )}
+                                    </div>
+
+                                    <div className="edit-request-column">
+                                        <h4>Your Requests</h4>
+                                        {!sentEditRequests.length ? (
+                                            <p className="edit-request-empty">No requests sent yet.</p>
+                                        ) : (
+                                            sentEditRequests.map((request) => (
+                                                <div key={`sent-${request.requestId}`} className="edit-request-card compact">
+                                                    <div className="request-card-header">
+                                                        <p className="request-card-title">Question #{request.questionId}</p>
+                                                        <div className="request-card-header-actions">
+                                                            <span className={`request-status-badge status-${String(request.status || '').toLowerCase()}`}>{request.status}</span>
+                                                            <button
+                                                                type="button"
+                                                                className="request-card-close-btn"
+                                                                aria-label="Close request card"
+                                                                title="Remove card"
+                                                                onClick={() => dismissSentRequestCard(request.requestId)}
+                                                                disabled={isResolvingEditRequest}
+                                                            >
+                                                                ×
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <div className="request-card-meta-row">
+                                                        <p><strong>Owner:</strong> {request.ownerName}</p>
+                                                        <p><strong>Requested:</strong> {new Date(request.requestedAt).toLocaleDateString()}</p>
+                                                    </div>
+                                                    {request.permissionLevel === 'EditDelete' && <p><strong>Permission:</strong> Edit + Delete</p>}
+                                                    {request.permissionLevel === 'EditOnly' && <p><strong>Permission:</strong> Edit Only</p>}
+                                                    {request.status === 'Revoked' && <p><strong>Permission:</strong> Revoked by owner</p>}
+                                                    {request.message && <p className="edit-request-message">{request.message}</p>}
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
                             
                             {isBm25SearchActive ? (
-                                <div className="filter-prompt">
-                                    <p>Showing BM25-ranked results above. Clear the search query to return to topic-grouped editing view.</p>
-                                </div>
+                                null
                             ) : isFilterComplete ? (
                                 // --- STAGE 2: Filter is complete, show the grouped list ---
                                 <>
@@ -2089,13 +2644,26 @@ const TestEncodingAndEditing = () => {
                                                                                     <small style={{color: '#666'}}>Answer: {correctLetter}</small>
                                                                                 </td>
                                                                                 <td className="actions-cell">
-                                                                                    <button 
-                                                                                        className="action-edit" 
-                                                                                        title="Edit" 
-                                                                                        onClick={() => handleEditQuestion(q)}>
-                                                                                        <Edit2 size={16} />
-                                                                                    </button>
-                                                                                    <button className="action-delete" title="Delete" onClick={() => handleDeleteQuestion(q.id)}><Trash2 size={16} /></button>
+                                                                                    {q.canEdit && (
+                                                                                        <button
+                                                                                            className="action-edit"
+                                                                                            title="Edit"
+                                                                                            onClick={() => handleEditQuestion(q)}>
+                                                                                            <Edit2 size={16} />
+                                                                                        </button>
+                                                                                    )}
+                                                                                    {!q.canEdit && (
+                                                                                        <button
+                                                                                            className="action-request"
+                                                                                            title="Request Edit Permission"
+                                                                                            onClick={() => openEditRequestModal(q)}
+                                                                                        >
+                                                                                            <FileText size={16} />
+                                                                                        </button>
+                                                                                    )}
+                                                                                    {q.canDelete && (
+                                                                                        <button className="action-delete" title="Delete" onClick={() => handleDeleteQuestion(q.id)}><Trash2 size={16} /></button>
+                                                                                    )}
                                                                                 </td>
                                                                             </tr>
                                                                         );

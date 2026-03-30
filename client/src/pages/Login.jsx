@@ -237,15 +237,13 @@ const Login = () => {
             </button>
           </div>
 
-          <button type="button" className="forgot-password">Forgot Password?</button>
-
           <button type="submit" disabled={loading || isCooldownActive} className="login-button">
             {loading ? 'Logging in...' : isCooldownActive ? `Try again in ${cooldownRemaining}s` : 'Login'}
           </button>
 
           <p className="contact-us">
             Don't have an account?
-            <button type="button" className="contact-link">Contact Us</button>
+            <a className="contact-link" href="mailto:c20-0461-159@uphsl.edu.ph">Contact Us</a>
           </p>
         </div>
       </form>

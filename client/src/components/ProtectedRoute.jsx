@@ -2,7 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { Navigate, useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
-const ProtectedRoute = ({ children, requireAdmin = false }) => {
+const ProtectedRoute = ({
+  children,
+  requireAdmin = false,
+  disallowAdmin = false,
+  redirectIfDisallowed = '/',
+}) => {
   const { isAuthenticated, isAdmin, loading, hasAccessToDepartmentCode, user } = useAuth();
   const { departmentCode } = useParams();
   const [checkingAccess, setCheckingAccess] = useState(false);
@@ -51,6 +56,10 @@ const ProtectedRoute = ({ children, requireAdmin = false }) => {
 
   if (requireAdmin && !isAdmin) {
     return <Navigate to="/" replace />;
+  }
+
+  if (disallowAdmin && isAdmin) {
+    return <Navigate to={redirectIfDisallowed} replace />;
   }
 
   if (departmentCode && !hasAccess) {

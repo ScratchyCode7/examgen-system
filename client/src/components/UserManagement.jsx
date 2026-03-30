@@ -5,6 +5,8 @@ import { useTheme } from '../contexts/ThemeContext';
 import ConfirmationModal from './ConfirmationModal';
 import '../styles/UserManagement.css';
 
+const MASKED_EXISTING_PASSWORD = '********';
+
 const UserManagement = ({ searchQuery = '' }) => {
   const { isDarkMode } = useTheme();
   const [users, setUsers] = useState([]);
@@ -17,6 +19,7 @@ const UserManagement = ({ searchQuery = '' }) => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [hasEditedPassword, setHasEditedPassword] = useState(false);
   
   const [formData, setFormData] = useState({
     firstName: '',
@@ -24,6 +27,7 @@ const UserManagement = ({ searchQuery = '' }) => {
     username: '',
     email: '',
     password: '',
+    adminPasswordVerification: '',
     departmentIds: [],
     isAdmin: false
   });
@@ -57,10 +61,24 @@ const UserManagement = ({ searchQuery = '' }) => {
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
+
+    if (name === 'password') {
+      setHasEditedPassword(true);
+    }
+
     setFormData(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }));
+  };
+
+  const handlePasswordFocus = () => {
+    if (!editingUser || hasEditedPassword) return;
+
+    // Start with an explicit masked placeholder for existing users;
+    // clear on first focus so the admin can type a replacement password.
+    setFormData(prev => ({ ...prev, password: '' }));
+    setHasEditedPassword(true);
   };
 
   const handleDepartmentToggle = (deptId) => {
@@ -77,8 +95,18 @@ const UserManagement = ({ searchQuery = '' }) => {
     setError('');
     setSuccess('');
 
+    const isPasswordChangeRequested = editingUser
+      && hasEditedPassword
+      && !!formData.password
+      && formData.password !== MASKED_EXISTING_PASSWORD;
+
     if (formData.departmentIds.length === 0) {
       setError('Please select at least one department');
+      return;
+    }
+
+    if (isPasswordChangeRequested && !formData.adminPasswordVerification) {
+      setError('Please enter your current admin password to verify identity before changing user password.');
       return;
     }
 
@@ -94,7 +122,10 @@ const UserManagement = ({ searchQuery = '' }) => {
           email: formData.email,
           isAdmin: formData.isAdmin,
           isActive: true,
-          ...(formData.password && { password: formData.password })
+          ...(isPasswordChangeRequested && {
+            password: formData.password,
+            adminPasswordVerification: formData.adminPasswordVerification
+          })
         });
         setSuccess('User updated successfully');
       } else {
@@ -138,10 +169,12 @@ const UserManagement = ({ searchQuery = '' }) => {
         lastName: user.lastName || '',
         username: user.username || '',
         email: user.email || '',
-        password: '',
+        password: MASKED_EXISTING_PASSWORD,
+        adminPasswordVerification: '',
         departmentIds: userDepts.map(d => d.id),
         isAdmin: user.isAdmin || false
       });
+      setHasEditedPassword(false);
       setShowModal(true);
     } catch (err) {
       console.error('Failed to load user departments:', err);
@@ -173,12 +206,14 @@ const UserManagement = ({ searchQuery = '' }) => {
 
   const openNewUserModal = () => {
     setEditingUser(null);
+    setHasEditedPassword(false);
     setFormData({
       firstName: '',
       lastName: '',
       username: '',
       email: '',
       password: '',
+      adminPasswordVerification: '',
       departmentIds: [],
       isAdmin: false
     });
@@ -190,12 +225,14 @@ const UserManagement = ({ searchQuery = '' }) => {
     setEditingUser(null);
     setError('');
     setShowPassword(false);
+    setHasEditedPassword(false);
     setFormData({
       firstName: '',
       lastName: '',
       username: '',
       email: '',
       password: '',
+      adminPasswordVerification: '',
       departmentIds: [],
       isAdmin: false
     });
@@ -362,8 +399,9 @@ const UserManagement = ({ searchQuery = '' }) => {
                     name="password"
                     value={formData.password}
                     onChange={handleInputChange}
+                    onFocus={handlePasswordFocus}
                     required={!editingUser}
-                    placeholder={editingUser ? 'Leave blank to keep current password' : ''}
+                    placeholder={editingUser ? 'Type a new password to change it' : ''}
                   />
                   <button
                     type="button"
@@ -375,6 +413,22 @@ const UserManagement = ({ searchQuery = '' }) => {
                   </button>
                 </div>
               </div>
+
+              {editingUser && hasEditedPassword && formData.password && formData.password !== MASKED_EXISTING_PASSWORD && (
+                <div className="form-group">
+                  <label>Verify Admin Password *</label>
+                  <div className="password-input-wrapper">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      name="adminPasswordVerification"
+                      value={formData.adminPasswordVerification}
+                      onChange={handleInputChange}
+                      required
+                      placeholder="Enter your current admin password"
+                    />
+                  </div>
+                </div>
+              )}
 
               <div className="form-group">
                 <label>Departments * (Select at least one)</label>

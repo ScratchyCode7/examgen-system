@@ -61,7 +61,7 @@ const Dashboard = () => {
   }, [isAdmin, navigate, user?.userId]);
 
   const displayName = getUserDisplayName(user, 'User');
-  const profileImageUrl = getUserProfileImageUrl(user?.profileImagePath);
+  const profileImageUrl = getUserProfileImageUrl(user?.profileImagePath, user?.userId);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -93,7 +93,8 @@ const Dashboard = () => {
   };
 
   const dataEntryItems = ["Program - Topic", "Test Encoding", "Test Question Editing"];
-  const isDataEntryActive = dataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
+  const availableDataEntryItems = isAdmin ? ["Program - Topic"] : dataEntryItems;
+  const isDataEntryActive = availableDataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
 
   const normalizedSearchText = searchText.trim().toLowerCase();
   const filteredDepartments = departments.filter((department) => {
@@ -130,7 +131,7 @@ const Dashboard = () => {
               icon={ClipboardList}
               label="Data Entry"
               isActive={isDataEntryActive}
-              dropdownItems={dataEntryItems}
+              dropdownItems={availableDataEntryItems}
               onSelect={(item) => {
                 setActiveTab(item);
                 if (item === 'Program - Topic') {
@@ -140,7 +141,8 @@ const Dashboard = () => {
                 } else if (item === 'Test Encoding' || item === 'Test Question Editing' || item === 'Test Question Encoding') {
                   const firstDept = departments?.[0];
                   const code = firstDept?.code || 'CCS';
-                  navigate(`/test-encoding/${code}`);
+                    const targetTab = item === 'Test Encoding' ? 'Test Question Encoding' : item;
+                    navigate(`/test-encoding/${code}`, { state: { activeTab: targetTab } });
                 }
               }}
             />

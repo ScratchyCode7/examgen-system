@@ -1,42 +1,20 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Search, Edit2, Trash2, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Search, Edit2, Trash2, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
 import { apiService } from '../services/api';
-
-const BLOOM_FILTERS = [
-  { value: '', label: 'All Bloom Levels' },
-  { value: 'Remember', label: 'Remember' },
-  { value: 'Understand', label: 'Understand' },
-  { value: 'Apply', label: 'Apply' },
-  { value: 'Analyze', label: 'Analyze' },
-  { value: 'Evaluate', label: 'Evaluate' },
-  { value: 'Create', label: 'Create' },
-];
-
-const QUESTION_TYPE_FILTERS = [
-  { value: '', label: 'All Question Types' },
-  { value: 'MultipleChoice', label: 'Multiple Choice' },
-  { value: 'TrueFalse', label: 'True or False' },
-  { value: 'Essay', label: 'Essay' },
-];
 
 const stripHtml = (value) => (value || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 
 const BM25QuestionSearch = ({
   isDarkMode,
-  subjects,
-  topics,
-  selectedSubjectId,
-  selectedTopicId,
   onEditQuestion,
+  onRequestEdit,
   onDeleteQuestion,
   onSearchStateChange,
+  resultsMountId,
 }) => {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [subjectFilter, setSubjectFilter] = useState('');
-  const [topicFilter, setTopicFilter] = useState('');
-  const [bloomFilter, setBloomFilter] = useState('');
-  const [questionTypeFilter, setQuestionTypeFilter] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [response, setResponse] = useState({ results: [], totalCount: 0, executionTime: 0, similarCount: 0 });
@@ -51,14 +29,6 @@ const BM25QuestionSearch = ({
 
     return () => clearTimeout(timer);
   }, [query]);
-
-  useEffect(() => {
-    const selectedSubject = subjects.find((item) => String(item.id) === String(selectedSubjectId));
-    const selectedTopic = topics.find((item) => String(item.id) === String(selectedTopicId));
-
-    setSubjectFilter(selectedSubject?.name || '');
-    setTopicFilter(selectedTopic?.title || '');
-  }, [selectedSubjectId, selectedTopicId, subjects, topics]);
 
   useEffect(() => {
     onSearchStateChange?.(Boolean(debouncedQuery));
@@ -80,10 +50,6 @@ const BM25QuestionSearch = ({
 
         const result = await apiService.searchQuestions({
           q: debouncedQuery,
-          subject: subjectFilter || undefined,
-          topic: topicFilter || undefined,
-          bloomLevel: bloomFilter || undefined,
-          questionType: questionTypeFilter || undefined,
         });
 
         if (!isDisposed) {
@@ -112,7 +78,7 @@ const BM25QuestionSearch = ({
     return () => {
       isDisposed = true;
     };
-  }, [debouncedQuery, subjectFilter, topicFilter, bloomFilter, questionTypeFilter]);
+  }, [debouncedQuery]);
 
   const totalPages = Math.max(1, Math.ceil(response.results.length / pageSize));
 
@@ -121,139 +87,124 @@ const BM25QuestionSearch = ({
     return response.results.slice(start, start + pageSize);
   }, [page, response.results]);
 
-  return (
-    <div className={`bm25-search-panel ${isDarkMode ? 'dark' : ''}`}>
-      <div className="bm25-search-input-row">
-        <Search size={18} className="bm25-search-icon" />
-        <input
-          type="text"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search questions with BM25 ranking..."
-          className={isDarkMode ? 'dark' : ''}
-        />
-        {query && (
-          <button
-            type="button"
-            className="bm25-clear-search"
-            onClick={() => setQuery('')}
-            aria-label="Clear search query"
-            title="Clear search"
-          >
-            <X size={16} />
-          </button>
-        )}
+  const resultsContent = !debouncedQuery ? null : isLoading ? (
+    <div className="bm25-empty-state">Searching...</div>
+  ) : error ? (
+    <div className="bm25-empty-state bm25-error">{error}</div>
+  ) : (
+    <>
+      <div className="bm25-result-summary">
+        <span>About {response.totalCount} results ({response.executionTime} ms)</span>
+        <span>{response.similarCount} highly similar questions</span>
       </div>
 
-      <div className="bm25-filter-grid">
-        <select value={subjectFilter} onChange={(event) => setSubjectFilter(event.target.value)}>
-          <option value="">All Subjects</option>
-          {subjects.map((item) => (
-            <option key={item.id} value={item.name}>{item.name}</option>
-          ))}
-        </select>
-
-        <select value={topicFilter} onChange={(event) => setTopicFilter(event.target.value)}>
-          <option value="">All Topics</option>
-          {topics.map((item) => (
-            <option key={item.id} value={item.title}>{item.title}</option>
-          ))}
-        </select>
-
-        <select value={bloomFilter} onChange={(event) => setBloomFilter(event.target.value)}>
-          {BLOOM_FILTERS.map((item) => (
-            <option key={item.value || 'all'} value={item.value}>{item.label}</option>
-          ))}
-        </select>
-
-        <select value={questionTypeFilter} onChange={(event) => setQuestionTypeFilter(event.target.value)}>
-          {QUESTION_TYPE_FILTERS.map((item) => (
-            <option key={item.value || 'all'} value={item.value}>{item.label}</option>
-          ))}
-        </select>
-      </div>
-
-      {!debouncedQuery ? (
-        <div className="bm25-empty-state">Type a query to start ranked search.</div>
-      ) : isLoading ? (
-        <div className="bm25-empty-state">Searching...</div>
-      ) : error ? (
-        <div className="bm25-empty-state bm25-error">{error}</div>
+      {response.results.length === 0 ? (
+        <div className="bm25-empty-state">No results found</div>
       ) : (
         <>
-          <div className="bm25-result-summary">
-            <span>About {response.totalCount} results ({response.executionTime} ms)</span>
-            <span>{response.similarCount} highly similar questions</span>
+          <div className="bm25-result-list">
+            {pagedResults.map((item, index) => {
+              const canEdit = item?.canEdit === true;
+              const canDelete = item?.canDelete === true;
+              const canRequestEdit = !canEdit && typeof onRequestEdit === 'function';
+
+              return (
+              <article key={item.id} className="bm25-result-item">
+                <div className="bm25-result-heading">
+                  <strong>#{(page - 1) * pageSize + index + 1}</strong>
+                  <span>Score: {Number(item.score || 0).toFixed(3)}</span>
+                </div>
+                <p className="bm25-result-text">{stripHtml(item.content)}</p>
+                <div className="bm25-result-meta">
+                  <span>{item.subject || 'N/A'}</span>
+                  <span>{item.topic || 'N/A'}</span>
+                  <span>{item.bloomLevel}</span>
+                  <span>{item.questionType}</span>
+                </div>
+                <div className="actions-cell">
+                  {canEdit && (
+                    <button
+                      type="button"
+                      className="action-edit"
+                      onClick={() => onEditQuestion?.(item)}
+                      aria-label="Edit question"
+                      title="Edit question"
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                  )}
+                  {canRequestEdit && (
+                    <button
+                      type="button"
+                      className="action-request"
+                      onClick={() => onRequestEdit?.(item)}
+                      aria-label="Request edit permission"
+                      title="Request edit permission"
+                    >
+                      <FileText size={16} />
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button
+                      type="button"
+                      className="action-delete"
+                      onClick={() => onDeleteQuestion?.(item.id)}
+                      aria-label="Delete question"
+                      title="Delete question"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  )}
+                </div>
+              </article>
+            );})}
           </div>
 
-          {response.results.length === 0 ? (
-            <div className="bm25-empty-state">No results found</div>
-          ) : (
-            <>
-              <div className="bm25-result-list">
-                {pagedResults.map((item, index) => (
-                  <article key={item.id} className="bm25-result-item">
-                    <div className="bm25-result-heading">
-                      <strong>#{(page - 1) * pageSize + index + 1}</strong>
-                      <span>Score: {Number(item.score || 0).toFixed(3)}</span>
-                    </div>
-                    <p className="bm25-result-text">{stripHtml(item.content)}</p>
-                    <div className="bm25-result-meta">
-                      <span>{item.subject || 'N/A'}</span>
-                      <span>{item.topic || 'N/A'}</span>
-                      <span>{item.bloomLevel}</span>
-                      <span>{item.questionType}</span>
-                    </div>
-                    <div className="bm25-result-actions">
-                      <button
-                        type="button"
-                        className="action-edit"
-                        onClick={() => onEditQuestion?.(item)}
-                        aria-label="Edit question"
-                        title="Edit question"
-                      >
-                        <Edit2 size={16} />
-                      </button>
-                      <button
-                        type="button"
-                        className="action-delete"
-                        onClick={() => onDeleteQuestion?.(item.id)}
-                        aria-label="Delete question"
-                        title="Delete question"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-
-              <div className="bm25-pagination">
-                <button
-                  type="button"
-                  onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-                  disabled={page <= 1}
-                  aria-label="Previous page"
-                  title="Previous page"
-                >
-                  <ChevronLeft size={16} />
-                </button>
-                <span>Page {page} of {totalPages}</span>
-                <button
-                  type="button"
-                  onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-                  disabled={page >= totalPages}
-                  aria-label="Next page"
-                  title="Next page"
-                >
-                  <ChevronRight size={16} />
-                </button>
-              </div>
-            </>
-          )}
+          <div className="bm25-pagination">
+            <button
+              type="button"
+              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+              disabled={page <= 1}
+              aria-label="Previous page"
+              title="Previous page"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <span>Page {page} of {totalPages}</span>
+            <button
+              type="button"
+              onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+              disabled={page >= totalPages}
+              aria-label="Next page"
+              title="Next page"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
         </>
       )}
-    </div>
+    </>
+  );
+
+  const resultsMountNode = (typeof document !== 'undefined' && resultsMountId)
+    ? document.getElementById(resultsMountId)
+    : null;
+
+  return (
+    <>
+      <div className={`bm25-search-panel ${isDarkMode ? 'dark' : ''}`}>
+        <div className={`search-bar ${isDarkMode ? 'dark' : ''}`}>
+          <Search size={18} className="search-icon" />
+          <input
+            type="text"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search..."
+          />
+        </div>
+      </div>
+      {resultsMountNode ? createPortal(resultsContent, resultsMountNode) : resultsContent}
+    </>
   );
 };
 

@@ -1,6 +1,7 @@
 using Databank.Abstract;
 using Databank.Database;
 using Databank.Entities;
+using Databank.Features.Questions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Databank.Features.Questions.BulkImport;
@@ -12,6 +13,7 @@ public sealed class BulkImportQuestionsEndpoint : IEndpoint
         app.MapPost("/api/questions/bulk", async Task<IResult> (
                 BulkImportRequest request,
                 AppDbContext dbContext,
+            HttpContext httpContext,
                 CancellationToken ct) =>
         {
             if (request.Questions == null || !request.Questions.Any())
@@ -27,6 +29,7 @@ public sealed class BulkImportQuestionsEndpoint : IEndpoint
 
             var errors = new List<string>();
             var questionsToAdd = new List<Question>();
+            var currentUserId = QuestionPermissionResolver.GetCurrentUserId(httpContext.User);
 
             foreach (var (questionDto, index) in request.Questions.Select((q, i) => (q, i)))
             {
@@ -48,6 +51,7 @@ public sealed class BulkImportQuestionsEndpoint : IEndpoint
                 var question = new Question
                 {
                     TopicId = request.TopicId,
+                    CreatedByUserId = currentUserId,
                     Content = questionDto.Content,
                     QuestionType = questionDto.QuestionType ?? "MultipleChoice",
                     BloomLevel = questionDto.BloomLevel,

@@ -1,11 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Eye, EyeOff, Upload } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, Upload, Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, FileText, HelpCircle, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { API_BASE_URL, apiService } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useTheme } from '../contexts/ThemeContext';
 import ConfirmationModal from '../components/ConfirmationModal';
+import NavItem from '../components/NavItem';
+import DropdownNavItem from '../components/DropdownNavItem';
+import LogoutModal from '../components/LogoutModal';
+import TDBLogo from '../assets/TDB logo.png';
+import UPHSL from '../assets/uphsl.png';
+import { HELP_CENTER_URL } from '../constants/helpLinks';
+import { getUserDisplayName, getUserProfileImageUrl } from '../utils/userDisplay';
 import '../styles/AccountSettings.css';
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -18,11 +25,32 @@ const toAbsoluteImageUrl = (path) => {
 
 const AccountSettings = () => {
   const navigate = useNavigate();
-  const { user, updateCurrentUser } = useAuth();
+  const { user, isAdmin, updateCurrentUser, logout } = useAuth();
   const { showToast } = useToast();
-  const { isDarkMode } = useTheme();
+  const { isDarkMode, toggleDarkMode } = useTheme();
+
+  const [activeTab, setActiveTab] = useState('Edit Account');
+  const [departments, setDepartments] = useState([]);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+
+  const displayName = getUserDisplayName(user, 'User');
+  const profileImageUrl = getUserProfileImageUrl(user?.profileImagePath, user?.userId);
+  const userMenuRef = React.useRef(null);
+
+  const dataEntryItems = ['Program - Topic', 'Test Encoding', 'Test Question Editing'];
+  const availableDataEntryItems = isAdmin ? ['Program - Topic'] : dataEntryItems;
+  const reportItems = ['Test Generation', 'Saved Exam Sets'];
+  const isDataEntryActive = availableDataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
+  const isReportsActive = reportItems.includes(activeTab) || activeTab === 'Reports';
+
+  const resolveDepartmentCode = () => {
+    const fallback = departments.find((d) => (d.code || '').toUpperCase() !== 'IT') || departments[0];
+    return fallback?.code || 'CCS';
+  };
 
   const [fullName, setFullName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -53,6 +81,7 @@ const AccountSettings = () => {
         if (isDisposed) return;
 
         setFullName(profile.fullName || `${profile.firstName || ''} ${profile.lastName || ''}`.trim());
+        setUsername(profile.username || '');
         setEmail(profile.email || '');
         setProfileImagePath(profile.profileImagePath || '');
       } catch (error) {
@@ -77,6 +106,34 @@ const AccountSettings = () => {
   }, [showToast]);
 
   useEffect(() => {
+    const loadDepartments = async () => {
+      if (!user?.userId) return;
+
+      try {
+        const data = isAdmin
+          ? await apiService.getDepartments()
+          : await apiService.getUserDepartments(user.userId);
+        setDepartments(Array.isArray(data) ? data : []);
+      } catch (error) {
+        console.error('Failed to load departments for AccountSettings navbar:', error);
+      }
+    };
+
+    void loadDepartments();
+  }, [isAdmin, user?.userId]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
+        setIsUserMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
     return () => {
       if (selectedImagePreview && selectedImagePreview.startsWith('blob:')) {
         URL.revokeObjectURL(selectedImagePreview);
@@ -95,6 +152,10 @@ const AccountSettings = () => {
 
     if (!fullName.trim()) {
       nextErrors.fullName = 'Name must not be empty.';
+    }
+
+    if (!username.trim()) {
+      nextErrors.username = 'Username must not be empty.';
     }
 
     if (newPassword && newPassword.length < MIN_PASSWORD_LENGTH) {
@@ -134,6 +195,7 @@ const AccountSettings = () => {
 
     const formData = new FormData();
     formData.append('fullName', fullName.trim());
+    formData.append('username', username.trim());
     if (newPassword.trim()) {
       formData.append('newPassword', newPassword.trim());
     }
@@ -144,19 +206,28 @@ const AccountSettings = () => {
     try {
       setSavingProfile(true);
       const updated = await apiService.updateMyAccount(formData);
+      let persistedProfile = null;
 
-      setProfileImagePath(updated.profileImagePath || profileImagePath);
+      try {
+        persistedProfile = await apiService.getMyAccount();
+      } catch {
+        // Fall back to immediate update response when profile refresh is temporarily unavailable.
+      }
+
+      const nextProfile = persistedProfile || updated;
+
+      setProfileImagePath(nextProfile.profileImagePath || profileImagePath);
       setSelectedImageFile(null);
       setSelectedImagePreview('');
       setNewPassword('');
       setConfirmPassword('');
 
       updateCurrentUser({
-        firstName: updated.firstName || user?.firstName || '',
-        lastName: updated.lastName || user?.lastName || '',
-        username: updated.username || user?.username || '',
-        email: updated.email || user?.email || '',
-        profileImagePath: updated.profileImagePath || null,
+        firstName: nextProfile.firstName || user?.firstName || '',
+        lastName: nextProfile.lastName || user?.lastName || '',
+        username: nextProfile.username || user?.username || '',
+        email: nextProfile.email || user?.email || '',
+        profileImagePath: nextProfile.profileImagePath || null,
       });
 
       showToast({ type: 'success', message: 'Account updated successfully.' });
@@ -181,10 +252,129 @@ const AccountSettings = () => {
 
   const displayInitial = (fullName || user?.username || 'U').charAt(0).toUpperCase();
 
+  const handleUserAction = (action) => {
+    setIsUserMenuOpen(false);
+    if (action === 'Logout') {
+      setIsLogoutModalOpen(true);
+    } else if (action === 'User Management') {
+      navigate('/admin', { state: { openUsers: true } });
+    } else if (action === 'Activity Logs') {
+      navigate('/activity-logs');
+    } else if (action === 'Need Help') {
+      if (typeof window !== 'undefined') {
+        window.open(HELP_CENTER_URL, '_blank', 'noopener,noreferrer');
+      }
+    } else if (action === 'Edit Account') {
+      navigate('/account/settings');
+    }
+  };
+
+  const handleConfirmLogout = () => {
+    setIsLogoutModalOpen(false);
+    logout();
+    navigate('/login');
+  };
+
   return (
     <div className={`dashboard ${isDarkMode ? 'dark' : ''}`}>
+      <div className="background" style={{ backgroundImage: `url(${UPHSL})` }} />
+
       <div className="main-container">
-        <div className="main-card">
+        <nav className={`navbar ${isDarkMode ? 'dark' : ''}`}>
+          <div className="nav-left">
+            <button onClick={() => { setActiveTab('Home'); navigate(isAdmin ? '/admin' : '/'); }} className="logo-btn">
+              <img src={TDBLogo} alt="TDB Logo" className="logo" />
+              <span className="logo-text">TEST DATABANK</span>
+            </button>
+          </div>
+
+          <div className="nav-center">
+            <NavItem
+              icon={Home}
+              label="Home"
+              isActive={activeTab === 'Home'}
+              onClick={() => {
+                setActiveTab('Home');
+                navigate(isAdmin ? '/admin' : '/');
+              }}
+            />
+            {isAdmin && (
+              <NavItem
+                icon={Users}
+                label="Users"
+                isActive={activeTab === 'User Management'}
+                onClick={() => {
+                  setActiveTab('User Management');
+                  navigate('/admin', { state: { openUsers: true } });
+                }}
+              />
+            )}
+            <DropdownNavItem
+              icon={ClipboardList}
+              label="Data Entry"
+              isActive={isDataEntryActive}
+              dropdownItems={availableDataEntryItems}
+              onSelect={(item) => {
+                setActiveTab(item);
+                const code = resolveDepartmentCode();
+                if (item === 'Program - Topic') {
+                  navigate(`/course-topic/${code}`);
+                } else if (item === 'Test Encoding' || item === 'Test Question Editing') {
+                  const targetTab = item === 'Test Encoding' ? 'Test Question Encoding' : item;
+                  navigate(`/test-encoding/${code}`, { state: { activeTab: targetTab } });
+                }
+              }}
+            />
+            <DropdownNavItem
+              icon={BookOpen}
+              label="Reports"
+              isActive={isReportsActive}
+              dropdownItems={reportItems}
+              onSelect={(item) => {
+                setActiveTab(item);
+                const code = resolveDepartmentCode();
+                if (item === 'Test Generation') {
+                  navigate(`/test-generation/${code}`);
+                } else if (item === 'Saved Exam Sets') {
+                  navigate(`/reports/saved-exams/${code}`);
+                }
+              }}
+            />
+          </div>
+
+          <div className="nav-right" ref={userMenuRef}>
+            <button onClick={toggleDarkMode} className={`mode-switch ${isDarkMode ? 'dark' : ''}`}>
+              <div className="circle">{isDarkMode ? <Moon /> : <Sun />}</div>
+            </button>
+
+            <button onClick={() => setIsUserMenuOpen(!isUserMenuOpen)} className={`user-btn ${isUserMenuOpen ? 'active' : ''}`}>
+              <div className="user-pic">
+                {profileImageUrl ? (
+                  <img src={profileImageUrl} alt="User profile" />
+                ) : (
+                  displayName.charAt(0).toUpperCase()
+                )}
+              </div>
+              <span className="user-name">{displayName}</span>
+            </button>
+
+            {isUserMenuOpen && (
+              <div className="user-dropdown show">
+                {isAdmin && (
+                  <>
+                    <button onClick={() => handleUserAction('User Management')}><Settings /> User Management</button>
+                    <button onClick={() => handleUserAction('Activity Logs')}><FileText /> Activity Logs</button>
+                  </>
+                )}
+                <button onClick={() => handleUserAction('Need Help')}><HelpCircle /> Need Help</button>
+                <button onClick={() => handleUserAction('Edit Account')}><User /> Edit Account</button>
+                <button className="logout-btn" onClick={() => handleUserAction('Logout')}><LogOut /> Logout</button>
+              </div>
+            )}
+          </div>
+        </nav>
+
+        <div className="main-card account-main-card">
           <button type="button" className="account-back-btn" onClick={handleBack}>
             <ArrowLeft size={16} /> Back
           </button>
@@ -240,6 +430,18 @@ const AccountSettings = () => {
                 </div>
 
                 <div className="field-container">
+                  <label htmlFor="username">Username</label>
+                  <input
+                    id="username"
+                    type="text"
+                    value={username}
+                    onChange={(event) => setUsername(event.target.value)}
+                    placeholder="Enter your username"
+                  />
+                  {formErrors.username && <p className="field-error">{formErrors.username}</p>}
+                </div>
+
+                <div className="field-container field-container-full-width">
                   <label htmlFor="email">Email</label>
                   <input id="email" type="email" value={email} disabled readOnly />
                 </div>
@@ -296,6 +498,8 @@ const AccountSettings = () => {
           )}
         </div>
       </div>
+
+      <LogoutModal isOpen={isLogoutModalOpen} onClose={() => setIsLogoutModalOpen(false)} onConfirm={handleConfirmLogout} />
 
       <ConfirmationModal
         isOpen={showConfirmModal}

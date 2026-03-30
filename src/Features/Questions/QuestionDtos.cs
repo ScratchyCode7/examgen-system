@@ -30,6 +30,8 @@ public sealed record QuestionResponse(
     int DisplayOrder,
     bool IsActive,
     List<OptionResponse>? Options = null,
-    QuestionImageDto? Image = null
+    QuestionImageDto? Image = null,
+    bool CanEdit = false,
+    bool CanDelete = false
 );
 

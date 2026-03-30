@@ -22,7 +22,9 @@ public sealed record SearchResultItem(
     string Subject,
     string Topic,
     float Score,
-    List<OptionResponse>? Options
+    List<OptionResponse>? Options,
+    bool CanEdit = false,
+    bool CanDelete = false
 );
 
 public sealed record SearchResponse(

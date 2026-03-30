@@ -1,6 +1,8 @@
 using Databank.Abstract;
+using Databank.Common;
 using Databank.Database;
 using Databank.Entities;
+using Databank.Features.Questions;
 using Databank.Services;
 using Microsoft.EntityFrameworkCore;
 
@@ -38,11 +40,18 @@ public sealed class CreateQuestionEndpoint : IEndpoint
                 return TypedResults.BadRequest("Question content is required.");
             }
 
-            var questionContent = request.Content.Trim();
+            var questionContent = TextInputSanitizer.SanitizeRichTextHtml(request.Content);
+            var questionTextOnly = TextInputSanitizer.NormalizeToPlainText(questionContent);
+            if (string.IsNullOrWhiteSpace(questionTextOnly))
+            {
+                logger.LogWarning("Question content was empty after sanitization for TopicId: {TopicId}", request.TopicId);
+                return TypedResults.BadRequest("Question content is required.");
+            }
 
             var question = new Question
             {
                 TopicId = request.TopicId,
+                CreatedByUserId = QuestionPermissionResolver.GetCurrentUserId(httpContext.User),
                 Content = questionContent,
                 QuestionType = request.QuestionType,
                 BloomLevel = request.BloomLevel,
@@ -69,13 +78,24 @@ public sealed class CreateQuestionEndpoint : IEndpoint
             // Save options if provided
             if (request.Options?.Count > 0)
             {
-                var options = request.Options.Select(opt => new Option
+                var options = new List<Option>(request.Options.Count);
+                foreach (var opt in request.Options)
                 {
-                    QuestionId = question.Id,
-                    Content = opt.Content,
-                    IsCorrect = opt.IsCorrect,
-                    DisplayOrder = opt.DisplayOrder
-                }).ToList();
+                    var optionContent = TextInputSanitizer.SanitizeRichTextHtml(opt.Content);
+                    var optionTextOnly = TextInputSanitizer.NormalizeToPlainText(optionContent);
+                    if (string.IsNullOrWhiteSpace(optionTextOnly))
+                    {
+                        return TypedResults.BadRequest("Answer choices must not be empty.");
+                    }
+
+                    options.Add(new Option
+                    {
+                        QuestionId = question.Id,
+                        Content = optionContent,
+                        IsCorrect = opt.IsCorrect,
+                        DisplayOrder = opt.DisplayOrder
+                    });
+                }
 
                 await dbContext.Options.AddRangeAsync(options, ct);
                 await dbContext.SaveChangesAsync(ct);
@@ -96,9 +116,9 @@ public sealed class CreateQuestionEndpoint : IEndpoint
                 .FirstAsync(q => q.Id == question.Id, ct);
 
             // Log activity
-            var userId = httpContext.User.FindFirst("sub")?.Value ?? httpContext.User.FindFirst("userId")?.Value;
+            var userId = QuestionPermissionResolver.GetCurrentUserId(httpContext.User)?.ToString();
             await loggingService.LogActivityAsync(userId, "Questions", "Created", "Question", question.Id, 
-                $"Created question: {questionContent.Substring(0, Math.Min(50, questionContent.Length))}...");
+                $"Created question: {questionTextOnly.Substring(0, Math.Min(50, questionTextOnly.Length))}...");
 
             return TypedResults.Created($"/api/questions/{question.Id}", createdQuestion.ToResponse());
         }).RequireAuthorization(); // Allow all authenticated users (teachers and admins)

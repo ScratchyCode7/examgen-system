@@ -53,7 +53,7 @@ function App() {
           <Route
             path="/test-encoding/:departmentCode"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute disallowAdmin={true} redirectIfDisallowed="/course-topic/CCS">
                 <TestEncodingAndEditing />
               </ProtectedRoute>
             }

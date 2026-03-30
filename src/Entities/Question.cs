@@ -9,6 +9,7 @@ public sealed class Question
 {
     public int Id { get; set; }
     public int TopicId { get; set; }
+    public Guid? CreatedByUserId { get; set; }
     public string Content { get; set; } = null!;
     public string QuestionType { get; set; } = "MultipleChoice";  // MCQ, TrueFalse, Essay
     public BloomLevel BloomLevel { get; set; } = BloomLevel.Remember;

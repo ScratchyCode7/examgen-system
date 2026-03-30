@@ -18,6 +18,8 @@ namespace Databank.Services;
 
 public sealed class LuceneSearchService : ISearchService
 {
+        private const int MaxSearchHits = 500;
+
     private const LuceneVersion AppLuceneVersion = LuceneVersion.LUCENE_48;
 
     private const string FieldQuestionId = "questionId";
@@ -36,9 +38,9 @@ public sealed class LuceneSearchService : ISearchService
     private readonly IWebHostEnvironment _environment;
     private readonly ILogger<LuceneSearchService> _logger;
     private readonly StandardAnalyzer _analyzer;
-    private readonly SemaphoreSlim _indexWriteLock = new(1, 1);
+    private static readonly SemaphoreSlim IndexWriteLock = new(1, 1);
     private readonly string _indexPath;
-    private volatile bool _indexInitialized;
+    private static volatile bool _indexInitialized;
 
     public LuceneSearchService(
         AppDbContext dbContext,
@@ -61,7 +63,7 @@ public sealed class LuceneSearchService : ISearchService
                 .ThenInclude(t => t.Subject)
             .ToListAsync(ct);
 
-        await _indexWriteLock.WaitAsync(ct);
+        await IndexWriteLock.WaitAsync(ct);
         try
         {
             System.IO.Directory.CreateDirectory(_indexPath);
@@ -85,7 +87,7 @@ public sealed class LuceneSearchService : ISearchService
         }
         finally
         {
-            _indexWriteLock.Release();
+            IndexWriteLock.Release();
         }
     }
 
@@ -106,7 +108,7 @@ public sealed class LuceneSearchService : ISearchService
             return;
         }
 
-        await _indexWriteLock.WaitAsync(ct);
+        await IndexWriteLock.WaitAsync(ct);
         try
         {
             using var luceneDirectory = FSDirectory.Open(_indexPath);
@@ -123,7 +125,7 @@ public sealed class LuceneSearchService : ISearchService
         }
         finally
         {
-            _indexWriteLock.Release();
+            IndexWriteLock.Release();
         }
     }
 
@@ -131,7 +133,7 @@ public sealed class LuceneSearchService : ISearchService
     {
         await EnsureIndexInitializedAsync(ct);
 
-        await _indexWriteLock.WaitAsync(ct);
+        await IndexWriteLock.WaitAsync(ct);
         try
         {
             using var luceneDirectory = FSDirectory.Open(_indexPath);
@@ -148,7 +150,7 @@ public sealed class LuceneSearchService : ISearchService
         }
         finally
         {
-            _indexWriteLock.Release();
+            IndexWriteLock.Release();
         }
     }
 
@@ -191,7 +193,7 @@ public sealed class LuceneSearchService : ISearchService
             AddFilter(boolQuery, FieldBloomLevel, filters.BloomLevel);
             AddFilter(boolQuery, FieldQuestionType, filters.QuestionType);
 
-            topDocs = searcher.Search(boolQuery, 20);
+            topDocs = searcher.Search(boolQuery, MaxSearchHits);
 
             rankedIds = topDocs.ScoreDocs
                 .Select(sd =>

@@ -157,7 +157,7 @@ const TestGeneration = () => {
   const tosSectionRef = useRef(null);
 
   const displayName = getUserDisplayName(user, 'User');
-  const profileImageUrl = getUserProfileImageUrl(user?.profileImagePath);
+  const profileImageUrl = getUserProfileImageUrl(user?.profileImagePath, user?.userId);
 
   const createEmptyTopicRow = (id) => ({
     id,
@@ -452,9 +452,15 @@ const TestGeneration = () => {
     }
   };
   const [error, setError] = useState('');
-  const [insufficientItemsWarning, setInsufficientItemsWarning] = useState('');
-  const [excessItemsWarning, setExcessItemsWarning] = useState('');
+  const [, setInsufficientItemsWarning] = useState('');
+  const [, setExcessItemsWarning] = useState('');
   const [generationWarnings, setGenerationWarnings] = useState([]);
+  const [warningPopup, setWarningPopup] = useState({
+    isOpen: false,
+    title: 'Generation Warning',
+    messages: []
+  });
+  const lastWarningPopupSignatureRef = useRef('');
   const [topicRows, setTopicRows] = useState(() => getInitialTopicRows());
   const [generatedSpec, setGeneratedSpec] = useState(null);
   const [sampleExam, setSampleExam] = useState(null);
@@ -516,6 +522,48 @@ const TestGeneration = () => {
   const [isLoadingSavedSets, setIsLoadingSavedSets] = useState(false);
   const [lastSavedSignature, setLastSavedSignature] = useState('');
   const [saveConfirmation, setSaveConfirmation] = useState(null);
+  const [myRequestsError, setMyRequestsError] = useState('');
+
+  const showWarningPopup = React.useCallback((title, messages) => {
+    const normalizedMessages = Array.isArray(messages)
+      ? messages.map((message) => String(message || '').trim()).filter(Boolean)
+      : [String(messages || '').trim()].filter(Boolean);
+
+    if (!normalizedMessages.length) return;
+
+    const signature = `${title}::${normalizedMessages.join('|')}`;
+    if (lastWarningPopupSignatureRef.current === signature) return;
+
+    lastWarningPopupSignatureRef.current = signature;
+    setWarningPopup({
+      isOpen: true,
+      title,
+      messages: normalizedMessages
+    });
+  }, []);
+
+  const closeWarningPopup = React.useCallback(() => {
+    lastWarningPopupSignatureRef.current = '';
+    setWarningPopup((previous) => ({
+      ...previous,
+      isOpen: false
+    }));
+  }, []);
+
+  React.useEffect(() => {
+    if (!error) return;
+    showWarningPopup('Generation Error', [error]);
+  }, [error, showWarningPopup]);
+
+  React.useEffect(() => {
+    if (!myRequestsError) return;
+    showWarningPopup('Print Request Error', [myRequestsError]);
+  }, [myRequestsError, showWarningPopup]);
+
+  React.useEffect(() => {
+    if (!saveNameError) return;
+    showWarningPopup('Save Exam Error', [saveNameError]);
+  }, [saveNameError, showWarningPopup]);
 
   const closeSaveModal = React.useCallback(() => {
     if (isSavingExam) return;
@@ -536,7 +584,6 @@ const TestGeneration = () => {
   const totalItemsDirtyRef = useRef(false);
   const [myPrintRequests, setMyPrintRequests] = useState([]);
   const [isLoadingMyRequests, setIsLoadingMyRequests] = useState(false);
-  const [myRequestsError, setMyRequestsError] = useState('');
   const coursesCacheRef = useRef(new Map());
   const subjectsCacheRef = useRef(new Map());
   const topicsCacheRef = useRef(new Map());
@@ -1229,17 +1276,26 @@ const TestGeneration = () => {
   // Update insufficient and excess items warnings based on the cached spec
   React.useEffect(() => {
     const spec = generatedSpec;
+    const nextWarningMessages = [];
+
     if (spec && spec.insufficientWarning) {
       setInsufficientItemsWarning(spec.insufficientWarning);
+      nextWarningMessages.push(spec.insufficientWarning);
     } else {
       setInsufficientItemsWarning('');
     }
 
     if (spec && spec.excessWarning) {
       setExcessItemsWarning(spec.excessWarning);
+      nextWarningMessages.push(spec.excessWarning);
     } else {
       setExcessItemsWarning('');
     }
+
+    if (nextWarningMessages.length > 0) {
+      showWarningPopup('Specification Warning', nextWarningMessages);
+    }
+
     // Auto-update total exam items when not manually overridden
     if (!manualTotalItems && spec && spec.totals) {
       const autoTotal = spec.totals.grand || 0;
@@ -1247,7 +1303,7 @@ const TestGeneration = () => {
         setTotalExamItems(String(autoTotal));
       }
     }
-  }, [generatedSpec, manualTotalItems, totalExamItems]);
+  }, [generatedSpec, manualTotalItems, totalExamItems, showWarningPopup]);
 
   const deriveSetLabel = React.useCallback((index) => {
     let value = Math.max(index, 0) + 1;
@@ -1544,6 +1600,19 @@ const TestGeneration = () => {
     const copy = [...arr];
     shuffleArray(copy);
     return copy.slice(0, n);
+  };
+
+  const dedupeQuestionsById = (arr) => {
+    if (!Array.isArray(arr) || arr.length === 0) return [];
+    const seen = new Set();
+    return arr.filter((question) => {
+      const rawId = question?.id ?? question?.Id ?? question?.questionId ?? question?.QuestionId ?? null;
+      if (rawId === null || rawId === undefined) return false;
+      const key = String(rawId);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   };
 
   const bloomCategoryFromQuestion = React.useCallback((q = {}) => {
@@ -1853,6 +1922,7 @@ const TestGeneration = () => {
             const data = await apiService.getQuestionsByTopic(topicId);
             list = normalizeApiArray(data);
           }
+          list = dedupeQuestionsById(list);
           const pools = { remembering: [], applying: [], evaluating: [] };
           list.forEach(q => {
             const cat = bloomCategoryFromQuestion(q);
@@ -1864,6 +1934,14 @@ const TestGeneration = () => {
           return { topicId, pools: { remembering: [], applying: [], evaluating: [] } };
         }
       }));
+
+      const uniqueFromSelectedTopics = dedupeQuestionsById(
+        topicPools.flatMap((entry) => [
+          ...entry.pools.remembering,
+          ...entry.pools.applying,
+          ...entry.pools.evaluating,
+        ])
+      ).length;
 
       // Allocate and sample per topic, with robust fallback
       const finalQuestions = [];
@@ -1931,11 +2009,15 @@ const TestGeneration = () => {
       let currentCount2 = finalQuestions.length;
       let missing2 = total - currentCount2;
 
+      let uniqueSubjectPoolCount = 0;
+
       // STEP 3b: If deficits still exist, try to fill from subject-level pools per bloom (excluding already-used ids)
       if (missing2 > 0) {
         // Build subject-level pools excluding already selected question ids
         const subjectData = await apiService.getQuestions({ subjectId: selectedSubject, pageSize: 1000 });
-        const subjectList = Array.isArray(subjectData) ? subjectData : (subjectData?.items && Array.isArray(subjectData.items) ? subjectData.items : (subjectData?.data && Array.isArray(subjectData.data) ? subjectData.data : []));
+        const subjectListRaw = Array.isArray(subjectData) ? subjectData : (subjectData?.items && Array.isArray(subjectData.items) ? subjectData.items : (subjectData?.data && Array.isArray(subjectData.data) ? subjectData.data : []));
+        const subjectList = dedupeQuestionsById(subjectListRaw);
+        uniqueSubjectPoolCount = subjectList.length;
         const usedIds = new Set(finalQuestions.map(q => String(q.id)));
         const subjectPools = { remembering: [], applying: [], evaluating: [], any: [] };
         subjectList.forEach(q => {
@@ -1974,18 +2056,26 @@ const TestGeneration = () => {
         }
       }
 
-      if (finalQuestions.length > total) {
-        setError(`Internal allocation error: generated ${finalQuestions.length} questions but expected exactly ${total}. Please adjust your specification and try again.`);
+      const uniqueFinalQuestions = dedupeQuestionsById(finalQuestions);
+      if (uniqueFinalQuestions.length < finalQuestions.length) {
+        warnings.push(`Removed ${finalQuestions.length - uniqueFinalQuestions.length} duplicate question entries before finalizing the exam.`);
+      }
+
+      if (uniqueFinalQuestions.length > total) {
+        setError(`Internal allocation error: generated ${uniqueFinalQuestions.length} unique questions but expected exactly ${total}. Please adjust your specification and try again.`);
         return;
       }
 
       // If still not enough, show error
-      if (finalQuestions.length < total) {
-        setError(`Not enough questions in the database to generate ${total} items across selected topics while honoring Bloom levels.`);
+      if (uniqueFinalQuestions.length < total) {
+        const availableReferenceCount = uniqueSubjectPoolCount > 0 ? uniqueSubjectPoolCount : uniqueFromSelectedTopics;
+        const insufficientMessage = `Not enough unique questions available. Requested ${total}, but only ${uniqueFinalQuestions.length} could be allocated (${availableReferenceCount} unique questions available in current pool). Reduce total items, add more questions, or broaden the selected topics.`;
+        setError(insufficientMessage);
+        showWarningPopup('Generation Error', [insufficientMessage]);
         return;
       }
 
-      const distributionCheck = validateBloomDistribution(finalQuestions, expectedBloomTotals);
+      const distributionCheck = validateBloomDistribution(uniqueFinalQuestions, expectedBloomTotals);
       if (!distributionCheck.isValid) {
         const describe = (counts) => `R/U: ${counts.remembering || 0}, A/A: ${counts.applying || 0}, E/C: ${counts.evaluating || 0}`;
         const mismatchDetail = distributionCheck.missingLevels.length > 0
@@ -2000,13 +2090,14 @@ const TestGeneration = () => {
       // Log collected warnings (do not block generation)
       if (warnings && warnings.length > 0) {
         setGenerationWarnings(warnings);
+        showWarningPopup('Generation Notice', warnings);
         console.warn('[generateExam] Warnings during allocation:', warnings);
       }
 
       // STEP 4: shuffle and set sample exam
-      shuffleArray(finalQuestions);
+      shuffleArray(uniqueFinalQuestions);
 
-      const enriched = finalQuestions.map((q) => {
+      const enriched = uniqueFinalQuestions.map((q) => {
         const bloomLevel = bloomCategoryFromQuestion(q);
         return {
           ...q,
@@ -2918,7 +3009,8 @@ const TestGeneration = () => {
 
   const dataEntryItems = ["Program - Topic", "Test Encoding", "Test Question Editing"];
   const reportItems = ["Test Generation", "Saved Exam Sets"];
-  const isDataEntryActive = dataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
+  const availableDataEntryItems = isAdmin ? ["Program - Topic"] : dataEntryItems;
+  const isDataEntryActive = availableDataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
   const isReportsActive = reportItems.includes(activeTab) || activeTab === 'Reports';
 
   const resolveDepartmentCode = () => {
@@ -2960,7 +3052,7 @@ const TestGeneration = () => {
               icon={ClipboardList}
               label="Data Entry"
               isActive={isDataEntryActive}
-              dropdownItems={dataEntryItems}
+              dropdownItems={availableDataEntryItems}
               onSelect={(item) => {
                 setActiveTab(item);
                 if (item === 'Program - Topic') {
@@ -2968,7 +3060,8 @@ const TestGeneration = () => {
                   navigate(`/course-topic/${code}`);
                 } else if (item === 'Test Encoding' || item === 'Test Question Editing') {
                   const code = resolveDepartmentCode();
-                  navigate(`/test-encoding/${code}`);
+                  const targetTab = item === 'Test Encoding' ? 'Test Question Encoding' : item;
+                  navigate(`/test-encoding/${code}`, { state: { activeTab: targetTab } });
                 }
               }}
             />
@@ -3182,13 +3275,6 @@ const TestGeneration = () => {
             <>
               <h2>Test Generation</h2>
               <p className="subtitle">Create a table of specifications and generate exams based on topics and cognitive levels</p>
-
-          {/* Error Message */}
-          {error && (
-            <div className="error-message">
-              {error}
-            </div>
-          )}
 
           {/* Initial Inputs */}
           <div className="input-section">
@@ -3571,22 +3657,6 @@ const TestGeneration = () => {
                 </table>
               </div>
               
-              {/* Warning for insufficient items */}
-              {insufficientItemsWarning && (
-                <div className="warning-message">
-                  <span className="warning-icon">⚠️</span>
-                  <span className="warning-text">{insufficientItemsWarning}</span>
-                </div>
-              )}
-              
-              {/* Warning for excess items */}
-              {excessItemsWarning && (
-                <div className="info-message">
-                  <span className="info-icon">ℹ️</span>
-                  <span className="info-text">{excessItemsWarning}</span>
-                </div>
-              )}
-
             </div>
           )}
 
@@ -3836,9 +3906,6 @@ const TestGeneration = () => {
                   Refresh
                 </button>
               </div>
-              {myRequestsError && (
-                <div className="error-message" style={{ marginTop: '15px' }}>{myRequestsError}</div>
-              )}
               {isLoadingMyRequests ? (
                 <div style={{ textAlign: 'center', padding: '30px' }}>Loading your requests...</div>
               ) : myPrintRequests.length === 0 ? (
@@ -3914,6 +3981,29 @@ const TestGeneration = () => {
       </div>
 
       {/* Save Modal */}
+      {warningPopup.isOpen && (
+        <div className="modal-overlay" onClick={closeWarningPopup}>
+          <div className="modal-dialog warning-popup-modal" onClick={(e) => e.stopPropagation()} role="alertdialog" aria-modal="true" aria-live="assertive">
+            <div className="warning-popup-header">
+              <h3 className="warning-popup-title">
+                <AlertTriangle size={20} /> ALERT: {warningPopup.title}
+              </h3>
+            </div>
+            <div className="warning-popup-body">
+              <ul className="warning-popup-list">
+                {warningPopup.messages.map((message, index) => (
+                  <li key={`warning-popup-item-${index}`}>{message}</li>
+                ))}
+              </ul>
+            </div>
+            <div className="exam-modal-actions warning-popup-actions">
+              <button type="button" className="modal-btn modal-btn-primary" onClick={closeWarningPopup}>OK</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Save Modal */}
       {showSaveModal && (
         <div className="modal-overlay" onClick={closeSaveModal}>
           <div className="modal-dialog exam-modal" onClick={(e) => e.stopPropagation()}>
@@ -3941,7 +4031,6 @@ const TestGeneration = () => {
                   placeholder={`e.g. ${nextSetLabel} or 'Remedial Prelim'`}
                   autoFocus
                 />
-                {saveNameError && <p className="error-message" style={{ marginTop: '6px' }}>{saveNameError}</p>}
                 <p className="exam-modal-note" style={{ marginTop: '8px' }}>Max 120 characters. This label shows up in Saved Exam Sets and print requests.</p>
               </div>
               <ul className="exam-modal-list">

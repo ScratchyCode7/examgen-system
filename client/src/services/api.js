@@ -201,6 +201,39 @@ export const apiService = {
     return response.data;
   },
 
+  createQuestionEditRequest: async (questionId, message) => {
+    const response = await apiClient.post(`/api/questions/${questionId}/edit-requests`, {
+      message,
+    });
+    return response.data;
+  },
+
+  getQuestionEditRequests: async (scope = 'inbox') => {
+    const response = await apiClient.get(`/api/questions/edit-requests?scope=${encodeURIComponent(scope)}`);
+    return response.data;
+  },
+
+  resolveQuestionEditRequest: async (requestId, approve, canDelete = false, note) => {
+    const response = await apiClient.post(`/api/questions/edit-requests/${requestId}/resolve`, {
+      approve,
+      canDelete,
+      note,
+    });
+    return response.data;
+  },
+
+  revokeQuestionEditPermission: async (requestId, note = '') => {
+    const response = await apiClient.post(`/api/questions/edit-requests/${requestId}/revoke`, {
+      note,
+    });
+    return response.data;
+  },
+
+  dismissQuestionEditRequest: async (requestId) => {
+    const response = await apiClient.post(`/api/questions/edit-requests/${requestId}/dismiss`);
+    return response.data;
+  },
+
   uploadQuestionImage: async (questionId, file, widthPercentage, alignment) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -301,6 +334,16 @@ export const apiService = {
     }
     console.log('Could not extract array from response');
     return [];
+  },
+
+  getTopicById: async (id) => {
+    const response = await apiClient.get(`/api/topics/${id}`);
+    return response.data;
+  },
+
+  getCourseById: async (id) => {
+    const response = await apiClient.get(`/api/courses/${id}`);
+    return response.data;
   },
 
   // Topics by course (fetches all topics associated with a course)

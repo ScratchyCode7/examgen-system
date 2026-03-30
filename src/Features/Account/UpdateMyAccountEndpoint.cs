@@ -33,12 +33,23 @@ public sealed class UpdateMyAccountEndpoint : IEndpoint
             var form = await httpContext.Request.ReadFormAsync(ct);
 
             var fullName = form["fullName"].ToString().Trim();
+            var username = form["username"].ToString().Trim();
             var newPassword = form["newPassword"].ToString().Trim();
             var profileImage = form.Files.GetFile("profilePicture");
 
             if (string.IsNullOrWhiteSpace(fullName))
             {
                 return TypedResults.BadRequest(new { message = "Name must not be empty." });
+            }
+
+            if (string.IsNullOrWhiteSpace(username))
+            {
+                return TypedResults.BadRequest(new { message = "Username must not be empty." });
+            }
+
+            if (username.Length < 3 || username.Length > 50)
+            {
+                return TypedResults.BadRequest(new { message = "Username must be between 3 and 50 characters." });
             }
 
             if (!string.IsNullOrWhiteSpace(newPassword) && newPassword.Length < 8)
@@ -73,8 +84,18 @@ public sealed class UpdateMyAccountEndpoint : IEndpoint
             }
 
             var (firstName, lastName) = SplitFullName(fullName);
+
+            var duplicateUsername = await dbContext.Users
+                .AnyAsync(x => x.UserId != userId && x.Username.ToLower() == username.ToLower(), ct);
+
+            if (duplicateUsername)
+            {
+                return TypedResults.Conflict(new { message = $"Username '{username}' is already in use." });
+            }
+
             user.FirstName = firstName;
             user.LastName = lastName;
+            user.Username = username;
 
             if (!string.IsNullOrWhiteSpace(newPassword))
             {

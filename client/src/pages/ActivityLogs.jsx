@@ -25,7 +25,7 @@ const ActivityLogs = () => {
   const userMenuRef = useRef(null);
 
   const displayName = getUserDisplayName(user, 'Admin User');
-  const profileImageUrl = getUserProfileImageUrl(user?.profileImagePath);
+  const profileImageUrl = getUserProfileImageUrl(user?.profileImagePath, user?.userId);
 
   const [logs, setLogs] = useState([]);
   const [expandedDetails, setExpandedDetails] = useState({});
@@ -59,7 +59,8 @@ const ActivityLogs = () => {
 
   // Navigation items
   const dataEntryItems = ["Program - Topic", "Test Encoding", "Test Question Editing"];
-  const isDataEntryActive = dataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
+  const availableDataEntryItems = user?.isAdmin ? ["Program - Topic"] : dataEntryItems;
+  const isDataEntryActive = availableDataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
   
   const reportItems = ["Test Generation", "Saved Exam Sets"];
   const isReportsActive = reportItems.includes(activeTab) || activeTab === 'Reports';
@@ -236,7 +237,7 @@ const ActivityLogs = () => {
               icon={ClipboardList}
               label="Data Entry"
               isActive={isDataEntryActive}
-              dropdownItems={dataEntryItems}
+              dropdownItems={availableDataEntryItems}
               onSelect={(item) => {
                 setActiveTab(item);
                 const firstDept = departments?.find(d => d.code !== 'IT') || departments?.[0];
@@ -244,7 +245,8 @@ const ActivityLogs = () => {
                 if (item === 'Program - Topic') {
                   navigate(`/course-topic/${code}`);
                 } else if (item === 'Test Encoding' || item === 'Test Question Editing') {
-                  navigate(`/test-encoding/${code}`);
+                  const targetTab = item === 'Test Encoding' ? 'Test Question Encoding' : item;
+                  navigate(`/test-encoding/${code}`, { state: { activeTab: targetTab } });
                 }
               }}
             />

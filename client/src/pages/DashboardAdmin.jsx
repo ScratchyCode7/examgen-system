@@ -31,7 +31,7 @@ const DashboardAdmin = () => {
   const userMenuRef = useRef(null);
 
   const displayName = getUserDisplayName(user, 'Admin User');
-  const profileImageUrl = getUserProfileImageUrl(user?.profileImagePath);
+  const profileImageUrl = getUserProfileImageUrl(user?.profileImagePath, user?.userId);
 
   // departments are loaded from API and used directly
   const [departments, setDepartments] = useState([]);
@@ -105,7 +105,7 @@ const DashboardAdmin = () => {
     navigate('/login');
   };
 
-  const dataEntryItems = ["Program - Topic", "Test Encoding", "Test Question Editing"];
+  const dataEntryItems = ["Program - Topic"];
   const isDataEntryActive = dataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
   
   const reportItems = ["Test Generation", "Saved Exam Sets"];
@@ -177,10 +177,6 @@ const DashboardAdmin = () => {
                     const firstDept = departments?.find(d => d.code !== 'IT') || departments?.[0];
                     const code = firstDept?.code || 'IT';
                     navigate(`/course-topic/${code}`);
-                  } else if (item === 'Test Encoding' || item === 'Test Question Editing') {
-                    const firstDept = departments?.find(d => d.code !== 'IT') || departments?.[0];
-                    const code = firstDept?.code || 'CCS';
-                    navigate(`/test-encoding/${code}`);
                   }
               }}
             />

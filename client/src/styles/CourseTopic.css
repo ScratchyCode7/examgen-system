@@ -27,7 +27,7 @@
   gap: 15px; /* space between logo and text */
   border-top: 1px solid #1C4DA1;
   border-bottom: 1px solid #1C4DA1;
-  padding: 5px 20px;
+  padding: 14px 20px;
   margin-bottom: 15px;
 }
 
@@ -46,6 +46,105 @@
 
 .program-header-line {
   padding: 0px;
+}
+
+.program-header-content {
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.program-header-line .department-selector-grid {
+  margin: 0;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.program-header-line .department-selector-card {
+  width: 260px;
+  min-height: 260px;
+  padding: 1rem;
+  border-radius: 20px;
+  border: 2px solid transparent;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.program-header-line .department-selector-card img {
+  width: 220px;
+  height: 220px;
+  object-fit: contain;
+  margin-bottom: 0.5rem;
+}
+
+.program-header-line .department-selector-card p {
+  margin: 0;
+  font-size: 1rem;
+  line-height: normal;
+  font-weight: 600;
+  text-align: center;
+  color: inherit;
+  max-width: 100%;
+  text-wrap: balance;
+}
+
+.program-header-line .department-selector-card.active-department-card {
+  border-color: #FFC63E;
+  background: #FFF9E6;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+.dashboard.dark .program-header-line .department-selector-card {
+  background: #14202b;
+  color: #E5E5E5;
+}
+
+.dashboard.dark .program-header-line .department-selector-card.active-department-card {
+  border-color: #FFC63E;
+  background: #1C2B45;
+  box-shadow: 0 8px 24px rgba(255, 198, 62, 0.3);
+}
+
+@media (max-width: 992px) {
+  .program-header-line .department-selector-card {
+    width: 220px;
+    min-height: 220px;
+  }
+
+  .program-header-line .department-selector-card img {
+    width: 180px;
+    height: 180px;
+  }
+
+  .program-header-line .department-selector-card p {
+    font-size: 0.95rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .program-header-line .department-selector-grid {
+    gap: 0.6rem;
+  }
+
+  .program-header-line .department-selector-card {
+    width: 160px;
+    min-height: 165px;
+    padding: 0.75rem;
+    border-radius: 14px;
+  }
+
+  .program-header-line .department-selector-card img {
+    width: 90px;
+    height: 90px;
+    margin-bottom: 0.5rem;
+  }
+
+  .program-header-line .department-selector-card p {
+    font-size: 1rem;
+  }
 }
 
 /* Fields */

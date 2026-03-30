@@ -1,11 +1,18 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { apiService } from '../services/api';
 import { useToast } from './ToastContext';
-import { persistLastProfileImagePath } from '../utils/userDisplay';
+import { clearLegacyProfileImageCache, persistLastProfileImagePath } from '../utils/userDisplay';
 
 const AuthContext = createContext(null);
 const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 const ACTIVITY_EVENTS = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart'];
+
+const normalizeDepartmentIds = (values) => {
+  if (!Array.isArray(values)) return [];
+  return values
+    .map((value) => Number.parseInt(value, 10))
+    .filter((value) => Number.isFinite(value));
+};
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -15,6 +22,8 @@ export const AuthProvider = ({ children }) => {
   const { showToast } = useToast();
 
   useEffect(() => {
+    clearLegacyProfileImageCache();
+
     // Check if user is logged in on mount
     const token = localStorage.getItem('token');
     const savedUser = localStorage.getItem('user');
@@ -24,7 +33,9 @@ export const AuthProvider = ({ children }) => {
         const userData = JSON.parse(savedUser);
         setUser(userData);
         setIsAuthenticated(true);
-        persistLastProfileImagePath(userData?.profileImagePath);
+        if (userData?.profileImagePath) {
+          persistLastProfileImagePath(userData.profileImagePath, userData?.userId);
+        }
       } catch (error) {
         console.error('Error parsing saved user:', error);
         localStorage.removeItem('token');
@@ -70,25 +81,44 @@ export const AuthProvider = ({ children }) => {
         departmentIds: departmentIds,
         departmentId: departmentIds[0] || null, // Legacy: keep first department for backward compatibility
       };
+
+      // Persist token before calling authenticated profile endpoints.
+      localStorage.setItem('token', accessToken);
       
-      // Try to fetch full user details if userId is available
+      // Prefer account profile for reliable self data (including profile image).
+      try {
+        const myAccount = await apiService.getMyAccount();
+        userData.firstName = myAccount.firstName || userData.firstName;
+        userData.lastName = myAccount.lastName || userData.lastName;
+        userData.username = myAccount.username || userData.username;
+        userData.email = myAccount.email || userData.email;
+        userData.profileImagePath = myAccount.profileImagePath || userData.profileImagePath;
+      } catch (err) {
+        console.warn('Could not fetch account profile:', err);
+      }
+
+      // Fallback to user details endpoint if userId is available
       if (userData.userId) {
         try {
           const fullUser = await apiService.getUser(userData.userId);
-          userData.firstName = fullUser.firstName || '';
-          userData.lastName = fullUser.lastName || '';
-          userData.profileImagePath = fullUser.profileImagePath || null;
-          userData.departmentIds = fullUser.departmentIds || userData.departmentIds;
+          userData.firstName = fullUser.firstName || userData.firstName || '';
+          userData.lastName = fullUser.lastName || userData.lastName || '';
+          userData.profileImagePath = fullUser.profileImagePath || userData.profileImagePath || null;
+          userData.departmentIds = normalizeDepartmentIds(fullUser.departmentIds) || userData.departmentIds;
           userData.departmentId = fullUser.departmentId || userData.departmentIds[0] || null;
         } catch (err) {
           console.warn('Could not fetch user details:', err);
           // Continue with basic user data from token
         }
       }
+
+      userData.departmentIds = normalizeDepartmentIds(userData.departmentIds);
+      userData.departmentId = userData.departmentIds[0] || userData.departmentId || null;
       
-      localStorage.setItem('token', accessToken);
       localStorage.setItem('user', JSON.stringify(userData));
-      persistLastProfileImagePath(userData?.profileImagePath);
+      if (userData?.profileImagePath) {
+        persistLastProfileImagePath(userData.profileImagePath, userData?.userId);
+      }
       
       setUser(userData);
       setIsAuthenticated(true);
@@ -122,7 +152,9 @@ export const AuthProvider = ({ children }) => {
       };
 
       localStorage.setItem('user', JSON.stringify(nextUser));
-      persistLastProfileImagePath(nextUser?.profileImagePath);
+      if (nextUser?.profileImagePath) {
+        persistLastProfileImagePath(nextUser.profileImagePath, nextUser?.userId);
+      }
       return nextUser;
     });
   }, []);
@@ -165,7 +197,12 @@ export const AuthProvider = ({ children }) => {
   const hasAccessToDepartment = (departmentId) => {
     if (!user) return false;
     if (user.isAdmin) return true;
-    return user.departmentIds?.includes(parseInt(departmentId, 10)) || false;
+
+    const targetDepartmentId = Number.parseInt(departmentId, 10);
+    if (!Number.isFinite(targetDepartmentId)) return false;
+
+    const allowedDepartmentIds = normalizeDepartmentIds(user.departmentIds);
+    return allowedDepartmentIds.includes(targetDepartmentId);
   };
 
   const hasAccessToDepartmentCode = async (departmentCode) => {
@@ -175,7 +212,16 @@ export const AuthProvider = ({ children }) => {
     try {
       // Fetch department by code to get its ID
       const dept = await apiService.getDepartmentByCode(departmentCode);
-      return hasAccessToDepartment(dept.id);
+      if (hasAccessToDepartment(dept.id)) {
+        return true;
+      }
+
+      // Fallback: trust latest assignments from API when local token/user cache is stale.
+      const assignedDepartments = await apiService.getUserDepartments(user.userId);
+      const assignedList = Array.isArray(assignedDepartments) ? assignedDepartments : [];
+      return assignedList.some((item) =>
+        String(item?.code || '').trim().toLowerCase() === String(departmentCode).trim().toLowerCase() ||
+        Number.parseInt(item?.id, 10) === Number.parseInt(dept.id, 10));
     } catch (error) {
       console.error('Error checking department access:', error);
       return false;
@@ -187,7 +233,7 @@ export const AuthProvider = ({ children }) => {
     loading,
     isAuthenticated,
     isAdmin: user?.isAdmin || false,
-    allowedDepartments: user?.departmentIds || [],
+    allowedDepartments: normalizeDepartmentIds(user?.departmentIds),
     hasAccessToDepartment,
     hasAccessToDepartmentCode,
     login,
