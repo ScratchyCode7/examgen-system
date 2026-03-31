@@ -58,6 +58,11 @@ const CourseTopic = () => {
   const [selectedSubjectForTopic, setSelectedSubjectForTopic] = useState(null);
   const [topicCreating, setTopicCreating] = useState(false);
 
+  // Program Creation states (for admins)
+  const [showProgramForm, setShowProgramForm] = useState(false);
+  const [programFormData, setProgramFormData] = useState({ programName: '', programCode: '', programDescription: '' });
+  const [isCreatingProgram, setIsCreatingProgram] = useState(false);
+
   const availableDataEntryItems = isAdmin ? ['Program - Topic'] : dataEntryItems;
 
   const isDataEntryActive = availableDataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
@@ -388,6 +393,60 @@ const CourseTopic = () => {
     void createTopicAsync();
   };
 
+  // Create new program for current department (admin only)
+  const handleAddProgram = () => {
+    if (!programFormData.programName || !programFormData.programCode) {
+      showToast({ message: 'Please fill in Program Name and Code.', type: 'error' });
+      return;
+    }
+
+    const selectedCode = departmentCode || resolveDepartmentCode();
+    const selectedDepartment = departments.find((d) => d.code === selectedCode);
+    if (!selectedDepartment) {
+      showToast({ message: 'Department not found.', type: 'error' });
+      return;
+    }
+
+    const createProgramAsync = async () => {
+      try {
+        setIsCreatingProgram(true);
+
+        const coursePayload = {
+          departmentId: selectedDepartment.id,
+          name: programFormData.programName,
+          code: programFormData.programCode,
+          description: programFormData.programDescription || null,
+        };
+
+        const createdCourse = await apiService.createCourse(coursePayload);
+        console.log('Program created:', createdCourse);
+
+        // Update local courses list
+        setCourses(prev => [...prev, createdCourse]);
+
+        // Reset form
+        setProgramFormData({ programName: '', programCode: '', programDescription: '' });
+        setShowProgramForm(false);
+
+        showToast({ 
+          message: `Program "${programFormData.programName}" created successfully.`, 
+          type: 'success' 
+        });
+      } catch (err) {
+        console.error('Failed to create program:', err);
+        const message =
+          err.response?.data?.message ||
+          err.response?.data ||
+          'Failed to create program.';
+        showToast({ message, type: 'error' });
+      } finally {
+        setIsCreatingProgram(false);
+      }
+    };
+
+    void createProgramAsync();
+  };
+
   return (
     <div className={`dashboard ${isDarkMode ? 'dark' : ''}`}>
       <div className="background" style={{ backgroundImage: `url(${UPHSL})` }} />
@@ -545,19 +604,108 @@ const CourseTopic = () => {
           {/* Fields */}
           <div className="field-container">
             <label>Program</label>
-            <select value={course} onChange={(e) => setCourse(e.target.value)}>
-              <option value="">Select Program</option>
-              {isLoadingCourses ? (
-                <option disabled>Loading programs...</option>
-              ) : courses.length === 0 ? (
-                <option disabled>No programs found for this department</option>
-              ) : (
-                courses.map(c => (
-                  <option key={c.id} value={c.id}>{(c.code ? `${c.code} - ` : '') + c.name}</option>
-                ))
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
+              <select 
+                value={course} 
+                onChange={(e) => setCourse(e.target.value)}
+                style={{ flex: 1 }}
+              >
+                <option value="">Select Program</option>
+                {isLoadingCourses ? (
+                  <option disabled>Loading programs...</option>
+                ) : courses.length === 0 ? (
+                  <option disabled>No programs found for this department</option>
+                ) : (
+                  courses.map(c => (
+                    <option key={c.id} value={c.id}>{(c.code ? `${c.code} - ` : '') + c.name}</option>
+                  ))
+                )}
+              </select>
+              {isAdmin && (
+                <button 
+                  type="button"
+                  className="add-program-btn"
+                  onClick={() => setShowProgramForm(!showProgramForm)}
+                  title="Add a new program to this department"
+                >
+                  + Add Program
+                </button>
               )}
-            </select>
+            </div>
           </div>
+
+          {/* Program Creation Form (admin only) */}
+          {isAdmin && showProgramForm && (
+            <div className="program-form-section">
+              <div className="program-form-card">
+                <div className="program-form-header">
+                  <div>
+                    <p className="program-form-eyebrow">Add New Program</p>
+                    <h5>Create a program for this department</h5>
+                    <span className="program-form-subtext">Programs are the foundation for organizing course topics and questions.</span>
+                  </div>
+                  <button 
+                    type="button"
+                    className="close-program-form"
+                    onClick={() => setShowProgramForm(false)}
+                    title="Close form"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="program-form-grid">
+                  <div className="program-input-group span-2">
+                    <label>Program Name</label>
+                    <input 
+                      type="text"
+                      value={programFormData.programName}
+                      onChange={(e) => setProgramFormData({...programFormData, programName: e.target.value})}
+                      placeholder="e.g., Data Structures"
+                    />
+                    <span className="input-hint">The full name of the program.</span>
+                  </div>
+                  <div className="program-input-group">
+                    <label>Program Code</label>
+                    <input 
+                      type="text"
+                      value={programFormData.programCode}
+                      onChange={(e) => setProgramFormData({...programFormData, programCode: e.target.value})}
+                      placeholder="e.g., CS201"
+                    />
+                    <span className="input-hint">Unique code for this program.</span>
+                  </div>
+                  <div className="program-input-group span-2">
+                    <label>Description (optional)</label>
+                    <textarea 
+                      value={programFormData.programDescription}
+                      onChange={(e) => setProgramFormData({...programFormData, programDescription: e.target.value})}
+                      placeholder="Optional description of the program"
+                      rows="3"
+                    />
+                    <span className="input-hint">Add details about this program if needed.</span>
+                  </div>
+                </div>
+
+                <div className="program-form-footer">
+                  <button 
+                    type="button"
+                    className="cancel-btn"
+                    onClick={() => setShowProgramForm(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    className="program-submit-btn"
+                    onClick={handleAddProgram}
+                    disabled={isCreatingProgram}
+                  >
+                    {isCreatingProgram ? 'Creating…' : 'Create Program'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="row-fields">
             <div className="field-container half-width">

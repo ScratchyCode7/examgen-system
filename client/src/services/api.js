@@ -315,6 +315,11 @@ export const apiService = {
     return [];
   },
 
+  createCourse: async (courseData) => {
+    const response = await apiClient.post('/api/courses', courseData);
+    return response.data;
+  },
+
   // Topics by subject
   getTopics: async (subjectId) => {
     const response = await apiClient.get(`/api/topics?subjectId=${subjectId}&pageSize=500`);
