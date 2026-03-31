@@ -59,8 +59,30 @@
 
 .program-header-line .department-selector-grid {
   margin: 0;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 1rem;
+  overflow-x: auto;
+  padding-bottom: 12px;
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar styling */
+.program-header-line .department-selector-grid::-webkit-scrollbar {
+  height: 8px;
+}
+
+.program-header-line .department-selector-grid::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+
+.program-header-line .department-selector-grid::-webkit-scrollbar-thumb {
+  background: #1C4DA1;
+  border-radius: 10px;
+}
+
+.program-header-line .department-selector-grid::-webkit-scrollbar-thumb:hover {
+  background: #FFC63E;
 }
 
 .program-header-line .department-selector-card {
@@ -106,6 +128,19 @@
   border-color: #FFC63E;
   background: #1C2B45;
   box-shadow: 0 8px 24px rgba(255, 198, 62, 0.3);
+}
+
+/* Dark mode scrollbar */
+.dashboard.dark .program-header-line .department-selector-grid::-webkit-scrollbar-track {
+  background: #14202b;
+}
+
+.dashboard.dark .program-header-line .department-selector-grid::-webkit-scrollbar-thumb {
+  background: #FFC63E;
+}
+
+.dashboard.dark .program-header-line .department-selector-grid::-webkit-scrollbar-thumb:hover {
+  background: #ffffff;
 }
 
 @media (max-width: 992px) {
