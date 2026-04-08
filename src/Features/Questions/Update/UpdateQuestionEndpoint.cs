@@ -1,6 +1,7 @@
 using Databank.Abstract;
 using Databank.Common;
 using Databank.Database;
+using Databank.Entities;
 using Databank.Features.Questions;
 using Databank.Services;
 using Microsoft.EntityFrameworkCore;
@@ -69,6 +70,55 @@ public sealed class UpdateQuestionEndpoint : IEndpoint
             question.Points = request.Points;
             question.DisplayOrder = request.DisplayOrder;
             question.UpdatedAt = DateTime.UtcNow;
+
+            if (request.Options is not null)
+            {
+                var existingOptionsByOrder = question.Options
+                    .ToDictionary(o => o.DisplayOrder, o => o);
+
+                var incomingOrders = new HashSet<int>();
+
+                foreach (var opt in request.Options)
+                {
+                    incomingOrders.Add(opt.DisplayOrder);
+
+                    var optionContent = TextInputSanitizer.SanitizeRichTextHtml(opt.Content);
+                    var optionTextOnly = TextInputSanitizer.NormalizeToPlainText(optionContent);
+                    var optionHasImage = optionContent.Contains("<img", StringComparison.OrdinalIgnoreCase);
+                    if (string.IsNullOrWhiteSpace(optionTextOnly) && !optionHasImage)
+                    {
+                        return TypedResults.BadRequest("Answer choices must not be empty.");
+                    }
+
+                    if (existingOptionsByOrder.TryGetValue(opt.DisplayOrder, out var existingOption))
+                    {
+                        existingOption.Content = optionContent;
+                        existingOption.IsCorrect = opt.IsCorrect;
+                        existingOption.DisplayOrder = opt.DisplayOrder;
+                    }
+                    else
+                    {
+                        var newOption = new Option
+                        {
+                            QuestionId = question.Id,
+                            Content = optionContent,
+                            IsCorrect = opt.IsCorrect,
+                            DisplayOrder = opt.DisplayOrder
+                        };
+                        dbContext.Options.Add(newOption);
+                        question.Options.Add(newOption);
+                    }
+                }
+
+                var optionsToRemove = question.Options
+                    .Where(o => !incomingOrders.Contains(o.DisplayOrder))
+                    .ToList();
+
+                if (optionsToRemove.Count > 0)
+                {
+                    dbContext.Options.RemoveRange(optionsToRemove);
+                }
+            }
 
             await dbContext.SaveChangesAsync(ct);
 

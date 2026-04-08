@@ -352,6 +352,7 @@ public sealed class SubmitPrintRequestEndpoint : IEndpoint
                         : new
                         {
                             imagePath = tq.Question.QuestionImage.ImagePath,
+                            imageData = tq.Question.QuestionImage.ImageData,
                             widthPercentage = tq.Question.QuestionImage.WidthPercentage,
                             alignment = tq.Question.QuestionImage.Alignment
                         },

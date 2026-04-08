@@ -30,7 +30,8 @@ import TDBLogo from '../assets/TDB logo.png';
 import UPHSL from '../assets/uphsl.png'; 
 
 // --- STATIC CONFIG ---
-const dataEntryItems = ["Program - Topic", "Test Question Encoding", "Test Question Editing"];
+const dataEntryItems = ["Program - Topic", "Test Encoding", "Test Question Editing"];
+const dataEntryTabs = [...dataEntryItems, "Test Question Encoding"];
 
 // Grouped Bloom's Taxonomy Levels (mapped to backend BloomLevel enum)
 const BLOOM_LEVELS = [
@@ -72,7 +73,7 @@ const IMAGE_EDITOR_DEFAULTS = {
     saturation: 100,
     grayscale: 0,
     rotate: 0,
-    imageSize: 100,
+    imageSize: 50,
     alignment: 'Center',
 };
 
@@ -110,6 +111,8 @@ const htmlToPlainText = (value) => {
     decoder.innerHTML = stripped;
     return normalizePlainText(decoder.value);
 };
+
+const hasImageTag = (value) => /<img\s/i.test(value || '');
 
 // -----------------
 
@@ -293,14 +296,17 @@ const RichTextToolbar = ({ onFormat, onSaveRange, activeCommands, onImageEdit })
 
 // --- HeaderTitleBlock Component ---
 const HeaderTitleBlock = ({ activeTab, isDarkMode, departments, selectedDepartmentCode, onDepartmentChange }) => {
+    const visibleDepartments = departments
+        .filter((dept) => (dept.code || '').toUpperCase() !== 'ITS');
+    const isScrollable = visibleDepartments.length > 5;
+
     return (
         <div className="header-section">
             <h1 className="page-title">{activeTab}</h1> 
             <hr className="header-separator-line" /> 
             <div className={`college-title-block centered-only ${isDarkMode ? 'dark' : ''}`}>
-                <div className="program-grid department-selector-grid">
-                    {departments
-                        .filter((dept) => (dept.code || '').toUpperCase() !== 'ITS')
+                <div className={`program-grid department-selector-grid${isScrollable ? ' is-scrollable' : ''}`}>
+                    {visibleDepartments
                         .map((dept) => {
                         const logo = dept.code ? (DEPARTMENT_LOGOS?.[dept.code] ?? null) : null;
                         const isActive = dept.code === selectedDepartmentCode;
@@ -386,6 +392,11 @@ const TestEncodingAndEditing = () => {
     const activeSetterRef = useRef(null); 
     const searchScopeRef = useRef(null);
     const encodingFormRef = useRef(null);
+    const questionEditorRef = useRef(null);
+    const choiceAEditorRef = useRef(null);
+    const choiceBEditorRef = useRef(null);
+    const choiceCEditorRef = useRef(null);
+    const choiceDEditorRef = useRef(null);
     const [savedRange, setSavedRange] = useState(null); // The critical saved selection range
     const [activeCommands, setActiveCommands] = useState({}); // State for TOOLBAR HIGHLIGHTING
     const imageFileInputRef = useRef(null);
@@ -593,7 +604,7 @@ const TestEncodingAndEditing = () => {
         
         if (item !== activeTab) {
             // Note: Filters are retained if staying in Data Entry, cleared otherwise
-            if (!dataEntryItems.includes(item)) {
+            if (!dataEntryTabs.includes(item)) {
                 setDepartment('');
                 setCourse('');
                 setSubject('');
@@ -712,7 +723,7 @@ const TestEncodingAndEditing = () => {
         if (!imageElement) return { ...IMAGE_EDITOR_DEFAULTS };
 
         const widthMatch = /^([\d.]+)%$/.exec((imageElement.style.width || '').trim());
-        const parsedSize = widthMatch ? Number(widthMatch[1]) : 100;
+        const parsedSize = widthMatch ? Number(widthMatch[1]) : 50;
 
         const savedAlignment = imageElement.dataset?.alignment;
         let alignment = 'Center';
@@ -730,7 +741,7 @@ const TestEncodingAndEditing = () => {
 
         return {
             ...IMAGE_EDITOR_DEFAULTS,
-            imageSize: Math.max(20, Math.min(100, Number.isFinite(parsedSize) ? parsedSize : 100)),
+            imageSize: Math.max(20, Math.min(100, Number.isFinite(parsedSize) ? parsedSize : 50)),
             alignment,
         };
     };
@@ -893,7 +904,7 @@ const TestEncodingAndEditing = () => {
     };
 
     const getFinalImageSizePercent = (imageSizePercent, shouldCrop, selection) => {
-        const baseSize = Math.max(20, Math.min(100, Number(imageSizePercent) || 100));
+        const baseSize = Math.max(20, Math.min(100, Number(imageSizePercent) || 50));
         if (!shouldCrop) return baseSize;
         const cropWidthScale = Math.max(0.1, Math.min(1, (selection?.width || 100) / 100));
         return Math.max(10, Math.round(baseSize * cropWidthScale));
@@ -918,7 +929,7 @@ const TestEncodingAndEditing = () => {
         }
     };
 
-    const insertImageAtCaret = (imageUrl, imageSizePercent = 100, shouldCrop = false, cropRect = null) => {
+    const insertImageAtCaret = (imageUrl, imageSizePercent = 50, shouldCrop = false, cropRect = null) => {
         const currentRef = activeEditableRef.current;
         if (!currentRef) return false;
 
@@ -1081,10 +1092,26 @@ const TestEncodingAndEditing = () => {
                     activeSetterRef.current(activeEditableRef.current.innerHTML);
                 }
             } else {
-                const inserted = insertImageAtCaret(editedImageUrl, imageEditorSettings.imageSize, isCropApplied, cropSelection);
-                if (!inserted) {
-                    showToast({ message: 'Click inside a content field first.', type: 'info' });
-                    return;
+                const currentEditable = activeEditableRef.current;
+                const existingImage = currentEditable?.querySelector('img') || null;
+                if (currentEditable && existingImage) {
+                    existingImage.src = editedImageUrl;
+                    applyImagePresentation(existingImage, {
+                        imageSizePercent: imageEditorSettings.imageSize,
+                        shouldCrop: isCropApplied,
+                        cropRect: cropSelection,
+                        alignment: imageEditorSettings.alignment,
+                        originalSource: getOriginalImageSourceFromElement(existingImage) || originalImageSource || imageEditorSource,
+                    });
+                    if (activeSetterRef.current) {
+                        activeSetterRef.current(currentEditable.innerHTML);
+                    }
+                } else {
+                    const inserted = insertImageAtCaret(editedImageUrl, imageEditorSettings.imageSize, isCropApplied, cropSelection);
+                    if (!inserted) {
+                        showToast({ message: 'Click inside a content field first.', type: 'info' });
+                        return;
+                    }
                 }
             }
 
@@ -1644,18 +1671,32 @@ const TestEncodingAndEditing = () => {
     
     // Handles both 'Add' and 'Save Edit' with backend API
     const handleAction = async () => { 
+        const questionHtml = questionEditorRef.current?.innerHTML ?? questionText;
+        const choiceAHtml = choiceAEditorRef.current?.innerHTML ?? choiceA;
+        const choiceBHtml = choiceBEditorRef.current?.innerHTML ?? choiceB;
+        const choiceCHtml = choiceCEditorRef.current?.innerHTML ?? choiceC;
+        const choiceDHtml = choiceDEditorRef.current?.innerHTML ?? choiceD;
+
         // 1. Validation 
-        const normalizedQuestionText = normalizePlainText(htmlToPlainText(questionText), { trimEdges: true });
-        const normalizedChoiceA = normalizePlainText(htmlToPlainText(choiceA), { trimEdges: true });
-        const normalizedChoiceB = normalizePlainText(htmlToPlainText(choiceB), { trimEdges: true });
-        const normalizedChoiceC = normalizePlainText(htmlToPlainText(choiceC), { trimEdges: true });
-        const normalizedChoiceD = normalizePlainText(htmlToPlainText(choiceD), { trimEdges: true });
+        const normalizedQuestionText = normalizePlainText(htmlToPlainText(questionHtml), { trimEdges: true });
+        const normalizedChoiceA = normalizePlainText(htmlToPlainText(choiceAHtml), { trimEdges: true });
+        const normalizedChoiceB = normalizePlainText(htmlToPlainText(choiceBHtml), { trimEdges: true });
+        const normalizedChoiceC = normalizePlainText(htmlToPlainText(choiceCHtml), { trimEdges: true });
+        const normalizedChoiceD = normalizePlainText(htmlToPlainText(choiceDHtml), { trimEdges: true });
+
+        const choiceAHasImage = hasImageTag(choiceAHtml);
+        const choiceBHasImage = hasImageTag(choiceBHtml);
+        const choiceCHasImage = hasImageTag(choiceCHtml);
+        const choiceDHasImage = hasImageTag(choiceDHtml);
 
         if (!topic || !bloomLevel || !normalizedQuestionText || !correctAnswer) { 
             showToast({ message: 'Fill all required fields (Topic, Bloom Level, Question Text, Answer).', type: 'error' }); 
             return; 
         }
-        if (!normalizedChoiceA || !normalizedChoiceB || !normalizedChoiceC || !normalizedChoiceD) {
+        if ((!normalizedChoiceA && !choiceAHasImage)
+            || (!normalizedChoiceB && !choiceBHasImage)
+            || (!normalizedChoiceC && !choiceCHasImage)
+            || (!normalizedChoiceD && !choiceDHasImage)) {
             showToast({ message: 'All four choices (A, B, C, D) must be filled.', type: 'error' });
             return;
         }
@@ -1676,16 +1717,16 @@ const TestEncodingAndEditing = () => {
         // 2. Create the question payload for the backend
         const questionData = { 
             topicId: Number(topic),
-            content: questionText,
+            content: questionHtml,
             questionType: 'MultipleChoice',
             bloomLevel: backendBloomLevel, // Mapped to individual backend enum: Remember, Understand, Apply, Analyze, Evaluate, Create
             points: 1,
             displayOrder: 0,
             options: [
-                { questionId: 0, content: choiceA, isCorrect: correctIndex === 0, displayOrder: 0 },
-                { questionId: 0, content: choiceB, isCorrect: correctIndex === 1, displayOrder: 1 },
-                { questionId: 0, content: choiceC, isCorrect: correctIndex === 2, displayOrder: 2 },
-                { questionId: 0, content: choiceD, isCorrect: correctIndex === 3, displayOrder: 3 }
+                { questionId: 0, content: choiceAHtml, isCorrect: correctIndex === 0, displayOrder: 0 },
+                { questionId: 0, content: choiceBHtml, isCorrect: correctIndex === 1, displayOrder: 1 },
+                { questionId: 0, content: choiceCHtml, isCorrect: correctIndex === 2, displayOrder: 2 },
+                { questionId: 0, content: choiceDHtml, isCorrect: correctIndex === 3, displayOrder: 3 }
             ]
         };
         
@@ -1822,7 +1863,7 @@ const TestEncodingAndEditing = () => {
 
     // Navigation helpers
     const reportItems = ["Test Generation", "Saved Exam Sets"];
-    const isDataEntryActive = dataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
+    const isDataEntryActive = dataEntryTabs.includes(activeTab) || activeTab === 'Data Entry';
     const isReportsActive = reportItems.includes(activeTab) || activeTab === 'Reports';
 
     // -----------------
@@ -2080,12 +2121,13 @@ const TestEncodingAndEditing = () => {
                             isActive={isDataEntryActive}
                             dropdownItems={dataEntryItems}
                             onSelect={(item) => {
-                                handleSetActiveTab(item);
+                                const targetTab = item === 'Test Encoding' ? 'Test Question Encoding' : item;
+                                handleSetActiveTab(targetTab);
                                 const deptCode = getActiveDepartmentCode();
                                 if (item === 'Program - Topic') {
                                     navigate(`/course-topic/${deptCode}`);
-                                } else if (item === 'Test Question Encoding' || item === 'Test Question Editing') {
-                                    navigate(`/test-encoding/${deptCode}`, { state: { activeTab: item } });
+                                } else if (item === 'Test Encoding' || item === 'Test Question Editing') {
+                                    navigate(`/test-encoding/${deptCode}`, { state: { activeTab: targetTab } });
                                 }
                             }}
                         />
@@ -2265,6 +2307,7 @@ const TestEncodingAndEditing = () => {
                                     activeCommands={getToolbarActiveCommands(setQuestionText)} 
                                 />
                                 <div 
+                                    ref={questionEditorRef}
                                     contentEditable="true" 
                                     className={questionText?'content-editable-area':'content-editable-area placeholder-active'} 
                                     data-placeholder="Enter question text..." 
@@ -2292,6 +2335,7 @@ const TestEncodingAndEditing = () => {
                                                 activeCommands={getToolbarActiveCommands(setter)} 
                                             />
                                             <div 
+                                                                ref={[choiceAEditorRef, choiceBEditorRef, choiceCEditorRef, choiceDEditorRef][index]}
                                                 contentEditable="true" 
                                                 className={content?'content-editable-area':'content-editable-area placeholder-active'} 
                                                 data-placeholder={`Enter choice ${ch}...`} 

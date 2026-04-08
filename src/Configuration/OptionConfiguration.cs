@@ -19,7 +19,7 @@ public sealed class OptionConfiguration : IEntityTypeConfiguration<Option>
 
         builder.Property(x => x.Content)
             .IsRequired()
-            .HasMaxLength(1000);
+            .HasColumnType("text");
 
         builder.Property(x => x.IsCorrect)
             .HasDefaultValue(false);

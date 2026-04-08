@@ -13,6 +13,7 @@ public static class QuestionMappings
             imageDto = new QuestionImageDto(
                 question.QuestionImage.Id,
                 question.QuestionImage.ImagePath,
+                question.QuestionImage.ImageData,
                 question.QuestionImage.WidthPercentage,
                 question.QuestionImage.Alignment
             );

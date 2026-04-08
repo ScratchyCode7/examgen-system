@@ -167,11 +167,11 @@
 ```bash
 ASPNETCORE_ENVIRONMENT=Production
 ASPNETCORE_URLS=http://+:10000
-ConnectionStrings__PostgresConnection=Host=ep-mute-truth-a165te2i-pooler.ap-southeast-1.aws.neon.tech;Port=5432;Database=neondb;Username=neondb_owner;Password=npg_V2frLZd0zjqM;SSL Mode=Require;Trust Server Certificate=true
-FRONTEND_URL=https://test-databank-system.vercel.app
-Jwt__Audience=TestDatabankUsers
-Jwt__Issuer=TestDatabank
-Jwt__SigningKey=9WXz/AjoET+7qqSoqsEllrRDYTzhRVezrATNh4utEJY9wgXy0GiA+H1FED3c9Kh9Xk+4JLvkXk3h2N1yPkIRhA==
+ConnectionStrings__PostgresConnection=Host=<neon-host>;Port=5432;Database=<db>;Username=<user>;Password=<password>;SSL Mode=Require;Trust Server Certificate=true
+FRONTEND_URL=https://<your-frontend>.vercel.app
+Jwt__Audience=<audience>
+Jwt__Issuer=<issuer>
+Jwt__SigningKey=<generate-secure-key>
 ```
 
 ### Vercel Frontend Environment
@@ -181,10 +181,10 @@ REACT_APP_API_BASE_URL=https://examgen-system.onrender.com
 
 ### Neon Database Configuration
 ```
-Host: ep-mute-truth-a165te2i-pooler.ap-southeast-1.aws.neon.tech
+Host: <neon-host>
 Port: 5432
-Database: neondb
-Username: neondb_owner
+Database: <db>
+Username: <user>
 SSL Mode: Require
 ```
 

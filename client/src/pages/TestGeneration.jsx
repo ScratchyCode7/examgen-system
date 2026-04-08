@@ -289,6 +289,7 @@ const TestGeneration = () => {
   const resolveQuestionImageUrl = React.useCallback((imagePath) => {
     if (!imagePath) return '';
     const normalizedPath = String(imagePath).replace(/\\/g, '/').replace(/^\/?api\//i, '/');
+    if (/^data:/i.test(normalizedPath)) return normalizedPath;
     if (/^https?:\/\//i.test(normalizedPath)) return normalizedPath;
 
     const normalizedBase = API_BASE_URL.replace(/\/$/, '');
@@ -1483,7 +1484,7 @@ const TestGeneration = () => {
         })
         .filter(Boolean);
 
-      const imagePath = sourceImage?.imagePath || sourceImage?.ImagePath || null;
+      const imagePath = sourceImage?.imageData || sourceImage?.ImageData || sourceImage?.imagePath || sourceImage?.ImagePath || null;
       const widthPercentage = Number(sourceImage?.widthPercentage ?? sourceImage?.WidthPercentage);
 
       return {
@@ -3778,7 +3779,7 @@ const TestGeneration = () => {
                               margin: '10px 0'
                             }}>
                               {(() => {
-                                const imagePath = image?.imagePath || image?.ImagePath;
+                                const imagePath = image?.imageData || image?.ImageData || image?.imagePath || image?.ImagePath;
                                 const imageUrl = resolveQuestionImageUrl(imagePath);
                                 if (!imageUrl) return null;
                                 return (
@@ -3892,7 +3893,7 @@ const TestGeneration = () => {
           )}
 
           {!user?.isAdmin && (
-            <div style={{ marginTop: '30px', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '20px', background: 'var(--card-bg, #fff)' }}>
+            <div className="my-print-requests-card" style={{ marginTop: '30px', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '20px', background: 'var(--card-bg, #fff)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
                 <div>
                   <h3 style={{ marginBottom: '4px' }}>My Print Requests</h3>
@@ -3914,7 +3915,7 @@ const TestGeneration = () => {
                 </div>
               ) : (
                 <div style={{ overflowX: 'auto', marginTop: '15px' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <table className="my-print-requests-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ borderBottom: '2px solid var(--border-color)' }}>
                         <th style={{ textAlign: 'left', padding: '10px' }}>Exam Set</th>
@@ -4395,7 +4396,7 @@ const TestGeneration = () => {
                     // Convert all question images to base64
                     const questionsWithImages = examToPrint.questions.map(async (q, idx) => {
                       const image = q.image || q.Image;
-                      const imagePath = image?.imagePath || image?.ImagePath;
+                      const imagePath = image?.imageData || image?.ImageData || image?.imagePath || image?.ImagePath;
                       if (imagePath) {
                         try {
                           const imageUrl = resolveQuestionImageUrl(imagePath);
@@ -4464,6 +4465,7 @@ const TestGeneration = () => {
                             .question-image-wrapper img { max-height: 400px; object-fit: contain; display: inline-block; }
                             .choices { display: flex; flex-wrap: wrap; gap: 15px; margin-left: 20px; }
                             .choice-item { font-size: 14px; flex: 1 1 calc(25% - 15px); min-width: 120px; word-wrap: break-word; white-space: normal; }
+                            .choice-item img { max-width: 120px; max-height: 80px; width: auto; height: auto; display: block; margin-top: 6px; object-fit: contain; }
                             .choice-letter { font-weight: normal; }
                             @media print {
                               body { margin: 0; padding: 10px; }

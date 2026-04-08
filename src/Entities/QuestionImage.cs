@@ -14,6 +14,11 @@ public sealed class QuestionImage
     /// Relative path to the image file (e.g., "uploads/questions/img_123.png")
     /// </summary>
     public string ImagePath { get; set; } = null!;
+
+    /// <summary>
+    /// Base64 data URL for the image (e.g., "data:image/png;base64,...")
+    /// </summary>
+    public string? ImageData { get; set; }
     
     /// <summary>
     /// Width as percentage of container (10-100)

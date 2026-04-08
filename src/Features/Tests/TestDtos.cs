@@ -73,6 +73,7 @@ public sealed record OptionResponse(
 public sealed record QuestionImageResponse(
     int Id,
     string ImagePath,
+    string? ImageData,
     int WidthPercentage,
     string Alignment
 );

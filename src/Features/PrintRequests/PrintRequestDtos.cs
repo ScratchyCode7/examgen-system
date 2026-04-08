@@ -62,6 +62,7 @@ public sealed record PrintRequestExamOptionDto(
 
 public sealed record PrintRequestExamImageDto(
     string? ImagePath,
+    string? ImageData,
     int? WidthPercentage,
     string? Alignment
 );

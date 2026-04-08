@@ -16,6 +16,7 @@ public sealed record QuestionRequest(
 public sealed record QuestionImageDto(
     int Id,
     string ImagePath,
+    string? ImageData,
     int WidthPercentage,
     string Alignment
 );

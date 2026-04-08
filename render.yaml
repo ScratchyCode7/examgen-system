@@ -25,10 +25,6 @@ services:
         sync: false # Set in dashboard
     healthCheckPath: /
     autoDeploy: true
-    disk:
-      name: uploads
-      mountPath: /app/wwwroot/uploads
-      sizeGB: 1
 
 # Note: This configuration is optional. You can also configure everything
 # through the Render dashboard web interface.

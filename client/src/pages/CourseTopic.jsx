@@ -31,6 +31,8 @@ const CourseTopic = () => {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const userMenuRef = useRef(null);
+  const departmentGridRef = useRef(null);
+  const activeDepartmentRef = useRef(null);
 
   const displayName = getUserDisplayName(user, 'User');
   const profileImageUrl = getUserProfileImageUrl(user?.profileImagePath, user?.userId);
@@ -81,6 +83,18 @@ const CourseTopic = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    const grid = departmentGridRef.current;
+    const activeCard = activeDepartmentRef.current;
+    if (!grid || !activeCard) return;
+
+    const gridRect = grid.getBoundingClientRect();
+    const activeRect = activeCard.getBoundingClientRect();
+    const targetLeft = activeCard.offsetLeft - (gridRect.width / 2) + (activeRect.width / 2);
+
+    grid.scrollTo({ left: Math.max(0, targetLeft), behavior: 'smooth' });
+  }, [departmentCode, departments.length]);
 
   // Load existing subjects that were created via this page (identified by JSON description)
   const [allSubjects, setAllSubjects] = useState([]);
@@ -562,11 +576,17 @@ const CourseTopic = () => {
                 return <p>Department not found ({selectedCode})</p>;
               }
 
+              const visibleDepartments = departments
+                .filter((dept) => (dept.code || '').toUpperCase() !== 'ITS');
+              const isScrollable = visibleDepartments.length > 5;
+
               return (
                 <div className="program-header-content">
-                  <div className="program-grid department-selector-grid">
-                    {departments
-                      .filter((dept) => (dept.code || '').toUpperCase() !== 'ITS')
+                  <div
+                    className={`program-grid department-selector-grid${isScrollable ? ' is-scrollable' : ''}`}
+                    ref={departmentGridRef}
+                  >
+                    {visibleDepartments
                       .map((dept) => {
                       const logo = dept.code ? (DEPARTMENT_LOGOS?.[dept.code] ?? null) : null;
                       const isActive = dept.code === selectedCode;
@@ -576,6 +596,7 @@ const CourseTopic = () => {
                           key={dept.id}
                           type="button"
                           className={`program-card department-selector-card ${isActive ? 'active-department-card' : ''}`}
+                          ref={isActive ? activeDepartmentRef : null}
                           onClick={() => navigate(`/course-topic/${dept.code}`)}
                           title={`${dept.code} - ${dept.name}`}
                         >

@@ -1151,6 +1151,14 @@
     flex-wrap: wrap;
 }
 
+.college-title-block .department-selector-grid.is-scrollable {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    justify-content: flex-start;
+    padding-bottom: 12px;
+    scroll-behavior: smooth;
+}
+
 .college-title-block .department-selector-card.active-department-card {
     border-color: #FFC63E;
     background: #FFF9E6;

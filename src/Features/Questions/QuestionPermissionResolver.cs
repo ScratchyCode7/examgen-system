@@ -185,6 +185,9 @@ public static class QuestionPermissionResolver
         var claimValue = user.FindFirstValue(ClaimTypes.NameIdentifier)
             ?? user.FindFirst("sub")?.Value
             ?? user.FindFirst("userId")?.Value
+            ?? user.FindFirst("UserId")?.Value
+            ?? user.FindFirst("userid")?.Value
+            ?? user.FindFirst("user_id")?.Value
             ?? user.FindFirst("nameid")?.Value
             ?? user.FindFirst("uid")?.Value;
 

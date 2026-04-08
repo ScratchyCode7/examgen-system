@@ -57,6 +57,7 @@ const loadImageAsDataUrl = (src) => new Promise((resolve, reject) => {
 const resolveQuestionImageUrl = (imagePath) => {
   if (!imagePath) return '';
   const normalizedPath = String(imagePath).replace(/\\/g, '/').replace(/^\/?api\//i, '/');
+  if (/^data:/i.test(normalizedPath)) return normalizedPath;
   if (/^https?:\/\//i.test(normalizedPath)) return normalizedPath;
 
   const normalizedBase = API_BASE_URL.replace(/\/$/, '');
@@ -624,11 +625,11 @@ const SavedExamsReport = () => {
     const processedQuestions = await Promise.all(
       orderedQuestions.map(async (question) => {
         const image = question?.image || question?.Image || null;
-        if (!image?.imagePath && !image?.ImagePath) {
+        if (!image?.imageData && !image?.ImageData && !image?.imagePath && !image?.ImagePath) {
           return { ...question, imageSrc: '' };
         }
 
-        const path = image.imagePath || image.ImagePath;
+        const path = image.imageData || image.ImageData || image.imagePath || image.ImagePath;
         const resolvedUrl = resolveQuestionImageUrl(path);
 
         try {
@@ -1125,7 +1126,7 @@ const SavedExamsReport = () => {
           </div>
 
           <div className="saved-exams-layout" style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '20px' }}>
-            <div className="saved-exams-list" style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '16px', background: 'var(--card-bg)' }}>
+            <div className="saved-exams-list saved-exams-list-card" style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '16px', background: 'var(--card-bg)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                 <h3 style={{ margin: 0 }}>Saved Sets</h3>
                 {isLoadingSavedSets && <span style={{ fontSize: '12px' }}>Loading...</span>}
@@ -1162,7 +1163,7 @@ const SavedExamsReport = () => {
               )}
             </div>
 
-            <div className="saved-exam-detail" style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '20px', background: 'var(--card-bg)', minHeight: '480px' }}>
+            <div className="saved-exam-detail saved-exam-detail-card" style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '20px', background: 'var(--card-bg)', minHeight: '480px' }}>
               {isLoadingExamDetail ? (
                 <p>Loading exam details...</p>
               ) : !selectedExam ? (
@@ -1238,7 +1239,7 @@ const SavedExamsReport = () => {
                           // Sort options by displayOrder to ensure A, B, C, D order
                           const options = getOrderedOptions(question.options || []);
                           const image = question.image || question.Image || null;
-                          const imagePath = image?.imagePath || image?.ImagePath;
+                          const imagePath = image?.imageData || image?.ImageData || image?.imagePath || image?.ImagePath;
                           const imageUrl = imagePath ? resolveQuestionImageUrl(imagePath) : '';
                           const imageWidth = image?.widthPercentage || image?.WidthPercentage || 50;
                           const imageAlignment = (image?.alignment || image?.Alignment || 'center').toLowerCase();

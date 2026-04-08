@@ -84,11 +84,19 @@ public sealed class UploadQuestionImageEndpoint : IEndpoint
             await using var stream = file.OpenReadStream();
             var imagePath = await fileStorage.SaveFileAsync(stream, file.FileName, "questions");
 
+            await using var dataStream = file.OpenReadStream();
+            await using var memoryStream = new MemoryStream();
+            await dataStream.CopyToAsync(memoryStream);
+            var base64 = Convert.ToBase64String(memoryStream.ToArray());
+            var contentType = string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType;
+            var imageData = $"data:{contentType};base64,{base64}";
+
             // Create new question image record
             var questionImage = new QuestionImage
             {
                 QuestionId = questionId,
                 ImagePath = imagePath,
+                ImageData = imageData,
                 WidthPercentage = widthPercentage,
                 Alignment = alignment,
                 CreatedAt = DateTime.UtcNow,

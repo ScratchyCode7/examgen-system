@@ -10,9 +10,19 @@ const QuestionImageUpload = forwardRef(({ questionId, existingImage, onImageUpda
   const [widthPercentage, setWidthPercentage] = useState(existingImage?.widthPercentage || 50);
   const [alignment, setAlignment] = useState(existingImage?.alignment || 'Center');
   const [isUploading, setIsUploading] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState(
-    existingImage ? `${API_BASE_URL}/${existingImage.imagePath}` : null
-  );
+  const resolvePreviewUrl = (image) => {
+    if (!image) return null;
+    const dataUrl = image.imageData || image.ImageData || image.imageDataUrl || image.ImageDataUrl;
+    if (dataUrl) return dataUrl;
+
+    const path = image.imagePath || image.ImagePath || null;
+    if (!path) return null;
+    if (/^data:/i.test(path)) return path;
+    if (/^https?:\/\//i.test(path)) return path;
+    return `${API_BASE_URL.replace(/\/$/, '')}/${String(path).replace(/^\/+/, '')}`;
+  };
+
+  const [previewUrl, setPreviewUrl] = useState(resolvePreviewUrl(existingImage));
   const [pendingFile, setPendingFile] = useState(null);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const fileInputRef = useRef(null);
@@ -32,7 +42,7 @@ const QuestionImageUpload = forwardRef(({ questionId, existingImage, onImageUpda
           alignment
         );
         setImageData(response);
-        setPreviewUrl(`${API_BASE_URL}/${response.imagePath}`);
+        setPreviewUrl(resolvePreviewUrl(response));
         setPendingFile(null);
         if (onImageUpdate) onImageUpdate(response);
         return response;
@@ -84,7 +94,7 @@ const QuestionImageUpload = forwardRef(({ questionId, existingImage, onImageUpda
           alignment
         );
         setImageData(response);
-        setPreviewUrl(`${API_BASE_URL}/${response.imagePath}`);
+        setPreviewUrl(resolvePreviewUrl(response));
         if (onImageUpdate) onImageUpdate(response);
         showToast({ message: 'Image uploaded successfully.', type: 'success' });
       } catch (error) {
@@ -139,7 +149,7 @@ const QuestionImageUpload = forwardRef(({ questionId, existingImage, onImageUpda
             alignment
           );
           setImageData(response);
-          setPreviewUrl(`${API_BASE_URL}/${response.imagePath}`);
+          setPreviewUrl(resolvePreviewUrl(response));
           if (onImageUpdate) onImageUpdate(response);
         }
       } catch (error) {
@@ -163,7 +173,7 @@ const QuestionImageUpload = forwardRef(({ questionId, existingImage, onImageUpda
             newAlignment
           );
           setImageData(response);
-          setPreviewUrl(`${API_BASE_URL}/${response.imagePath}`);
+          setPreviewUrl(resolvePreviewUrl(response));
           if (onImageUpdate) onImageUpdate(response);
         }
       } catch (error) {

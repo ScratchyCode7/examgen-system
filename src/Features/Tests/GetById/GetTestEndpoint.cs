@@ -39,6 +39,7 @@ public sealed class GetTestEndpoint : IEndpoint
                         image = new QuestionImageResponse(
                             tq.Question.QuestionImage.Id,
                             tq.Question.QuestionImage.ImagePath,
+                            tq.Question.QuestionImage.ImageData,
                             tq.Question.QuestionImage.WidthPercentage,
                             tq.Question.QuestionImage.Alignment);
                     }

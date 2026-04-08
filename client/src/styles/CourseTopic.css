@@ -63,6 +63,14 @@
   gap: 1rem;
 }
 
+.program-header-line .department-selector-grid.is-scrollable {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  justify-content: flex-start;
+  padding-bottom: 12px;
+  scroll-behavior: smooth;
+}
+
 .program-header-line .department-selector-card {
   width: 260px;
   min-height: 260px;

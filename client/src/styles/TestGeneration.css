@@ -1514,6 +1514,39 @@
   color: #000;
 }
 
+/* Keep sample exam preview in light mode even when the page is dark */
+.dashboard.dark .sample-exam .exam-paper {
+  background: #ffffff;
+  color: #000000;
+}
+
+.dashboard.dark .sample-exam .university-header h2,
+.dashboard.dark .sample-exam .university-header p,
+.dashboard.dark .sample-exam .exam-instructions,
+.dashboard.dark .sample-exam .exam-instructions p,
+.dashboard.dark .sample-exam .question-number-text,
+.dashboard.dark .sample-exam .question-options,
+.dashboard.dark .sample-exam .option-line,
+.dashboard.dark .sample-exam .option-letter,
+.dashboard.dark .sample-exam .option-text,
+.dashboard.dark .sample-exam .program-info,
+.dashboard.dark .sample-exam .course-info,
+.dashboard.dark .sample-exam .exam-date {
+  color: #000000;
+}
+
+.dashboard.dark .sample-exam .form-line {
+  border-bottom-color: #000000;
+}
+
+.dashboard.dark .sample-exam .form-field label {
+  color: #000000;
+}
+
+.dashboard.dark .sample-exam .form-field {
+  color: #000000;
+}
+
 .exam-header {
   display: flex;
   align-items: center;
@@ -1652,6 +1685,16 @@
   overflow-wrap: break-word;
 }
 
+.option-text img {
+  max-width: 120px;
+  max-height: 80px;
+  width: auto;
+  height: auto;
+  display: block;
+  margin-top: 6px;
+  object-fit: contain;
+}
+
 .total-questions {
   margin-top: 2rem;
   text-align: center;
@@ -1689,6 +1732,14 @@
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
     color-adjust: exact;
+  }
+
+  .option-text img {
+    max-width: 120px !important;
+    max-height: 80px !important;
+    width: auto !important;
+    height: auto !important;
+    display: block !important;
   }
 
   .sample-exam h3 {
@@ -1745,6 +1796,119 @@
 .dashboard.dark .exam-modal-title {
   color: #93c5fd;
 }
+
+/* My Print Requests (dark mode) */
+.dashboard.dark .my-print-requests-card {
+  background: #0f172a !important;
+  border-color: #263244;
+  color: #e5e7eb;
+}
+
+.dashboard.dark .my-print-requests-card h3,
+.dashboard.dark .my-print-requests-card p,
+.dashboard.dark .my-print-requests-card .subtitle {
+  color: #e5e7eb;
+}
+
+.dashboard.dark .my-print-requests-card table {
+  color: #e5e7eb;
+}
+
+.dashboard.dark .my-print-requests-card thead tr {
+  background: #1e293b;
+  border-bottom-color: #334155;
+}
+
+.dashboard.dark .my-print-requests-card th,
+.dashboard.dark .my-print-requests-card td {
+  border-bottom-color: #263244;
+  color: #e5e7eb;
+}
+
+.dashboard.dark .my-print-requests-card td[style*="var(--text-muted)"] {
+  color: #94a3b8 !important;
+}
+
+/* Saved Exam Sets (dark mode) */
+.dashboard.dark .saved-exams-list-card,
+.dashboard.dark .saved-exam-detail-card {
+  background: #0f172a !important;
+  border-color: #263244 !important;
+  color: #e5e7eb;
+}
+
+.dashboard.dark .saved-exams-list-card h3,
+.dashboard.dark .saved-exam-detail-card h3,
+.dashboard.dark .saved-exam-detail-card p,
+.dashboard.dark .saved-exams-list-card p {
+  color: #e5e7eb;
+}
+
+.dashboard.dark .saved-exams-list-card p[style*="var(--text-muted)"],
+.dashboard.dark .saved-exam-detail-card p[style*="var(--text-muted)"] {
+  color: #94a3b8 !important;
+}
+
+.dashboard.dark .saved-exam-row {
+  border-color: #263244 !important;
+  background-color: transparent !important;
+  color: #e5e7eb;
+}
+
+.dashboard.dark .saved-exam-row:hover {
+  background-color: #1e293b !important;
+}
+
+.dashboard.dark .saved-exam-row.active {
+  background-color: rgba(59, 130, 246, 0.2) !important;
+  border-color: #3b82f6 !important;
+}
+
+.my-print-requests-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #ffffff;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.my-print-requests-table th,
+.my-print-requests-table td {
+  padding: 0.9rem 1rem;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.my-print-requests-table thead tr {
+  background: #1C4DA1;
+  color: #ffffff;
+}
+
+.my-print-requests-table tbody tr:hover {
+  background: #f8fafd;
+}
+
+.dashboard.dark .my-print-requests-table {
+  background: #14202b;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.dashboard.dark .my-print-requests-table th,
+.dashboard.dark .my-print-requests-table td {
+  border-bottom-color: #263244;
+  color: #e5e7eb;
+}
+
+.dashboard.dark .my-print-requests-table thead tr {
+  background: #1C4DA1;
+}
+
+.dashboard.dark .my-print-requests-table tbody tr:hover {
+  background: #1e293b;
+}
+
 
 .exam-modal-body {
   color: #44506a;

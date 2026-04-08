@@ -12,6 +12,7 @@ public sealed record QuestionImageResponse(
     int Id,
     int QuestionId,
     string ImagePath,
+    string? ImageData,
     int WidthPercentage,
     string Alignment
 );
@@ -25,6 +26,7 @@ public static class QuestionImageMappings
             image.Id,
             image.QuestionId,
             image.ImagePath,
+            image.ImageData,
             image.WidthPercentage,
             image.Alignment
         );

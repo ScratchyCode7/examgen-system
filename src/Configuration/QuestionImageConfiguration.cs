@@ -21,6 +21,9 @@ public sealed class QuestionImageConfiguration : IEntityTypeConfiguration<Questi
             .IsRequired()
             .HasMaxLength(500);
 
+        builder.Property(x => x.ImageData)
+            .HasColumnType("text");
+
         builder.Property(x => x.WidthPercentage)
             .IsRequired()
             .HasDefaultValue(50);

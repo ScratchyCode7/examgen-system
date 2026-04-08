@@ -83,7 +83,8 @@ public sealed class CreateQuestionEndpoint : IEndpoint
                 {
                     var optionContent = TextInputSanitizer.SanitizeRichTextHtml(opt.Content);
                     var optionTextOnly = TextInputSanitizer.NormalizeToPlainText(optionContent);
-                    if (string.IsNullOrWhiteSpace(optionTextOnly))
+                    var optionHasImage = optionContent.Contains("<img", StringComparison.OrdinalIgnoreCase);
+                    if (string.IsNullOrWhiteSpace(optionTextOnly) && !optionHasImage)
                     {
                         return TypedResults.BadRequest("Answer choices must not be empty.");
                     }
