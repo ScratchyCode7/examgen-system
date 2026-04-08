@@ -83,7 +83,7 @@ const SavedExamsReport = () => {
   const userMenuRef = useRef(null);
 
   const displayName = getUserDisplayName(user, 'User');
-  const profileImageUrl = getUserProfileImageUrl(user?.profileImagePath, user?.userId);
+  const profileImageUrl = user?.profileImageData || getUserProfileImageUrl(user?.profileImagePath, user?.userId);
 
   // Filters
   const [selectedDepartment, setSelectedDepartment] = useState('');
