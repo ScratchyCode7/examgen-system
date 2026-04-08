@@ -35,7 +35,7 @@ const AccountSettings = () => {
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
 
   const displayName = getUserDisplayName(user, 'User');
-  const profileImageUrl = getUserProfileImageUrl(user?.profileImagePath, user?.userId);
+  const profileImageUrl = user?.profileImageData || getUserProfileImageUrl(user?.profileImagePath, user?.userId);
   const userMenuRef = React.useRef(null);
 
   const dataEntryItems = ['Program - Topic', 'Test Encoding', 'Test Question Editing'];
@@ -58,6 +58,7 @@ const AccountSettings = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [profileImagePath, setProfileImagePath] = useState('');
+  const [profileImageData, setProfileImageData] = useState('');
   const [selectedImageFile, setSelectedImageFile] = useState(null);
   const [selectedImagePreview, setSelectedImagePreview] = useState('');
 
@@ -84,6 +85,7 @@ const AccountSettings = () => {
         setUsername(profile.username || '');
         setEmail(profile.email || '');
         setProfileImagePath(profile.profileImagePath || '');
+        setProfileImageData(profile.profileImageData || '');
       } catch (error) {
         if (!isDisposed) {
           showToast({
@@ -143,9 +145,10 @@ const AccountSettings = () => {
 
   const currentImageSrc = useMemo(() => {
     if (selectedImagePreview) return selectedImagePreview;
+    if (profileImageData) return profileImageData;
     if (profileImagePath) return toAbsoluteImageUrl(profileImagePath);
     return '';
-  }, [selectedImagePreview, profileImagePath]);
+  }, [selectedImagePreview, profileImageData, profileImagePath]);
 
   const validate = () => {
     const nextErrors = {};
@@ -217,6 +220,7 @@ const AccountSettings = () => {
       const nextProfile = persistedProfile || updated;
 
       setProfileImagePath(nextProfile.profileImagePath || profileImagePath);
+      setProfileImageData(nextProfile.profileImageData || '');
       setSelectedImageFile(null);
       setSelectedImagePreview('');
       setNewPassword('');
@@ -228,6 +232,7 @@ const AccountSettings = () => {
         username: nextProfile.username || user?.username || '',
         email: nextProfile.email || user?.email || '',
         profileImagePath: nextProfile.profileImagePath || null,
+        profileImageData: nextProfile.profileImageData || null,
       });
 
       showToast({ type: 'success', message: 'Account updated successfully.' });
@@ -455,6 +460,7 @@ const AccountSettings = () => {
                       value={newPassword}
                       onChange={(event) => setNewPassword(event.target.value)}
                       placeholder="Leave blank to keep current password"
+                      autoComplete="new-password"
                     />
                     <button
                       type="button"
@@ -476,6 +482,7 @@ const AccountSettings = () => {
                       value={confirmPassword}
                       onChange={(event) => setConfirmPassword(event.target.value)}
                       placeholder="Confirm your new password"
+                      autoComplete="new-password"
                     />
                     <button
                       type="button"

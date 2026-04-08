@@ -40,6 +40,10 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .HasMaxLength(500)
             .IsRequired(false);
 
+        builder.Property(x => x.ProfileImageData)
+            .HasColumnType("text")
+            .IsRequired(false);
+
         builder.Property(x => x.Email)
             .IsRequired()
             .HasMaxLength(150);

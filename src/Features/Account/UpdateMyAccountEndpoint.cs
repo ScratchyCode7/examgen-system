@@ -114,6 +114,15 @@ public sealed class UpdateMyAccountEndpoint : IEndpoint
                 }
 
                 user.ProfileImagePath = newPath;
+
+                // Also encode to base64 for database backup (persistent across container restarts)
+                stream.Position = 0;
+                using var memoryStream = new MemoryStream();
+                await stream.CopyToAsync(memoryStream, ct);
+                var imageBytes = memoryStream.ToArray();
+                var base64String = Convert.ToBase64String(imageBytes);
+                var mimeType = profileImage.ContentType ?? "image/jpeg";
+                user.ProfileImageData = $"data:{mimeType};base64,{base64String}";
             }
 
             user.UpdatedAt = DateTime.UtcNow;

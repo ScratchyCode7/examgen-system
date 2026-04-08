@@ -8,6 +8,7 @@ public sealed record AccountProfileResponse(
     string Email,
     string Username,
     string? ProfileImagePath,
+    string? ProfileImageData,
     bool IsAdmin,
     DateTime UpdatedAt
 );

@@ -5,6 +5,7 @@ public sealed record UserResponse(
     string FirstName,
     string LastName,
     string? ProfileImagePath,
+    string? ProfileImageData,
     [property: Obsolete("Use DepartmentIds instead")] int? DepartmentId,
     int[] DepartmentIds,
     string Username,

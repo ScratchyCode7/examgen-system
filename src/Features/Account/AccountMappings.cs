@@ -16,6 +16,7 @@ public static class AccountMappings
             user.Email,
             user.Username,
             user.ProfileImagePath,
+            user.ProfileImageData,
             user.IsAdmin,
             user.UpdatedAt
         );

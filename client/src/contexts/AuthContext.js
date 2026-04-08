@@ -77,6 +77,7 @@ export const AuthProvider = ({ children }) => {
         firstName: '', // Will need to fetch from API if needed
         lastName: '',  // Will need to fetch from API if needed
         profileImagePath: null,
+        profileImageData: null,
         isAdmin: payload.isAdmin === 'true' || payload.isAdmin === true,
         departmentIds: departmentIds,
         departmentId: departmentIds[0] || null, // Legacy: keep first department for backward compatibility
@@ -93,6 +94,7 @@ export const AuthProvider = ({ children }) => {
         userData.username = myAccount.username || userData.username;
         userData.email = myAccount.email || userData.email;
         userData.profileImagePath = myAccount.profileImagePath || userData.profileImagePath;
+        userData.profileImageData = myAccount.profileImageData || userData.profileImageData;
       } catch (err) {
         console.warn('Could not fetch account profile:', err);
       }
@@ -104,6 +106,7 @@ export const AuthProvider = ({ children }) => {
           userData.firstName = fullUser.firstName || userData.firstName || '';
           userData.lastName = fullUser.lastName || userData.lastName || '';
           userData.profileImagePath = fullUser.profileImagePath || userData.profileImagePath || null;
+          userData.profileImageData = fullUser.profileImageData || userData.profileImageData || null;
           userData.departmentIds = normalizeDepartmentIds(fullUser.departmentIds) || userData.departmentIds;
           userData.departmentId = fullUser.departmentId || userData.departmentIds[0] || null;
         } catch (err) {
