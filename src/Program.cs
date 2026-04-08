@@ -16,6 +16,16 @@ using SessionOptions = Databank.Options.SessionOptions;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Disable file watching on configuration to prevent inotify limit issues on container platforms like Render
+if (!builder.Environment.IsDevelopment())
+{
+    foreach (var source in builder.Configuration.Sources.OfType<Microsoft.Extensions.Configuration.Json.JsonConfigurationSource>())
+    {
+        source.ReloadOnChange = false;
+    }
+    Console.WriteLine("✓ File change monitoring disabled for production environment");
+}
+
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("PostgresConnection"))
 );
