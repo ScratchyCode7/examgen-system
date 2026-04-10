@@ -166,6 +166,39 @@ export const apiService = {
     return response.data;
   },
 
+  createSubjectEditRequest: async (subjectId, message) => {
+    const response = await apiClient.post(`/api/subjects/${subjectId}/edit-requests`, {
+      message,
+    });
+    return response.data;
+  },
+
+  getSubjectEditRequests: async (scope = 'inbox') => {
+    const response = await apiClient.get(`/api/subjects/edit-requests?scope=${encodeURIComponent(scope)}`);
+    return response.data;
+  },
+
+  resolveSubjectEditRequest: async (requestId, approve, canDelete = false, note) => {
+    const response = await apiClient.post(`/api/subjects/edit-requests/${requestId}/resolve`, {
+      approve,
+      canDelete,
+      note,
+    });
+    return response.data;
+  },
+
+  revokeSubjectEditPermission: async (requestId, note = '') => {
+    const response = await apiClient.post(`/api/subjects/edit-requests/${requestId}/revoke`, {
+      note,
+    });
+    return response.data;
+  },
+
+  dismissSubjectEditRequest: async (requestId) => {
+    const response = await apiClient.post(`/api/subjects/edit-requests/${requestId}/dismiss`);
+    return response.data;
+  },
+
   // Questions
   getQuestions: async (params = {}) => {
     const queryParams = new URLSearchParams();

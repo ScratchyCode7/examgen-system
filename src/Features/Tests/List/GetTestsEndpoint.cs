@@ -3,6 +3,7 @@ using Databank.Common;
 using Databank.Database;
 using Databank.Entities;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace Databank.Features.Tests.List;
 
@@ -18,12 +19,29 @@ public sealed class GetTestsEndpoint : IEndpoint
                 string? semester = null,
                 string? schoolYear = null,
                 bool includeDrafts = false,
+                HttpContext httpContext = null!,
                 AppDbContext dbContext = null!,
                 CancellationToken ct = default) =>
         {
+            var isAdmin = httpContext.User.HasClaim("isAdmin", "true");
+            var userIdValue = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? httpContext.User.FindFirst("sub")?.Value
+                ?? httpContext.User.FindFirst("userId")?.Value;
+            var hasUserId = Guid.TryParse(userIdValue, out var actingUserId);
+
+            if (!isAdmin && !hasUserId)
+            {
+                return TypedResults.Unauthorized();
+            }
+
             var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
             IQueryable<Test> query = dbContext.Tests
                 .AsNoTracking();
+
+            if (!isAdmin)
+            {
+                query = query.Where(t => t.CreatedByUserId == actingUserId);
+            }
 
             if (!includeDrafts)
             {

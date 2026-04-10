@@ -90,7 +90,24 @@ public sealed class UpdateUserEndpoint : IEndpoint
 
             if (request.IsActive.HasValue)
             {
+                if (!request.IsActive.Value)
+                {
+                    var actingUserIdValue = httpContext.User.FindFirstValue(JwtRegisteredClaimNames.Sub)
+                        ?? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+                    if (Guid.TryParse(actingUserIdValue, out var actingUserId) && actingUserId == userId)
+                    {
+                        return TypedResults.BadRequest("Admins cannot lock their own account.");
+                    }
+                }
+
                 user.IsActive = request.IsActive.Value;
+
+                if (request.IsActive.Value)
+                {
+                    user.FailedLoginAttempts = 0;
+                    user.LockoutEnd = null;
+                }
             }
 
             var isPasswordChangeRequested = !string.IsNullOrWhiteSpace(request.Password);

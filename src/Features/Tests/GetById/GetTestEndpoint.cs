@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Text.Json;
+using System.Security.Claims;
 using Databank.Abstract;
 using Databank.Database;
 using Databank.Entities;
@@ -12,8 +13,19 @@ public sealed class GetTestEndpoint : IEndpoint
 {
     public void Endpoint(IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/tests/{id:int}", async Task<IResult> (int id, AppDbContext dbContext, CancellationToken ct) =>
+        app.MapGet("/api/tests/{id:int}", async Task<IResult> (int id, HttpContext httpContext, AppDbContext dbContext, CancellationToken ct) =>
         {
+            var isAdmin = httpContext.User.HasClaim("isAdmin", "true");
+            var userIdValue = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? httpContext.User.FindFirst("sub")?.Value
+                ?? httpContext.User.FindFirst("userId")?.Value;
+            var hasUserId = Guid.TryParse(userIdValue, out var actingUserId);
+
+            if (!isAdmin && !hasUserId)
+            {
+                return TypedResults.Unauthorized();
+            }
+
             var test = await dbContext.Tests
                 .Include(t => t.TestQuestions)
                     .ThenInclude(tq => tq.Question)
@@ -27,6 +39,14 @@ public sealed class GetTestEndpoint : IEndpoint
 
             if (test is null)
                 return TypedResults.NotFound();
+
+            if (!isAdmin)
+            {
+                if (!test.CreatedByUserId.HasValue || test.CreatedByUserId.Value != actingUserId)
+                {
+                    return TypedResults.Forbid();
+                }
+            }
 
             var questionResponses = test.TestQuestions
                 .OrderBy(tq => tq.DisplayOrder)

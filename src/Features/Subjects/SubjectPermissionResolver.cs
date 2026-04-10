@@ -1,74 +1,73 @@
 using Databank.Database;
-using Databank.Features.Subjects;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
-namespace Databank.Features.Topics;
+namespace Databank.Features.Subjects;
 
-public static class TopicPermissionResolver
+public static class SubjectPermissionResolver
 {
     public const string RequestAction = "EditRequestCreated";
     public const string ApproveEditOnlyAction = "EditRequestApproved";
     public const string ApproveEditDeleteAction = "EditRequestApprovedWithDelete";
     public const string RejectAction = "EditRequestRejected";
     public const string RevokeAction = "EditPermissionRevoked";
-    public const string RequestEntityType = "Topic";
-    public const string ResolutionEntityType = "TopicEditRequest";
+    public const string RequestEntityType = "Subject";
+    public const string ResolutionEntityType = "SubjectEditRequest";
 
     private static readonly string[] OwnerCreationActions =
     {
         "Created",
         "Imported",
         "Seeded",
-        "TopicCreated"
+        "SubjectCreated"
     };
 
     public static async Task<Dictionary<int, Guid?>> ResolveOwnerIdsAsync(
         AppDbContext dbContext,
-        IReadOnlyCollection<int> topicIds,
+        IReadOnlyCollection<int> subjectIds,
         CancellationToken ct)
     {
-        var ownerByTopicId = topicIds
+        var ownerBySubjectId = subjectIds
             .Distinct()
             .ToDictionary(id => id, _ => (Guid?)null);
 
-        if (ownerByTopicId.Count == 0)
+        if (ownerBySubjectId.Count == 0)
         {
-            return ownerByTopicId;
+            return ownerBySubjectId;
         }
 
         var ownerRows = await dbContext.ActivityLogs
             .AsNoTracking()
             .Where(a =>
-                a.Category == "Topics" &&
+                a.Category == "Subjects" &&
                 a.EntityType == RequestEntityType &&
                 a.EntityId.HasValue &&
-                topicIds.Contains(a.EntityId.Value) &&
+                subjectIds.Contains(a.EntityId.Value) &&
                 a.UserId.HasValue &&
                 OwnerCreationActions.Contains(a.Action))
             .OrderBy(a => a.CreatedAt)
             .ThenBy(a => a.Id)
-            .Select(a => new { TopicId = a.EntityId!.Value, OwnerId = a.UserId!.Value })
+            .Select(a => new { SubjectId = a.EntityId!.Value, OwnerId = a.UserId!.Value })
             .ToListAsync(ct);
 
         foreach (var row in ownerRows)
         {
-            if (!ownerByTopicId[row.TopicId].HasValue)
+            if (!ownerBySubjectId[row.SubjectId].HasValue)
             {
-                ownerByTopicId[row.TopicId] = row.OwnerId;
+                ownerBySubjectId[row.SubjectId] = row.OwnerId;
             }
         }
 
-        return ownerByTopicId;
+        return ownerBySubjectId;
     }
 
     public static async Task<Dictionary<int, (bool CanEdit, bool CanDelete)>> ResolvePermissionsForUserAsync(
         AppDbContext dbContext,
         Guid currentUserId,
-        IReadOnlyCollection<int> topicIds,
+        IReadOnlyCollection<int> subjectIds,
         CancellationToken ct)
     {
-        var permissions = topicIds
+        var permissions = subjectIds
             .Distinct()
             .ToDictionary(id => id, _ => (CanEdit: false, CanDelete: false));
 
@@ -82,78 +81,29 @@ public static class TopicPermissionResolver
             .AnyAsync(u => u.UserId == currentUserId && u.IsAdmin, ct);
         if (isAdmin)
         {
-            foreach (var topicId in permissions.Keys.ToList())
+            foreach (var subjectId in permissions.Keys.ToList())
             {
-                permissions[topicId] = (true, true);
+                permissions[subjectId] = (true, true);
             }
 
             return permissions;
         }
 
-        var ownerByTopicId = await ResolveOwnerIdsAsync(dbContext, permissions.Keys.ToList(), ct);
-        foreach (var (topicId, ownerId) in ownerByTopicId)
+        var ownerBySubjectId = await ResolveOwnerIdsAsync(dbContext, permissions.Keys.ToList(), ct);
+        foreach (var (subjectId, ownerId) in ownerBySubjectId)
         {
             if (ownerId.HasValue && ownerId.Value == currentUserId)
             {
-                permissions[topicId] = (true, true);
+                permissions[subjectId] = (true, true);
             }
         }
 
-        var topicIdsWithoutOwnerRights = permissions
+        var remainingSubjectIds = permissions
             .Where(kvp => !kvp.Value.CanEdit)
             .Select(kvp => kvp.Key)
             .ToList();
 
-        if (topicIdsWithoutOwnerRights.Count > 0)
-        {
-            var topicToSubjectRows = await dbContext.Topics
-                .AsNoTracking()
-                .Where(t => topicIdsWithoutOwnerRights.Contains(t.Id))
-                .Select(t => new { t.Id, t.SubjectId })
-                .ToListAsync(ct);
-
-            if (topicToSubjectRows.Count > 0)
-            {
-                var subjectIds = topicToSubjectRows
-                    .Select(row => row.SubjectId)
-                    .Distinct()
-                    .ToList();
-
-                var subjectOwnerById = await SubjectPermissionResolver.ResolveOwnerIdsAsync(dbContext, subjectIds, ct);
-                foreach (var row in topicToSubjectRows)
-                {
-                    if (subjectOwnerById.TryGetValue(row.SubjectId, out var ownerId) &&
-                        ownerId.HasValue &&
-                        ownerId.Value == currentUserId)
-                    {
-                        permissions[row.Id] = (true, true);
-                    }
-                }
-
-                var subjectPermissions = await SubjectPermissionResolver.ResolvePermissionsForUserAsync(
-                    dbContext,
-                    currentUserId,
-                    subjectIds,
-                    ct);
-
-                foreach (var row in topicToSubjectRows)
-                {
-                    if (!subjectPermissions.TryGetValue(row.SubjectId, out var subjectPerms) || !subjectPerms.CanEdit)
-                    {
-                        continue;
-                    }
-
-                    permissions[row.Id] = subjectPerms.CanDelete ? (true, true) : (true, false);
-                }
-            }
-        }
-
-        var remainingTopicIds = permissions
-            .Where(kvp => !kvp.Value.CanEdit)
-            .Select(kvp => kvp.Key)
-            .ToList();
-
-        if (remainingTopicIds.Count == 0)
+        if (remainingSubjectIds.Count == 0)
         {
             return permissions;
         }
@@ -164,9 +114,9 @@ public static class TopicPermissionResolver
                 a.Action == RequestAction &&
                 a.EntityType == RequestEntityType &&
                 a.EntityId.HasValue &&
-                remainingTopicIds.Contains(a.EntityId.Value) &&
+                remainingSubjectIds.Contains(a.EntityId.Value) &&
                 a.UserId == currentUserId)
-            .Select(a => new { RequestId = (int)a.Id, TopicId = a.EntityId!.Value })
+            .Select(a => new { RequestId = (int)a.Id, SubjectId = a.EntityId!.Value })
             .ToListAsync(ct);
 
         if (requestRows.Count == 0)
@@ -174,7 +124,7 @@ public static class TopicPermissionResolver
             return permissions;
         }
 
-        var requestById = requestRows.ToDictionary(r => r.RequestId, r => r.TopicId);
+        var requestById = requestRows.ToDictionary(r => r.RequestId, r => r.SubjectId);
         var requestIds = requestRows.Select(r => r.RequestId).Distinct().ToList();
 
         var resolutionRows = await dbContext.ActivityLogs
@@ -189,33 +139,33 @@ public static class TopicPermissionResolver
             .Select(a => new { RequestId = a.EntityId!.Value, a.Action, a.CreatedAt, a.Id })
             .ToListAsync(ct);
 
-        var latestResolutionByTopicId = resolutionRows
+        var latestResolutionBySubjectId = resolutionRows
             .Where(r => requestById.ContainsKey(r.RequestId))
             .Select(r => new
             {
-                TopicId = requestById[r.RequestId],
+                SubjectId = requestById[r.RequestId],
                 r.Action,
                 r.CreatedAt,
                 r.Id
             })
-            .GroupBy(row => row.TopicId)
+            .GroupBy(row => row.SubjectId)
             .ToDictionary(
                 group => group.Key,
                 group => group.OrderByDescending(row => row.CreatedAt).ThenByDescending(row => row.Id).First());
 
-        foreach (var (topicId, resolution) in latestResolutionByTopicId)
+        foreach (var (subjectId, resolution) in latestResolutionBySubjectId)
         {
             if (resolution.Action == ApproveEditDeleteAction)
             {
-                permissions[topicId] = (true, true);
+                permissions[subjectId] = (true, true);
             }
             else if (resolution.Action == ApproveEditOnlyAction)
             {
-                permissions[topicId] = (true, false);
+                permissions[subjectId] = (true, false);
             }
             else if (resolution.Action == RevokeAction)
             {
-                permissions[topicId] = (false, false);
+                permissions[subjectId] = (false, false);
             }
         }
 

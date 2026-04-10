@@ -65,6 +65,21 @@ public sealed class UpdateQuestionEndpoint : IEndpoint
                 return TypedResults.BadRequest("Question content is required.");
             }
 
+            var normalizedIncomingQuestion = DuplicateKeyNormalizer.NormalizeQuestionHtml(sanitizedContent);
+            var existingQuestionContents = await dbContext.Questions
+                .AsNoTracking()
+                .Where(q => q.TopicId == request.TopicId && q.Id != id)
+                .Select(q => q.Content)
+                .ToListAsync(ct);
+
+            var duplicateExists = existingQuestionContents.Any(content =>
+                DuplicateKeyNormalizer.NormalizeQuestionHtml(content) == normalizedIncomingQuestion);
+
+            if (duplicateExists)
+            {
+                return TypedResults.Conflict("Duplicate question detected in this topic.");
+            }
+
             question.TopicId = request.TopicId;
             question.Content = sanitizedContent;
             question.QuestionType = request.QuestionType;

@@ -525,6 +525,17 @@
   margin: 2rem 0;
 }
 
+.program-grid.has-many-departments {
+  justify-content: flex-start;
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+
+.program-grid.has-many-departments .program-card {
+  flex: 0 0 calc(25% - 0.75rem);
+  width: auto;
+}
+
 .program-card {
   display: flex;
   flex-direction: column;
@@ -692,4 +703,20 @@
   .main-container { padding: 0 1rem 1rem; }
   .nav-left .logo { width: 64px; }
   .program-grid { grid-template-columns: repeat(2, 1fr); }
+
+  .program-grid.has-many-departments .program-card {
+    flex-basis: calc(50% - 0.5rem);
+  }
+}
+
+@media (max-width: 1100px) {
+  .program-grid.has-many-departments .program-card {
+    flex-basis: calc(33.333% - 0.67rem);
+  }
+}
+
+@media (max-width: 560px) {
+  .program-grid.has-many-departments .program-card {
+    flex-basis: 100%;
+  }
 }

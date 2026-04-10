@@ -15,6 +15,7 @@ public sealed class LoginEndpoint : IEndpoint
 {
     private const int MaxFailedAttempts = 5;
     private const int LockoutDurationMinutes = 5;
+    private const string PermanentLockMessage = "This account has been temporarly locked due to multiple incorrect login attemps please contact ITS for support.";
 
     public void Endpoint(IEndpointRouteBuilder app)
     {
@@ -45,6 +46,19 @@ public sealed class LoginEndpoint : IEndpoint
                 return TypedResults.Unauthorized();
             }
 
+            if (!user.IsActive)
+            {
+                await loggingService.LogWarningAsync(
+                    user.UserId.ToString(),
+                    "Auth",
+                    "Login Blocked - Account Locked",
+                    $"Locked account login blocked for user '{user.Username}'. {contextDetails}");
+
+                return TypedResults.Problem(
+                    detail: PermanentLockMessage,
+                    statusCode: StatusCodes.Status423Locked);
+            }
+
             if (user.LockoutEnd.HasValue && user.LockoutEnd.Value > DateTime.UtcNow)
             {
                 await loggingService.LogWarningAsync(
@@ -55,6 +69,25 @@ public sealed class LoginEndpoint : IEndpoint
 
                 return TypedResults.Problem(
                     detail: $"Too many failed attempts. Account locked until {user.LockoutEnd:O}.",
+                    statusCode: StatusCodes.Status423Locked);
+            }
+
+            if (user.LockoutEnd.HasValue && user.LockoutEnd.Value <= DateTime.UtcNow)
+            {
+                user.IsActive = false;
+                user.FailedLoginAttempts = 0;
+                user.LockoutEnd = null;
+
+                await loggingService.LogWarningAsync(
+                    user.UserId.ToString(),
+                    "Auth",
+                    "Login Blocked - Account Locked",
+                    $"User '{user.Username}' reached cooldown expiry and is now admin-unlock required. {contextDetails}");
+
+                await dbContext.SaveChangesAsync(ct);
+
+                return TypedResults.Problem(
+                    detail: PermanentLockMessage,
                     statusCode: StatusCodes.Status423Locked);
             }
 

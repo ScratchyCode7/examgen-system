@@ -1,4 +1,5 @@
 using Databank.Abstract;
+using Databank.Common;
 using Databank.Database;
 using Databank.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -23,9 +24,20 @@ public sealed class CreateCourseEndpoint : IEndpoint
                 return TypedResults.BadRequest("Department not found.");
             }
 
+            var normalizedCode = DuplicateKeyNormalizer.NormalizeKey(request.Code);
+            if (string.IsNullOrWhiteSpace(normalizedCode))
+            {
+                return TypedResults.BadRequest("Course code is required.");
+            }
+
             // Check for duplicate code within same department
-            var exists = await dbContext.Courses
-                .AnyAsync(c => c.Code == request.Code && c.DepartmentId == request.DepartmentId, ct);
+            var siblingCodes = await dbContext.Courses
+                .AsNoTracking()
+                .Where(c => c.DepartmentId == request.DepartmentId)
+                .Select(c => c.Code)
+                .ToListAsync(ct);
+
+            var exists = siblingCodes.Any(code => DuplicateKeyNormalizer.NormalizeKey(code) == normalizedCode);
 
             if (exists)
             {
@@ -36,7 +48,7 @@ public sealed class CreateCourseEndpoint : IEndpoint
             {
                 DepartmentId = request.DepartmentId,
                 Name = request.Name,
-                Code = request.Code,
+                Code = request.Code?.Trim() ?? string.Empty,
                 Description = request.Description,
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow,

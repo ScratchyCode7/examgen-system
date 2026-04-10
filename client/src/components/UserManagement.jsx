@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Lock, ShieldOff, Pencil, Trash2 } from 'lucide-react';
 import { apiService } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
 import ConfirmationModal from './ConfirmationModal';
 import '../styles/UserManagement.css';
 
@@ -9,6 +10,7 @@ const MASKED_EXISTING_PASSWORD = '********';
 
 const UserManagement = ({ searchQuery = '' }) => {
   const { isDarkMode } = useTheme();
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -188,6 +190,44 @@ const UserManagement = ({ searchQuery = '' }) => {
     setPendingDeleteUserId(userId);
   };
 
+  const handleToggleAccountLock = async (user) => {
+    if (!user?.userId) return;
+
+    try {
+      setLoading(true);
+      const shouldLock = Boolean(user.isActive);
+      const userDepts = await apiService.getUserDepartments(user.userId);
+      const departmentIds = Array.isArray(userDepts)
+        ? userDepts.map((department) => department?.id).filter((id) => Number.isInteger(id))
+        : [];
+
+      if (departmentIds.length === 0) {
+        setError('Unable to change lock state because this user has no assigned department.');
+        return;
+      }
+
+      await apiService.updateUser(user.userId, {
+        firstName: user.firstName || '',
+        lastName: user.lastName || '',
+        departmentIds,
+        email: user.email || '',
+        isAdmin: Boolean(user.isAdmin),
+        isActive: !shouldLock,
+      });
+
+      setSuccess(shouldLock
+        ? `User '${user.username}' has been locked.`
+        : `User '${user.username}' has been unlocked.`);
+
+      await loadUsers();
+    } catch (err) {
+      console.error('Failed to update account lock state:', err);
+      setError(err.response?.data?.detail || err.response?.data || 'Failed to update account lock state');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const confirmDelete = async () => {
     if (!pendingDeleteUserId) return;
     try {
@@ -288,7 +328,11 @@ const UserManagement = ({ searchQuery = '' }) => {
               </tr>
             </thead>
             <tbody>
-              {filteredUsers.map(user => (
+              {filteredUsers.map(user => {
+                const isCurrentAdminUser = Boolean(currentUser?.isAdmin)
+                  && String(currentUser?.userId || '') === String(user.userId || '');
+
+                return (
                 <tr key={user.userId}>
                   <td>{`${user.firstName} ${user.lastName}`.trim() || '-'}</td>
                   <td>{user.username}</td>
@@ -304,27 +348,48 @@ const UserManagement = ({ searchQuery = '' }) => {
                     <span className={`role-badge ${user.isAdmin ? 'admin' : 'user'}`}>
                       {user.isAdmin ? 'Admin' : 'User'}
                     </span>
+                    {!user.isActive && (
+                      <span className="role-badge locked">Locked</span>
+                    )}
                   </td>
                   <td>
                     <div className="user-row-actions">
+                      {!isCurrentAdminUser && (
+                        <button
+                          className={`btn btn-sm ${user.isActive ? 'btn-warning' : 'btn-success'}`}
+                          onClick={() => handleToggleAccountLock(user)}
+                          title={user.isActive ? 'Lock account' : 'Unlock account'}
+                          aria-label={user.isActive ? 'Lock account' : 'Unlock account'}
+                          disabled={loading}
+                        >
+                          {user.isActive
+                            ? <Lock size={16} strokeWidth={2} />
+                            : <ShieldOff size={16} strokeWidth={2} />}
+                        </button>
+                      )}
                       <button 
                         className="btn btn-sm btn-secondary" 
                         onClick={() => handleEdit(user)}
+                        title="Edit user"
+                        aria-label="Edit user"
                         disabled={loading}
                       >
-                        Edit
+                        <Pencil size={16} strokeWidth={2} />
                       </button>
                       <button 
                         className="btn btn-sm btn-danger" 
                         onClick={() => handleDelete(user.userId)}
+                        title="Delete user"
+                        aria-label="Delete user"
                         disabled={loading}
                       >
-                        Delete
+                        <Trash2 size={16} strokeWidth={2} />
                       </button>
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
               {filteredUsers.length === 0 && (
                 <tr>
                   <td colSpan="6" style={{ textAlign: 'center', color: 'var(--text-secondary, #6c757d)' }}>
@@ -431,21 +496,24 @@ const UserManagement = ({ searchQuery = '' }) => {
               )}
 
               <div className="form-group">
-                <label>Departments * (Select at least one)</label>
+                <label>Enrolled Departments</label>
                 <div className="department-selector">
                   {departments.map(dept => (
-                    <button
-                      type="button"
+                    <label
                       key={dept.id}
                       className={`department-checkbox ${formData.departmentIds.includes(dept.id) ? 'selected' : ''}`}
-                      onClick={() => handleDepartmentToggle(dept.id)}
                     >
-                      <span className="dept-indicator" aria-hidden="true" />
+                      <input
+                        type="checkbox"
+                        checked={formData.departmentIds.includes(dept.id)}
+                        onChange={() => handleDepartmentToggle(dept.id)}
+                        aria-label={`Select ${dept.name}`}
+                      />
                       <span className="dept-info">
                         <strong>{dept.name}</strong>
                         <span className="dept-code">{dept.code}</span>
                       </span>
-                    </button>
+                    </label>
                   ))}
                 </div>
               </div>

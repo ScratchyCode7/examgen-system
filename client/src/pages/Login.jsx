@@ -144,6 +144,7 @@ const Login = () => {
       }
 
       const statusCode = err?.response?.status;
+      const problemDetail = err?.response?.data?.detail;
       if (statusCode === 409) {
         const conflictMessage =
           err.response?.data?.message ||
@@ -153,8 +154,19 @@ const Login = () => {
         console.warn('Login blocked due to active session:', err);
         return;
       }
+
+      if (statusCode === 423) {
+        const lockedMessage = problemDetail
+          || 'This account has been temporarly locked due to multiple incorrect login attemps please contact ITS for support.';
+        setError(lockedMessage);
+        showToast({ message: lockedMessage, type: 'error' });
+        clearLoginGuardState();
+        return;
+      }
+
       const rawErrorMessage =
         err.response?.data?.message ||
+        err.response?.data?.detail ||
         err.response?.data?.error ||
         err.message ||
         '';

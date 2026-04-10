@@ -103,6 +103,7 @@ const Dashboard = () => {
     const departmentCode = (department.code || '').toLowerCase();
     return departmentName.includes(normalizedSearchText) || departmentCode.includes(normalizedSearchText);
   });
+  const shouldUseMultiRowGrid = filteredDepartments.length > 4;
 
   const handleSearchNavigate = () => {
     if (!normalizedSearchText) return;
@@ -219,7 +220,7 @@ const Dashboard = () => {
           </div>
 
           {programView === 'grid' ? (
-            <div className="program-grid">
+            <div className={`program-grid${shouldUseMultiRowGrid ? ' has-many-departments' : ''}`}>
               {isLoadingDepartments ? (
                 <p>Loading departments...</p>
               ) : filteredDepartments.length === 0 ? (

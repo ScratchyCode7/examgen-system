@@ -1,4 +1,5 @@
 using Databank.Abstract;
+using Databank.Common;
 using Databank.Database;
 using Databank.Entities;
 using Databank.Features.Topics;
@@ -56,10 +57,28 @@ public sealed class CreateTopicEndpoint : IEndpoint
                 }
             }
 
+            var normalizedTitle = DuplicateKeyNormalizer.NormalizeKey(request.Title);
+            if (string.IsNullOrWhiteSpace(normalizedTitle))
+            {
+                return TypedResults.BadRequest("Topic title is required.");
+            }
+
+            var siblingTitles = await dbContext.Topics
+                .AsNoTracking()
+                .Where(t => t.SubjectId == request.SubjectId)
+                .Select(t => t.Title)
+                .ToListAsync(ct);
+
+            var duplicateExists = siblingTitles.Any(title => DuplicateKeyNormalizer.NormalizeKey(title) == normalizedTitle);
+            if (duplicateExists)
+            {
+                return TypedResults.Conflict($"Topic '{request.Title}' already exists in this subject.");
+            }
+
             var topic = new Topic
             {
                 SubjectId = request.SubjectId,
-                Title = request.Title,
+                Title = request.Title.Trim(),
                 Description = request.Description,
                 SequenceOrder = request.SequenceOrder,
                 AllocatedHours = request.AllocatedHours,

@@ -1,4 +1,5 @@
 using Databank.Database;
+using Databank.Features.Topics;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
@@ -104,6 +105,44 @@ public static class QuestionPermissionResolver
         }
 
         var remainingQuestionIds = permissions
+            .Where(kvp => !kvp.Value.CanEdit)
+            .Select(kvp => kvp.Key)
+            .ToList();
+
+        if (remainingQuestionIds.Count > 0)
+        {
+            var questionToTopicRows = await dbContext.Questions
+                .AsNoTracking()
+                .Where(q => remainingQuestionIds.Contains(q.Id))
+                .Select(q => new { q.Id, q.TopicId })
+                .ToListAsync(ct);
+
+            if (questionToTopicRows.Count > 0)
+            {
+                var topicIds = questionToTopicRows
+                    .Select(row => row.TopicId)
+                    .Distinct()
+                    .ToList();
+
+                var topicPermissions = await TopicPermissionResolver.ResolvePermissionsForUserAsync(
+                    dbContext,
+                    currentUserId,
+                    topicIds,
+                    ct);
+
+                foreach (var row in questionToTopicRows)
+                {
+                    if (!topicPermissions.TryGetValue(row.TopicId, out var topicPerms) || !topicPerms.CanEdit)
+                    {
+                        continue;
+                    }
+
+                    permissions[row.Id] = topicPerms.CanDelete ? (true, true) : (true, false);
+                }
+            }
+        }
+
+        remainingQuestionIds = permissions
             .Where(kvp => !kvp.Value.CanEdit)
             .Select(kvp => kvp.Key)
             .ToList();

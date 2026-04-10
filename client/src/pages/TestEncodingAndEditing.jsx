@@ -5,6 +5,8 @@
 // - Uses Bloom's taxonomy levels from backend
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
 import { 
     Home, ClipboardList, BookOpen, Settings, LogOut, User, Users, Sun, Moon, Search, 
     FileText, Plus, Edit2, Trash2, Save, HelpCircle,
@@ -93,6 +95,333 @@ const normalizePlainText = (value, { trimEdges = false } = {}) => {
         .replace(/\n{3,}/g, '\n\n');
 
     return trimEdges ? normalized.trim() : normalized;
+};
+
+const SUPERSCRIPT_MAP = {
+    '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
+    '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
+    '+': '⁺', '-': '⁻', '=': '⁼', '(': '⁽', ')': '⁾',
+    'a': 'ᵃ', 'b': 'ᵇ', 'c': 'ᶜ', 'd': 'ᵈ', 'e': 'ᵉ',
+    'f': 'ᶠ', 'g': 'ᵍ', 'h': 'ʰ', 'i': 'ⁱ', 'j': 'ʲ',
+    'k': 'ᵏ', 'l': 'ˡ', 'm': 'ᵐ', 'n': 'ⁿ', 'o': 'ᵒ',
+    'p': 'ᵖ', 'r': 'ʳ', 's': 'ˢ', 't': 'ᵗ', 'u': 'ᵘ',
+    'v': 'ᵛ', 'w': 'ʷ', 'x': 'ˣ', 'y': 'ʸ', 'z': 'ᶻ',
+    'A': 'ᴬ', 'B': 'ᴮ', 'D': 'ᴰ', 'E': 'ᴱ', 'G': 'ᴳ',
+    'H': 'ᴴ', 'I': 'ᴵ', 'J': 'ᴶ', 'K': 'ᴷ', 'L': 'ᴸ',
+    'M': 'ᴹ', 'N': 'ᴺ', 'O': 'ᴼ', 'P': 'ᴾ', 'R': 'ᴿ',
+    'T': 'ᵀ', 'U': 'ᵁ', 'V': 'ⱽ', 'W': 'ᵂ'
+};
+
+const SUBSCRIPT_MAP = {
+    '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄',
+    '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉',
+    '+': '₊', '-': '₋', '=': '₌', '(': '₍', ')': '₎',
+    'a': 'ₐ', 'e': 'ₑ', 'h': 'ₕ', 'i': 'ᵢ', 'j': 'ⱼ',
+    'k': 'ₖ', 'l': 'ₗ', 'm': 'ₘ', 'n': 'ₙ', 'o': 'ₒ',
+    'p': 'ₚ', 'r': 'ᵣ', 's': 'ₛ', 't': 'ₜ', 'u': 'ᵤ',
+    'v': 'ᵥ', 'x': 'ₓ'
+};
+
+const toSuperscript = (value) => String(value)
+    .split('')
+    .map((char) => SUPERSCRIPT_MAP[char] || char)
+    .join('');
+
+const toSubscript = (value) => String(value)
+    .split('')
+    .map((char) => SUBSCRIPT_MAP[char] || char)
+    .join('');
+
+const applyOverline = (value) => String(value || '')
+    .split('')
+    .map((char) => (/\s/.test(char) ? char : `${char}\u0305`))
+    .join('');
+
+const readBraceContent = (value, openBraceIndex) => {
+    if (!value || value[openBraceIndex] !== '{') {
+        return null;
+    }
+
+    let depth = 0;
+    for (let i = openBraceIndex; i < value.length; i += 1) {
+        if (value[i] === '{') {
+            depth += 1;
+        } else if (value[i] === '}') {
+            depth -= 1;
+            if (depth === 0) {
+                return {
+                    content: value.slice(openBraceIndex + 1, i),
+                    nextIndex: i + 1,
+                };
+            }
+        }
+    }
+
+    return null;
+};
+
+const applySuperSubscripts = (value) => String(value)
+    .replace(/\^\{([^}]+)\}/g, (_, content) => toSuperscript(content))
+    .replace(/\^([^\s{}])/g, (_, content) => toSuperscript(content))
+    .replace(/_\{([^}]+)\}/g, (_, content) => toSubscript(content))
+    .replace(/_([^\s{}])/g, (_, content) => toSubscript(content));
+
+const replaceSqrtExpressions = (value, converter) => {
+    let output = String(value || '');
+    let searchIndex = 0;
+
+    while (searchIndex < output.length) {
+        const sqrtIndex = output.indexOf('\\sqrt', searchIndex);
+        if (sqrtIndex === -1) {
+            break;
+        }
+
+        let groupStart = sqrtIndex + '\\sqrt'.length;
+        while (groupStart < output.length && /\s/.test(output[groupStart])) {
+            groupStart += 1;
+        }
+
+        const radicand = readBraceContent(output, groupStart);
+        if (!radicand) {
+            searchIndex = sqrtIndex + '\\sqrt'.length;
+            continue;
+        }
+
+        const convertedRadicand = converter(radicand.content).trim();
+        const wrappedRadicand = convertedRadicand.startsWith('(') && convertedRadicand.endsWith(')')
+            ? convertedRadicand
+            : `(${convertedRadicand})`;
+        output = `${output.slice(0, sqrtIndex)}√${wrappedRadicand}${output.slice(radicand.nextIndex)}`;
+        searchIndex = sqrtIndex + wrappedRadicand.length + 1;
+    }
+
+    return output;
+};
+
+const replaceFractionExpressions = (value, converter) => {
+    let output = String(value || '');
+    let searchIndex = 0;
+
+    while (searchIndex < output.length) {
+        const fracIndex = output.indexOf('\\frac', searchIndex);
+        if (fracIndex === -1) {
+            break;
+        }
+
+        let numeratorStart = fracIndex + '\\frac'.length;
+        while (numeratorStart < output.length && /\s/.test(output[numeratorStart])) {
+            numeratorStart += 1;
+        }
+
+        const numeratorGroup = readBraceContent(output, numeratorStart);
+        if (!numeratorGroup) {
+            searchIndex = fracIndex + '\\frac'.length;
+            continue;
+        }
+
+        let denominatorStart = numeratorGroup.nextIndex;
+        while (denominatorStart < output.length && /\s/.test(output[denominatorStart])) {
+            denominatorStart += 1;
+        }
+
+        const denominatorGroup = readBraceContent(output, denominatorStart);
+        if (!denominatorGroup) {
+            searchIndex = numeratorGroup.nextIndex;
+            continue;
+        }
+
+        const numerator = converter(numeratorGroup.content);
+        const denominator = converter(denominatorGroup.content);
+        const replacement = `(${numerator})/(${denominator})`;
+
+        output = `${output.slice(0, fracIndex)}${replacement}${output.slice(denominatorGroup.nextIndex)}`;
+        searchIndex = fracIndex + replacement.length;
+    }
+
+    return output;
+};
+
+const replaceOverlineExpressions = (value, converter) => {
+    let output = String(value || '');
+    let searchIndex = 0;
+
+    while (searchIndex < output.length) {
+        const overlineIndex = output.indexOf('\\overline', searchIndex);
+        const barIndex = output.indexOf('\\bar', searchIndex);
+
+        let commandIndex = -1;
+        let commandLength = 0;
+
+        if (overlineIndex !== -1 && (barIndex === -1 || overlineIndex < barIndex)) {
+            commandIndex = overlineIndex;
+            commandLength = '\\overline'.length;
+        } else if (barIndex !== -1) {
+            commandIndex = barIndex;
+            commandLength = '\\bar'.length;
+        }
+
+        if (commandIndex === -1) {
+            break;
+        }
+
+        let operandStart = commandIndex + commandLength;
+        while (operandStart < output.length && /\s/.test(output[operandStart])) {
+            operandStart += 1;
+        }
+
+        let converted = '';
+        let nextIndex = operandStart;
+
+        const group = readBraceContent(output, operandStart);
+        if (group) {
+            converted = applyOverline(converter(group.content));
+            nextIndex = group.nextIndex;
+        } else if (operandStart < output.length) {
+            converted = applyOverline(output[operandStart]);
+            nextIndex = operandStart + 1;
+        } else {
+            searchIndex = commandIndex + commandLength;
+            continue;
+        }
+
+        output = `${output.slice(0, commandIndex)}${converted}${output.slice(nextIndex)}`;
+        searchIndex = commandIndex + converted.length;
+    }
+
+    return output;
+};
+
+const convertSimpleLatexMath = (expression) => {
+    if (!expression) {
+        return '';
+    }
+
+    const convertRecursively = (input) => {
+        let output = String(input || '');
+
+        output = output
+            .replace(/\\left/g, '')
+            .replace(/\\right/g, '')
+            .replace(/\\text\{([^}]*)\}/g, '$1')
+            .replace(/\\mathrm\{([^}]*)\}/g, '$1')
+            .replace(/\\operatorname\{([^}]*)\}/g, '$1')
+            .replace(/\\cdot/g, '·')
+            .replace(/\\times/g, '×')
+            .replace(/\\div/g, '÷')
+            .replace(/\\cup/g, '∪')
+            .replace(/\\cap/g, '∩')
+            .replace(/\\pm/g, '±')
+            .replace(/\\neq/g, '≠')
+            .replace(/\\leq/g, '≤')
+            .replace(/\\geq/g, '≥')
+            .replace(/\\approx/g, '≈')
+            .replace(/\\infty/g, '∞')
+            .replace(/\\sum/g, 'Σ')
+            .replace(/\\prod/g, '∏')
+            .replace(/\\int/g, '∫')
+            .replace(/\\pi/g, 'π')
+            .replace(/\\theta/g, 'θ')
+            .replace(/\\alpha/g, 'α')
+            .replace(/\\beta/g, 'β')
+            .replace(/\\gamma/g, 'γ')
+            .replace(/\\lambda/g, 'λ')
+            .replace(/\\mu/g, 'μ')
+            .replace(/\\sigma/g, 'σ')
+            .replace(/\\Delta/g, 'Δ')
+            .replace(/\\Sigma/g, 'Σ');
+
+        output = replaceSqrtExpressions(output, convertRecursively);
+        output = replaceFractionExpressions(output, convertRecursively);
+        output = replaceOverlineExpressions(output, convertRecursively);
+        output = applySuperSubscripts(output);
+
+        output = output
+            .replace(/\$+/g, '')
+            .replace(/[{}]/g, '')
+            .replace(/\\/g, '')
+            .replace(/\s{2,}/g, ' ')
+            .trim();
+
+        return output;
+    };
+
+    return convertRecursively(expression);
+};
+
+const looksLikeLatexMath = (text) => {
+    const value = String(text || '');
+    return /\\[a-zA-Z]+/.test(value) || /\^\{[^}]+\}|_\{[^}]+\}|\^[^\s{}]|_[^\s{}]/.test(value);
+};
+
+const convertLatexMathFromPaste = (text) => {
+    const source = normalizePlainText(text || '');
+    let outputHtml = '';
+    let lastIndex = 0;
+    let foundDelimitedToken = false;
+
+    const escapeHtml = (value) => String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
+    const plainTextToHtml = (value) => escapeHtml(value).replace(/\n/g, '<br>');
+
+    const renderLatexExpressionToHtml = (expression, displayMode) => {
+        try {
+            return katex.renderToString(expression, {
+                throwOnError: false,
+                strict: 'ignore',
+                displayMode,
+            });
+        } catch {
+            return plainTextToHtml(convertSimpleLatexMath(expression));
+        }
+    };
+
+    const latexDelimitedTokenRegex = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$[^$\n]+\$)/g;
+
+    source.replace(latexDelimitedTokenRegex, (token, _unused, offset) => {
+        const tokenStart = Number(offset);
+        if (tokenStart > lastIndex) {
+            outputHtml += plainTextToHtml(source.slice(lastIndex, tokenStart));
+        }
+
+        let expression = token;
+        let displayMode = false;
+
+        if (token.startsWith('$$') && token.endsWith('$$')) {
+            expression = token.slice(2, -2);
+            displayMode = true;
+        } else if (token.startsWith('\\[') && token.endsWith('\\]')) {
+            expression = token.slice(2, -2);
+            displayMode = true;
+        } else if (token.startsWith('\\(') && token.endsWith('\\)')) {
+            expression = token.slice(2, -2);
+        } else if (token.startsWith('$') && token.endsWith('$')) {
+            expression = token.slice(1, -1);
+        }
+
+        outputHtml += renderLatexExpressionToHtml(expression, displayMode);
+        foundDelimitedToken = true;
+        lastIndex = tokenStart + token.length;
+        return token;
+    });
+
+    if (lastIndex < source.length) {
+        outputHtml += plainTextToHtml(source.slice(lastIndex));
+    }
+
+    if (foundDelimitedToken) {
+        return outputHtml;
+    }
+
+    if (looksLikeLatexMath(source)) {
+        return renderLatexExpressionToHtml(source, true);
+    }
+
+    return plainTextToHtml(source);
 };
 
 const htmlToPlainText = (value) => {
@@ -397,6 +726,7 @@ const TestEncodingAndEditing = () => {
     const choiceBEditorRef = useRef(null);
     const choiceCEditorRef = useRef(null);
     const choiceDEditorRef = useRef(null);
+    const choiceEEditorRef = useRef(null);
     const [savedRange, setSavedRange] = useState(null); // The critical saved selection range
     const [activeCommands, setActiveCommands] = useState({}); // State for TOOLBAR HIGHLIGHTING
     const imageFileInputRef = useRef(null);
@@ -425,6 +755,7 @@ const TestEncodingAndEditing = () => {
     const [choiceB, setChoiceB] = useState('');
     const [choiceC, setChoiceC] = useState('');
     const [choiceD, setChoiceD] = useState('');
+    const [choiceE, setChoiceE] = useState('');
     const [explanation, setExplanation] = useState('');
     const [correctAnswer, setCorrectAnswer] = useState(''); 
 
@@ -574,6 +905,7 @@ const TestEncodingAndEditing = () => {
         setChoiceB('');
         setChoiceC('');
         setChoiceD('');
+        setChoiceE('');
         setExplanation('');
         setCorrectAnswer(''); 
         setBloomLevel('');
@@ -697,6 +1029,20 @@ const TestEncodingAndEditing = () => {
         selection.removeAllRanges();
         selection.addRange(range);
     };
+
+    const syncEditorStateAndKeepCaretAtEnd = useCallback((editable, setterOverride = null) => {
+        const setterToUse = setterOverride || activeSetterRef.current;
+        if (!editable || !setterToUse) return;
+
+        setterToUse(editable.innerHTML);
+
+        // React re-render can reset selection; restore caret at end after DOM update.
+        requestAnimationFrame(() => {
+            if (!editable.isConnected) return;
+            placeCaretAtEnd(editable);
+            handleSaveRange();
+        });
+    }, [handleSaveRange]);
 
     const handleFocus = (e, setter) => { 
         activeEditableRef.current = e.target;
@@ -1326,6 +1672,97 @@ const TestEncodingAndEditing = () => {
         handleSaveRange();
     };
 
+    const isKatexContainerNode = (node) => {
+        if (!node || node.nodeType !== Node.ELEMENT_NODE) return false;
+        const element = node;
+        return element.classList?.contains('katex-display') || element.classList?.contains('katex');
+    };
+
+    const getClosestKatexContainer = (node, editableRoot) => {
+        let current = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentNode;
+        let inlineKatex = null;
+
+        while (current && current !== editableRoot) {
+            if (current.nodeType === Node.ELEMENT_NODE) {
+                const element = current;
+                if (element.classList?.contains('katex-display')) {
+                    return element;
+                }
+                if (element.classList?.contains('katex')) {
+                    inlineKatex = inlineKatex || element;
+                }
+            }
+            current = current.parentNode;
+        }
+
+        return inlineKatex;
+    };
+
+    const getNodeBeforeCaret = (range, editableRoot) => {
+        let container = range.startContainer;
+        let offset = range.startOffset;
+
+        if (container.nodeType === Node.TEXT_NODE) {
+            if (offset > 0) return null;
+            let current = container;
+            while (current && current !== editableRoot) {
+                if (current.previousSibling) {
+                    return current.previousSibling;
+                }
+                current = current.parentNode;
+            }
+            return null;
+        }
+
+        if (container.nodeType === Node.ELEMENT_NODE) {
+            if (offset > 0) {
+                return container.childNodes[offset - 1] || null;
+            }
+            let current = container;
+            while (current && current !== editableRoot) {
+                if (current.previousSibling) {
+                    return current.previousSibling;
+                }
+                current = current.parentNode;
+            }
+        }
+
+        return null;
+    };
+
+    const handleEditorBackspace = useCallback((event) => {
+        if (event.key !== 'Backspace') return;
+
+        const selection = window.getSelection();
+        if (!selection || !selection.rangeCount || !selection.isCollapsed) return;
+
+        const editable = event.currentTarget;
+        const range = selection.getRangeAt(0);
+        if (!editable.contains(range.startContainer)) return;
+
+        const directKatexContainer = getClosestKatexContainer(range.startContainer, editable);
+        if (directKatexContainer) {
+            event.preventDefault();
+            directKatexContainer.remove();
+            syncEditorStateAndKeepCaretAtEnd(editable);
+            return;
+        }
+
+        const previousNode = getNodeBeforeCaret(range, editable);
+        if (!previousNode) return;
+
+        const shouldRemovePreviousNode = isKatexContainerNode(previousNode)
+            || (previousNode.nodeType === Node.ELEMENT_NODE
+                && previousNode.textContent?.trim() === ''
+                && previousNode.querySelector?.('.katex, .katex-display'));
+
+        if (!shouldRemovePreviousNode) return;
+
+        event.preventDefault();
+        previousNode.remove();
+        syncEditorStateAndKeepCaretAtEnd(editable);
+    }, [syncEditorStateAndKeepCaretAtEnd]);
+
     const handlePlainTextPaste = useCallback((event, setter) => {
         event.preventDefault();
 
@@ -1333,7 +1770,8 @@ const TestEncodingAndEditing = () => {
             || window.clipboardData?.getData('Text')
             || '';
 
-        const normalizedPaste = normalizePlainText(pastedText);
+        const normalizedPlainPaste = normalizePlainText(pastedText);
+        const normalizedPasteHtml = convertLatexMathFromPaste(normalizedPlainPaste);
         const editable = event.currentTarget;
         editable.focus();
 
@@ -1354,13 +1792,20 @@ const TestEncodingAndEditing = () => {
             rangeToUse.deleteContents();
         }
 
-        const textNode = document.createTextNode(normalizedPaste);
-        rangeToUse.insertNode(textNode);
-        rangeToUse.setStartAfter(textNode);
+        const fragment = rangeToUse.createContextualFragment(normalizedPasteHtml);
+        const marker = document.createTextNode('');
+
+        rangeToUse.insertNode(fragment);
+        rangeToUse.insertNode(marker);
+        rangeToUse.setStartAfter(marker);
         rangeToUse.collapse(true);
 
         selection?.removeAllRanges();
         selection?.addRange(rangeToUse);
+
+        if (marker.parentNode) {
+            marker.parentNode.removeChild(marker);
+        }
 
         setter(editable.innerHTML);
         placeCaretAtEnd(editable);
@@ -1525,8 +1970,9 @@ const TestEncodingAndEditing = () => {
             setChoiceB(applyPersistedImagePresentationToHtml(sortedOptions[1]?.content || '', imageMeta));
             setChoiceC(applyPersistedImagePresentationToHtml(sortedOptions[2]?.content || '', imageMeta));
             setChoiceD(applyPersistedImagePresentationToHtml(sortedOptions[3]?.content || '', imageMeta));
+            setChoiceE(applyPersistedImagePresentationToHtml(sortedOptions[4]?.content || '', imageMeta));
             
-            // Find the correct answer (A, B, C, or D)
+            // Find the correct answer (A-E based on available options)
             const correctOption = sortedOptions.find(opt => opt.isCorrect);
             if (correctOption) {
                 const correctIndex = sortedOptions.indexOf(correctOption);
@@ -1805,7 +2251,8 @@ const TestEncodingAndEditing = () => {
                 ...extractImagesFromHtml(allContent.choiceAHtml),
                 ...extractImagesFromHtml(allContent.choiceBHtml),
                 ...extractImagesFromHtml(allContent.choiceCHtml),
-                ...extractImagesFromHtml(allContent.choiceDHtml)
+                ...extractImagesFromHtml(allContent.choiceDHtml),
+                ...extractImagesFromHtml(allContent.choiceEHtml)
             ];
             
             if (allImages.length === 0) {
@@ -1842,6 +2289,7 @@ const TestEncodingAndEditing = () => {
         const choiceBHtml = choiceBEditorRef.current?.innerHTML ?? choiceB;
         const choiceCHtml = choiceCEditorRef.current?.innerHTML ?? choiceC;
         const choiceDHtml = choiceDEditorRef.current?.innerHTML ?? choiceD;
+        const choiceEHtml = choiceEEditorRef.current?.innerHTML ?? choiceE;
 
         // 1. Validation 
         const normalizedQuestionText = normalizePlainText(htmlToPlainText(questionHtml), { trimEdges: true });
@@ -1849,25 +2297,49 @@ const TestEncodingAndEditing = () => {
         const normalizedChoiceB = normalizePlainText(htmlToPlainText(choiceBHtml), { trimEdges: true });
         const normalizedChoiceC = normalizePlainText(htmlToPlainText(choiceCHtml), { trimEdges: true });
         const normalizedChoiceD = normalizePlainText(htmlToPlainText(choiceDHtml), { trimEdges: true });
+        const normalizedChoiceE = normalizePlainText(htmlToPlainText(choiceEHtml), { trimEdges: true });
 
         const choiceAHasImage = hasImageTag(choiceAHtml);
         const choiceBHasImage = hasImageTag(choiceBHtml);
         const choiceCHasImage = hasImageTag(choiceCHtml);
         const choiceDHasImage = hasImageTag(choiceDHtml);
+        const choiceEHasImage = hasImageTag(choiceEHtml);
+
+        const choiceLetters = ['A', 'B', 'C', 'D', 'E'];
+        const choiceValues = [
+            { letter: 'A', html: choiceAHtml, normalized: normalizedChoiceA, hasImage: choiceAHasImage },
+            { letter: 'B', html: choiceBHtml, normalized: normalizedChoiceB, hasImage: choiceBHasImage },
+            { letter: 'C', html: choiceCHtml, normalized: normalizedChoiceC, hasImage: choiceCHasImage },
+            { letter: 'D', html: choiceDHtml, normalized: normalizedChoiceD, hasImage: choiceDHasImage },
+            { letter: 'E', html: choiceEHtml, normalized: normalizedChoiceE, hasImage: choiceEHasImage }
+        ];
+        const hasChoiceContent = (choice) => Boolean(choice.normalized) || choice.hasImage;
+        const filledChoices = choiceValues.filter(hasChoiceContent);
+        const highestFilledIndex = Math.max(
+            ...choiceValues
+                .map((choice, index) => (hasChoiceContent(choice) ? index : -1))
+        );
+        const hasSkippedChoice = highestFilledIndex >= 0
+            && choiceValues.slice(0, highestFilledIndex + 1).some((choice) => !hasChoiceContent(choice));
 
         if (!topic || !bloomLevel || !normalizedQuestionText || !correctAnswer) { 
             showToast({ message: 'Fill all required fields (Topic, Bloom Level, Question Text, Answer).', type: 'error' }); 
             return; 
         }
-        if ((!normalizedChoiceA && !choiceAHasImage)
-            || (!normalizedChoiceB && !choiceBHasImage)
-            || (!normalizedChoiceC && !choiceCHasImage)
-            || (!normalizedChoiceD && !choiceDHasImage)) {
-            showToast({ message: 'All four choices (A, B, C, D) must be filled.', type: 'error' });
+        if (filledChoices.length < 2) {
+            showToast({ message: 'Provide at least two choices (e.g., A and B for True/False).', type: 'error' });
             return;
         }
-        if (!['A', 'B', 'C', 'D'].includes(correctAnswer.toUpperCase())) {
-            showToast({ message: 'Correct Answer must be A, B, C, or D.', type: 'error' });
+        if (hasSkippedChoice) {
+            showToast({ message: 'Fill choices in order without skipping letters (A through the last used choice).', type: 'error' });
+            return;
+        }
+        if (!choiceLetters.includes(correctAnswer.toUpperCase())) {
+            showToast({ message: 'Correct Answer must be between A and E.', type: 'error' });
+            return;
+        }
+        if (!filledChoices.some((choice) => choice.letter === correctAnswer.toUpperCase())) {
+            showToast({ message: 'Correct Answer must match one of the provided choices.', type: 'error' });
             return;
         }
 
@@ -1888,12 +2360,12 @@ const TestEncodingAndEditing = () => {
             bloomLevel: backendBloomLevel, // Mapped to individual backend enum: Remember, Understand, Apply, Analyze, Evaluate, Create
             points: 1,
             displayOrder: 0,
-            options: [
-                { questionId: 0, content: choiceAHtml, isCorrect: correctIndex === 0, displayOrder: 0 },
-                { questionId: 0, content: choiceBHtml, isCorrect: correctIndex === 1, displayOrder: 1 },
-                { questionId: 0, content: choiceCHtml, isCorrect: correctIndex === 2, displayOrder: 2 },
-                { questionId: 0, content: choiceDHtml, isCorrect: correctIndex === 3, displayOrder: 3 }
-            ]
+            options: filledChoices.map((choice, index) => ({
+                questionId: 0,
+                content: choice.html,
+                isCorrect: correctIndex === index,
+                displayOrder: index
+            }))
         };
         
         // Debug logging
@@ -1926,7 +2398,8 @@ const TestEncodingAndEditing = () => {
                 choiceAHtml,
                 choiceBHtml,
                 choiceCHtml,
-                choiceDHtml
+                choiceDHtml,
+                choiceEHtml
             });
             
             // 3. Reset content fields but keep filters
@@ -2514,6 +2987,7 @@ const TestEncodingAndEditing = () => {
                                     onFocus={e=>handleFocus(e,setQuestionText)} 
                                     onClick={e=>handleEditableClick(e,setQuestionText)}
                                     onPaste={e=>handlePlainTextPaste(e,setQuestionText)}
+                                    onKeyDown={handleEditorBackspace}
                                     onKeyUp={handleSaveRange} 
                                     onMouseUp={handleSaveRange} 
                                     dangerouslySetInnerHTML={{__html:questionText}}
@@ -2522,9 +2996,9 @@ const TestEncodingAndEditing = () => {
 
                             {/* Choices */}
                             <div className="choices-grid">
-                                {['A','B','C','D'].map((ch,index)=>{
-                                    const setter=[setChoiceA,setChoiceB,setChoiceC,setChoiceD][index];
-                                    const content=[choiceA,choiceB,choiceC,choiceD][index];
+                                {['A','B','C','D','E'].map((ch,index)=>{
+                                    const setter=[setChoiceA,setChoiceB,setChoiceC,setChoiceD,setChoiceE][index];
+                                    const content=[choiceA,choiceB,choiceC,choiceD,choiceE][index];
                                     return (
                                         <div className="choice-block" key={ch}>
                                             <label>Choice {ch}</label>
@@ -2534,7 +3008,7 @@ const TestEncodingAndEditing = () => {
                                                 activeCommands={getToolbarActiveCommands(setter)} 
                                             />
                                             <div 
-                                                                ref={[choiceAEditorRef, choiceBEditorRef, choiceCEditorRef, choiceDEditorRef][index]}
+                                                ref={[choiceAEditorRef, choiceBEditorRef, choiceCEditorRef, choiceDEditorRef, choiceEEditorRef][index]}
                                                 contentEditable="true" 
                                                 className={content?'content-editable-area':'content-editable-area placeholder-active'} 
                                                 data-placeholder={`Enter choice ${ch}...`} 
@@ -2542,6 +3016,7 @@ const TestEncodingAndEditing = () => {
                                                 onFocus={e=>handleFocus(e,setter)} 
                                                 onClick={e=>handleEditableClick(e,setter)}
                                                 onPaste={e=>handlePlainTextPaste(e,setter)}
+                                                onKeyDown={handleEditorBackspace}
                                                 onKeyUp={handleSaveRange}
                                                 onMouseUp={handleSaveRange}
                                                 dangerouslySetInnerHTML={{__html:content}}
@@ -2556,7 +3031,20 @@ const TestEncodingAndEditing = () => {
                                 <div className="correct-answer-field">
                                     <span className="correct-answer-label">Select the correct answer</span>
                                     <div className="correct-answer-buttons" role="group" aria-label="Correct answer choices">
-                                        {['A','B','C','D'].map(letter => {
+                                        {[
+                                            { letter: 'A', value: choiceA, hasImage: hasImageTag(choiceA) },
+                                            { letter: 'B', value: choiceB, hasImage: hasImageTag(choiceB) },
+                                            { letter: 'C', value: choiceC, hasImage: hasImageTag(choiceC) },
+                                            { letter: 'D', value: choiceD, hasImage: hasImageTag(choiceD) },
+                                            { letter: 'E', value: choiceE, hasImage: hasImageTag(choiceE) }
+                                        ].filter((choice, index, list) => {
+                                            const hasContent = normalizePlainText(htmlToPlainText(choice.value), { trimEdges: true }) || choice.hasImage;
+                                            if (index < 2) return true;
+                                            return Boolean(hasContent) || list.slice(index + 1).some((nextChoice) => {
+                                                const nextHasContent = normalizePlainText(htmlToPlainText(nextChoice.value), { trimEdges: true }) || nextChoice.hasImage;
+                                                return Boolean(nextHasContent);
+                                            });
+                                        }).map(({ letter }) => {
                                             const isSelected = correctAnswer === letter;
                                             return (
                                                 <button
@@ -2586,6 +3074,7 @@ const TestEncodingAndEditing = () => {
                                         onFocus={e=>handleFocus(e,setExplanation)} 
                                         onClick={e=>handleEditableClick(e,setExplanation)}
                                         onPaste={e=>handlePlainTextPaste(e,setExplanation)}
+                                        onKeyDown={handleEditorBackspace}
                                         onKeyUp={handleSaveRange}
                                         onMouseUp={handleSaveRange}
                                         dangerouslySetInnerHTML={{__html:explanation}}

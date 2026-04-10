@@ -2,8 +2,8 @@ using Databank.Abstract;
 using Databank.Database;
 using Databank.Entities;
 using Databank.Services;
-using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Databank.Features.Subjects;
 
 namespace Databank.Features.Subjects.Create;
 
@@ -18,6 +18,14 @@ public sealed class CreateSubjectEndpoint : IEndpoint
                 HttpContext httpContext,
                 CancellationToken ct) =>
         {
+            var requesterId = SubjectPermissionResolver.GetCurrentUserId(httpContext.User);
+            if (!requesterId.HasValue)
+            {
+                return TypedResults.Problem(
+                    "Unable to determine the current user. Please sign in again and retry.",
+                    statusCode: StatusCodes.Status401Unauthorized);
+            }
+
             var course = await dbContext.Courses
                 .AsNoTracking()
                 .FirstOrDefaultAsync(c => c.Id == request.CourseId, ct);
@@ -34,18 +42,7 @@ public sealed class CreateSubjectEndpoint : IEndpoint
 
             if (!isAdminUser)
             {
-                var userIdClaim = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
-                    ?? httpContext.User.FindFirst("sub")?.Value
-                    ?? httpContext.User.FindFirst("userId")?.Value;
-
-                if (!Guid.TryParse(userIdClaim, out var userId))
-                {
-                    return TypedResults.Problem(
-                        "Unable to determine the current user. Please sign in again and retry.",
-                        statusCode: StatusCodes.Status403Forbidden);
-                }
-
-                var hasAccess = await departmentAccessService.HasAccessToDepartmentAsync(userId, course.DepartmentId, ct);
+                var hasAccess = await departmentAccessService.HasAccessToDepartmentAsync(requesterId.Value, course.DepartmentId, ct);
                 if (!hasAccess)
                 {
                     return TypedResults.Problem(
@@ -76,7 +73,22 @@ public sealed class CreateSubjectEndpoint : IEndpoint
             await dbContext.Subjects.AddAsync(subject, ct);
             await dbContext.SaveChangesAsync(ct);
 
-            return TypedResults.Created($"/api/subjects/{subject.Id}", subject.ToResponse());
+            dbContext.ActivityLogs.Add(new ActivityLog
+            {
+                DepartmentId = course.DepartmentId,
+                UserId = requesterId.Value,
+                Category = "Subjects",
+                Action = "Created",
+                EntityType = SubjectPermissionResolver.RequestEntityType,
+                EntityId = subject.Id,
+                Details = $"Subject '{subject.Code}' created.",
+                Severity = "Info",
+                CreatedAt = DateTime.UtcNow
+            });
+
+            await dbContext.SaveChangesAsync(ct);
+
+            return TypedResults.Created($"/api/subjects/{subject.Id}", subject.ToResponse(canEdit: true, canDelete: true));
         }).RequireAuthorization();
     }
 }

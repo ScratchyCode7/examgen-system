@@ -2,9 +2,9 @@
 // - Added navigation for Test Encoding/Test Question Editing in the Data Entry dropdown.
 // - Integrated ThemeContext usage and ensured logout modal respects theme.
 // See README for full details.
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search, FileText, Users, HelpCircle, Send, Check, X, ShieldOff } from 'lucide-react';
+import { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search, FileText, Users, HelpCircle, Send, Check, X, ShieldOff, Pencil, Trash2, ChevronRight, ChevronDown } from 'lucide-react';
 import NavItem from '../components/NavItem';
 import DropdownNavItem from '../components/DropdownNavItem';
 import LogoutModal from '../components/LogoutModal';
@@ -52,6 +52,15 @@ const CourseTopic = () => {
   const [isLoadingDepartments, setIsLoadingDepartments] = useState(false);
   const [history, setHistory] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [editingSubjectId, setEditingSubjectId] = useState(null);
+  const [isSubjectEditRequestModalOpen, setIsSubjectEditRequestModalOpen] = useState(false);
+  const [subjectEditRequestTarget, setSubjectEditRequestTarget] = useState(null);
+  const [subjectEditRequestMessage, setSubjectEditRequestMessage] = useState('');
+  const [isSubmittingSubjectEditRequest, setIsSubmittingSubjectEditRequest] = useState(false);
+  const [isTopicEditRequestModalOpen, setIsTopicEditRequestModalOpen] = useState(false);
+  const [topicEditRequestTarget, setTopicEditRequestTarget] = useState(null);
+  const [topicEditRequestMessage, setTopicEditRequestMessage] = useState('');
+  const [isSubmittingTopicEditRequest, setIsSubmittingTopicEditRequest] = useState(false);
 
   // Topic Management states
   const [expandedSubjectsMap, setExpandedSubjectsMap] = useState({});
@@ -138,6 +147,8 @@ const CourseTopic = () => {
                 courseUnits: derivedCourseUnits,
                 courseHours: derivedCourseHours,
                 createdAt: s.createdAt,
+                canEdit: s.canEdit === true,
+                canDelete: s.canDelete === true,
               };
             } catch (ex) {
               console.warn('Invalid subject description JSON for subject', s.id, ex);
@@ -234,22 +245,42 @@ const CourseTopic = () => {
     void loadCourses();
   }, [departmentCode, departments]);
 
-  useEffect(() => {
-    const loadTopicRequests = async () => {
-      try {
-        setTopicRequestsLoading(true);
-        const requests = await apiService.getTopicEditRequests(topicRequestScope);
-        setTopicEditRequests(Array.isArray(requests) ? requests : []);
-      } catch (err) {
-        console.error('Failed to load topic edit requests:', err);
-        setTopicEditRequests([]);
-      } finally {
-        setTopicRequestsLoading(false);
-      }
-    };
+  const refreshAccessRequests = useCallback(async (scope = topicRequestScope) => {
+    try {
+      setTopicRequestsLoading(true);
 
-    void loadTopicRequests();
+      const [topicRequestsRaw, subjectRequestsRaw] = await Promise.all([
+        apiService.getTopicEditRequests(scope),
+        apiService.getSubjectEditRequests(scope),
+      ]);
+
+      const topicRequests = (Array.isArray(topicRequestsRaw) ? topicRequestsRaw : []).map((request) => ({
+        ...request,
+        requestType: 'Topic',
+        entityId: request.topicId,
+      }));
+
+      const subjectRequests = (Array.isArray(subjectRequestsRaw) ? subjectRequestsRaw : []).map((request) => ({
+        ...request,
+        requestType: 'Course',
+        entityId: request.subjectId,
+      }));
+
+      const merged = [...topicRequests, ...subjectRequests]
+        .sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime());
+
+      setTopicEditRequests(merged);
+    } catch (err) {
+      console.error('Failed to load access requests:', err);
+      setTopicEditRequests([]);
+    } finally {
+      setTopicRequestsLoading(false);
+    }
   }, [topicRequestScope]);
+
+  useEffect(() => {
+    void refreshAccessRequests(topicRequestScope);
+  }, [refreshAccessRequests, topicRequestScope]);
 
   const handleUserAction = (action) => {
     setIsUserMenuOpen(false);
@@ -326,22 +357,47 @@ const CourseTopic = () => {
           description,
         };
 
-        const createdSubject = await apiService.createSubject(subjectPayload);
-        console.log('Subject created:', createdSubject);
+        if (editingSubjectId) {
+          const updatedSubject = await apiService.updateSubject(editingSubjectId, subjectPayload);
+          console.log('Subject updated:', updatedSubject);
 
-        // Update local history table
-        setHistory((prev) => [
-          ...prev,
-          {
-            subjectId: createdSubject.id,
-            courseId: createdSubject.courseId || Number(course),
-            courseCode,
-            courseTitle,
-            courseUnits,
-            courseHours,
-            createdAt: createdSubject.createdAt,
-          },
-        ]);
+          setHistory((prev) => prev.map((entry) => (
+            entry.subjectId === editingSubjectId
+              ? {
+                  ...entry,
+                  courseId: updatedSubject.courseId || Number(course),
+                  courseCode,
+                  courseTitle,
+                  courseUnits,
+                  courseHours,
+                }
+              : entry
+          )));
+
+          showToast({ message: 'Course entry updated successfully.', type: 'success' });
+          setEditingSubjectId(null);
+        } else {
+          const createdSubject = await apiService.createSubject(subjectPayload);
+          console.log('Subject created:', createdSubject);
+
+          // Update local history table
+          setHistory((prev) => [
+            ...prev,
+            {
+              subjectId: createdSubject.id,
+              courseId: createdSubject.courseId || Number(course),
+              courseCode,
+              courseTitle,
+              courseUnits,
+              courseHours,
+              createdAt: createdSubject.createdAt,
+              canEdit: createdSubject.canEdit === true,
+              canDelete: createdSubject.canDelete === true,
+            },
+          ]);
+
+          showToast({ message: 'Course entry created successfully.', type: 'success' });
+        }
 
         setCourse("");
         setCourseCode("");
@@ -361,6 +417,127 @@ const CourseTopic = () => {
     };
 
     void saveAsync();
+  };
+
+  const handleEditSubjectRow = (item) => {
+    if (!item.canEdit) {
+      showToast({ message: 'You do not have permission to edit this course entry.', type: 'error' });
+      return;
+    }
+
+    setEditingSubjectId(item.subjectId);
+    setCourse(String(item.courseId || ''));
+    setCourseCode(item.courseCode || '');
+    setCourseTitle(item.courseTitle || '');
+    setCourseUnits(String(item.courseUnits || ''));
+    setCourseHours(String(item.courseHours || ''));
+  };
+
+  const handleDeleteSubjectRow = async (item) => {
+    if (!item.canDelete) {
+      showToast({ message: 'You do not have permission to delete this course entry.', type: 'error' });
+      return;
+    }
+
+    const shouldDelete = window.confirm(`Delete course entry "${item.courseTitle}"?`);
+    if (!shouldDelete) return;
+
+    try {
+      setIsLoading(true);
+      await apiService.deleteSubject(item.subjectId);
+      setHistory((prev) => prev.filter((entry) => entry.subjectId !== item.subjectId));
+      if (editingSubjectId === item.subjectId) {
+        setEditingSubjectId(null);
+        setCourse("");
+        setCourseCode("");
+        setCourseTitle("");
+        setCourseUnits("");
+        setCourseHours("");
+      }
+      showToast({ message: 'Course entry deleted successfully.', type: 'success' });
+    } catch (err) {
+      console.error('Failed to delete course entry:', err);
+      const message = err.response?.data?.message || err.response?.data || 'Failed to delete course entry.';
+      showToast({ message, type: 'error' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRequestSubjectAccess = async (item) => {
+    if (!item?.subjectId) return;
+
+    setSubjectEditRequestTarget(item);
+    setSubjectEditRequestMessage('');
+    setIsSubjectEditRequestModalOpen(true);
+  };
+
+  const closeSubjectEditRequestModal = () => {
+    if (isSubmittingSubjectEditRequest) return;
+
+    setIsSubjectEditRequestModalOpen(false);
+    setSubjectEditRequestTarget(null);
+    setSubjectEditRequestMessage('');
+  };
+
+  const submitSubjectEditRequest = async () => {
+    if (!subjectEditRequestTarget?.subjectId) return;
+
+    try {
+      setIsSubmittingSubjectEditRequest(true);
+      await apiService.createSubjectEditRequest(subjectEditRequestTarget.subjectId, subjectEditRequestMessage);
+      await refreshAccessRequests();
+      showToast({ message: 'Access request submitted.', type: 'success' });
+      closeSubjectEditRequestModal();
+    } catch (err) {
+      console.error('Failed to request course access:', err);
+      const errorMessage = err.response?.data?.message || err.response?.data || 'Failed to submit request.';
+      showToast({ message: errorMessage, type: 'error' });
+    } finally {
+      setIsSubmittingSubjectEditRequest(false);
+    }
+  };
+
+  const openTopicEditRequestModal = (topic) => {
+    if (!topic?.id) return;
+    setTopicEditRequestTarget(topic);
+    setTopicEditRequestMessage('');
+    setIsTopicEditRequestModalOpen(true);
+  };
+
+  const closeTopicEditRequestModal = () => {
+    if (isSubmittingTopicEditRequest) return;
+
+    setIsTopicEditRequestModalOpen(false);
+    setTopicEditRequestTarget(null);
+    setTopicEditRequestMessage('');
+  };
+
+  const submitTopicEditRequest = async () => {
+    if (!topicEditRequestTarget?.id) return;
+
+    try {
+      setIsSubmittingTopicEditRequest(true);
+      await apiService.createTopicEditRequest(topicEditRequestTarget.id, topicEditRequestMessage);
+      await refreshAccessRequests();
+      showToast({ message: 'Access request submitted.', type: 'success' });
+      closeTopicEditRequestModal();
+    } catch (err) {
+      console.error('Failed to request topic access:', err);
+      const errorMessage = err.response?.data?.message || err.response?.data || 'Failed to submit request.';
+      showToast({ message: errorMessage, type: 'error' });
+    } finally {
+      setIsSubmittingTopicEditRequest(false);
+    }
+  };
+
+  const handleCancelSubjectEdit = () => {
+    setEditingSubjectId(null);
+    setCourse("");
+    setCourseCode("");
+    setCourseTitle("");
+    setCourseUnits("");
+    setCourseHours("");
   };
 
   // Toggle subject expansion and load topics
@@ -471,15 +648,6 @@ const CourseTopic = () => {
     }
   };
 
-  const refreshTopicRequests = async () => {
-    try {
-      const requests = await apiService.getTopicEditRequests(topicRequestScope);
-      setTopicEditRequests(Array.isArray(requests) ? requests : []);
-    } catch (err) {
-      console.error('Failed to refresh topic edit requests:', err);
-    }
-  };
-
   const handleEditTopic = (subjectId, topic) => {
     if (!topic.canEdit) {
       showToast({ message: 'You do not have permission to edit this topic.', type: 'error' });
@@ -569,25 +737,37 @@ const CourseTopic = () => {
     await handleAddTopic();
   };
 
-  const handleRequestTopicAccess = async (topic) => {
-    const message = window.prompt('Add a message for the topic owner (optional):', '');
-    if (message === null) return;
-
-    try {
-      await apiService.createTopicEditRequest(topic.id, message);
-      await refreshTopicRequests();
-      showToast({ message: 'Access request submitted.', type: 'success' });
-    } catch (err) {
-      console.error('Failed to request topic access:', err);
-      const errorMessage = err.response?.data?.message || err.response?.data || 'Failed to submit request.';
-      showToast({ message: errorMessage, type: 'error' });
-    }
+  const handleRequestTopicAccess = (topic) => {
+    openTopicEditRequestModal(topic);
   };
 
-  const handleResolveTopicRequest = async (requestId, approve, canDelete = false) => {
+  const getRequestMessageText = (request) => {
+    const raw = String(request?.message || '').trim();
+    if (!raw) return 'No message provided.';
+
+    const normalized = raw.toLowerCase();
+    if (normalized === 'edit access requested') {
+      return 'No message provided.';
+    }
+
+    const prefix = 'edit access requested:';
+    if (normalized.startsWith(prefix)) {
+      const stripped = raw.slice(prefix.length).trim();
+      return stripped || 'No message provided.';
+    }
+
+    return raw;
+  };
+
+  const handleResolveTopicRequest = async (request, approve, canDelete = false) => {
     try {
-      await apiService.resolveTopicEditRequest(requestId, approve, canDelete, '');
-      await refreshTopicRequests();
+      if (request.requestType === 'Course') {
+        await apiService.resolveSubjectEditRequest(request.requestId, approve, canDelete, '');
+      } else {
+        await apiService.resolveTopicEditRequest(request.requestId, approve, canDelete, '');
+      }
+
+      await refreshAccessRequests();
 
       const expandedSubjectIds = Object.keys(expandedSubjectsMap)
         .filter(key => expandedSubjectsMap[key])
@@ -605,10 +785,15 @@ const CourseTopic = () => {
     }
   };
 
-  const handleRevokeTopicRequest = async (requestId) => {
+  const handleRevokeTopicRequest = async (request) => {
     try {
-      await apiService.revokeTopicEditPermission(requestId, '');
-      await refreshTopicRequests();
+      if (request.requestType === 'Course') {
+        await apiService.revokeSubjectEditPermission(request.requestId, '');
+      } else {
+        await apiService.revokeTopicEditPermission(request.requestId, '');
+      }
+
+      await refreshAccessRequests();
       showToast({ message: 'Permission revoked.', type: 'success' });
     } catch (err) {
       console.error('Failed to revoke topic permission:', err);
@@ -617,10 +802,15 @@ const CourseTopic = () => {
     }
   };
 
-  const handleDismissTopicRequest = async (requestId) => {
+  const handleDismissTopicRequest = async (request) => {
     try {
-      await apiService.dismissTopicEditRequest(requestId);
-      await refreshTopicRequests();
+      if (request.requestType === 'Course') {
+        await apiService.dismissSubjectEditRequest(request.requestId);
+      } else {
+        await apiService.dismissTopicEditRequest(request.requestId);
+      }
+
+      await refreshAccessRequests();
     } catch (err) {
       console.error('Failed to dismiss topic request:', err);
       const message = err.response?.data?.message || err.response?.data || 'Failed to dismiss request.';
@@ -981,16 +1171,21 @@ const CourseTopic = () => {
             </div>
           </div>
 
-          <button className="save-btn" onClick={handleSave}>Save</button>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+            {editingSubjectId && (
+              <button className="save-btn" onClick={handleCancelSubjectEdit}>Cancel</button>
+            )}
+            <button className="save-btn" onClick={handleSave}>{editingSubjectId ? 'Save Changes' : 'Save'}</button>
+          </div>
 
           {/* History Table - Subject and Topic */}
           <div className="history-table">
             <div className="history-row header">
-              <span style={{width: '5%'}}>#</span>
-              <span style={{width: '20%'}}>Course ID</span>
-              <span style={{width: '45%'}}>Course Title</span>
-              <span style={{width: '20%'}}>Course Hours</span>
-              <span style={{width: '10%'}}></span>
+              <span className="history-cell index">#</span>
+              <span className="history-cell course-id">Course ID</span>
+              <span className="history-cell course-title">Course Title</span>
+              <span className="history-cell hours">Course Hours</span>
+              <span className="history-cell actions">Actions</span>
             </div>
             {isLoading && history.length === 0 && (
               <div className="history-row">
@@ -1006,18 +1201,41 @@ const CourseTopic = () => {
               <React.Fragment key={item.subjectId}>
                 {/* Subject Row with Manage Topics button */}
                 <div className="history-row subject-row">
-                  <span style={{width: '5%'}}>{index + 1}</span>
-                  <span style={{width: '20%'}}>{item.courseCode}</span>
-                  <span style={{width: '45%'}}><strong>{item.courseTitle}</strong></span>
-                  <span style={{width: '20%'}}>{item.courseHours}</span>
-                  <span style={{width: '10%', display: 'flex', justifyContent: 'center', alignItems: 'center'}}>
-                    <button 
-                      className={`expand-btn ${expandedSubjectsMap[item.subjectId] ? 'expanded' : ''}`}
-                      onClick={() => toggleSubjectExpansion(item.subjectId)}
-                      title={expandedSubjectsMap[item.subjectId] ? 'Collapse topics' : 'Manage topics'}
-                    >
-                      {expandedSubjectsMap[item.subjectId] ? '▼' : '▶'}
-                    </button>
+                  <span className="history-cell index">{index + 1}</span>
+                  <span className="history-cell course-id">{item.courseCode}</span>
+                  <span className="history-cell course-title"><strong>{item.courseTitle}</strong></span>
+                  <span className="history-cell hours">{item.courseHours}</span>
+                  <span className="history-cell actions">
+                    <div className="subject-row-actions">
+                      {item.canEdit ? (
+                        <button
+                          className="topic-action-btn"
+                          onClick={() => handleEditSubjectRow(item)}
+                          title="Edit course"
+                          aria-label="Edit course"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                      ) : null}
+                      {item.canDelete && (
+                        <button
+                          className="topic-action-btn danger"
+                          onClick={() => handleDeleteSubjectRow(item)}
+                          title="Delete course"
+                          aria-label="Delete course"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                      <button 
+                        className={`expand-btn ${expandedSubjectsMap[item.subjectId] ? 'expanded' : ''}`}
+                        onClick={() => toggleSubjectExpansion(item.subjectId)}
+                        title={expandedSubjectsMap[item.subjectId] ? 'Collapse topics' : 'Manage topics'}
+                        aria-label={expandedSubjectsMap[item.subjectId] ? 'Collapse topics' : 'Expand topics'}
+                      >
+                        {expandedSubjectsMap[item.subjectId] ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                      </button>
+                    </div>
                   </span>
                 </div>
                 
@@ -1026,28 +1244,55 @@ const CourseTopic = () => {
                   <div className="subject-topics-container">
                     {/* Existing Topics List */}
                     <div className="topics-list-section">
-                      <h4>Topics for {item.courseTitle}</h4>
+                      <div className="topics-list-header">
+                        <h4>Topics for {item.courseTitle}</h4>
+                        {!item.canEdit && (
+                          <button
+                            className="topic-action-btn request request-access-btn"
+                            onClick={() => handleRequestSubjectAccess(item)}
+                            title="Request course access"
+                            aria-label="Request course access"
+                          >
+                            Request Access
+                          </button>
+                        )}
+                      </div>
                       {subjectTopicsMap[item.subjectId] && subjectTopicsMap[item.subjectId].length > 0 ? (
                         <div className="topics-list">
                           {subjectTopicsMap[item.subjectId].map((topic, topicIdx) => (
                             <div key={topic.id} className="history-row topic-item-row">
-                              <span style={{width: '5%'}}>{topicIdx + 1}</span>
-                              <span style={{width: '20%'}}>{item.courseCode}</span>
-                              <span style={{width: '35%'}}>• {topic.title}</span>
-                              <span className="hours-cell" style={{width: '15%'}}>{topic.allocatedHours}</span>
-                              <span className="topic-row-actions" style={{width: '25%'}}>
+                              <span className="history-cell index">{topicIdx + 1}</span>
+                              <span className="history-cell course-id">{item.courseCode}</span>
+                              <span className="history-cell course-title">• {topic.title}</span>
+                              <span className="history-cell hours hours-cell">{topic.allocatedHours}</span>
+                              <span className="history-cell actions topic-row-actions">
                                 {topic.canEdit ? (
-                                  <button className="topic-action-btn" onClick={() => handleEditTopic(item.subjectId, topic)}>
-                                    Edit
+                                  <button
+                                    className="topic-action-btn"
+                                    onClick={() => handleEditTopic(item.subjectId, topic)}
+                                    title="Edit topic"
+                                    aria-label="Edit topic"
+                                  >
+                                    <Pencil size={14} />
                                   </button>
                                 ) : (
-                                  <button className="topic-action-btn request" onClick={() => handleRequestTopicAccess(topic)}>
-                                    <Send size={14} className="btn-icon" /> Request Access
+                                  <button
+                                    className="topic-action-btn request"
+                                    onClick={() => handleRequestTopicAccess(topic)}
+                                    title="Request topic access"
+                                    aria-label="Request topic access"
+                                  >
+                                    <Send size={14} className="btn-icon" />
                                   </button>
                                 )}
                                 {topic.canDelete && (
-                                  <button className="topic-action-btn danger" onClick={() => handleDeleteTopic(item.subjectId, topic)}>
-                                    Delete
+                                  <button
+                                    className="topic-action-btn danger"
+                                    onClick={() => handleDeleteTopic(item.subjectId, topic)}
+                                    title="Delete topic"
+                                    aria-label="Delete topic"
+                                  >
+                                    <Trash2 size={14} />
                                   </button>
                                 )}
                               </span>
@@ -1135,7 +1380,7 @@ const CourseTopic = () => {
 
           <div className="topic-requests-panel">
             <div className="topic-requests-header">
-              <h4>Topic Access Requests</h4>
+              <h4>Course & Topic Access Requests</h4>
               <div className="topic-request-scope">
                 <button
                   type="button"
@@ -1164,44 +1409,59 @@ const CourseTopic = () => {
             {topicRequestsLoading ? (
               <p>Loading access requests...</p>
             ) : topicEditRequests.length === 0 ? (
-              <p>No topic access requests found.</p>
+              <p>No access requests found.</p>
             ) : (
               <div className="topic-request-list">
-                {topicEditRequests.map((request) => (
-                  <div key={request.requestId} className="topic-request-item">
+                {topicEditRequests.map((request) => {
+                  const isOwnerOfRequest = String(request.ownerUserId || '').toLowerCase() === String(user?.userId || '').toLowerCase();
+
+                  return (
+                  <div key={`${request.requestType}-${request.requestId}`} className="topic-request-item">
                     <div className="topic-request-main">
-                      <strong>{request.requesterName}</strong> requested access to topic #{request.topicId}
-                      <span className={`status-badge status-${request.status.toLowerCase()}`}>{request.status}</span>
+                      <strong>{request.requesterName}</strong> requested access to {request.requestType.toLowerCase()} #{request.entityId}
+                      <div className="topic-request-main-actions">
+                        <span className={`status-badge status-${request.status.toLowerCase()}`}>{request.status}</span>
+                        <button
+                          type="button"
+                          className="request-card-close-btn"
+                          onClick={() => handleDismissTopicRequest(request)}
+                          title="Close card"
+                          aria-label="Close card"
+                        >
+                          ×
+                        </button>
+                      </div>
                     </div>
-                    {request.message && <p className="topic-request-message">{request.message}</p>}
+                    <p className="topic-request-message">
+                      <strong>Message:</strong> {getRequestMessageText(request)}
+                    </p>
                     <div className="topic-request-meta">
+                      <span>Type: {request.requestType}</span>
                       <span>Permission: {request.permissionLevel}</span>
                     </div>
                     <div className="topic-request-actions">
+                      {isOwnerOfRequest && request.status !== 'Revoked' && (
+                        <button type="button" className="danger" onClick={() => handleRevokeTopicRequest(request)}>
+                          <ShieldOff size={14} className="btn-icon" /> Revoke Access
+                        </button>
+                      )}
                       {request.status === 'Pending' && !request.isMine && (
                         <>
-                          <button type="button" onClick={() => handleResolveTopicRequest(request.requestId, true, false)}>
+                          <button type="button" onClick={() => handleResolveTopicRequest(request, true, false)}>
                             <Check size={14} className="btn-icon" /> Approve Edit
                           </button>
-                          <button type="button" onClick={() => handleResolveTopicRequest(request.requestId, true, true)}>
+                          <button type="button" onClick={() => handleResolveTopicRequest(request, true, true)}>
                             <Check size={14} className="btn-icon" /> Approve Edit+Delete
                           </button>
-                          <button type="button" className="danger" onClick={() => handleResolveTopicRequest(request.requestId, false, false)}>
+                          <button type="button" className="danger" onClick={() => handleResolveTopicRequest(request, false, false)}>
                             <X size={14} className="btn-icon" /> Reject
                           </button>
                         </>
                       )}
-                      {request.canRevoke && (
-                        <button type="button" className="danger" onClick={() => handleRevokeTopicRequest(request.requestId)}>
-                          <ShieldOff size={14} className="btn-icon" /> Revoke
-                        </button>
-                      )}
-                      {request.status === 'Revoked' && (
-                        <button type="button" onClick={() => handleDismissTopicRequest(request.requestId)}>Dismiss</button>
-                      )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1209,6 +1469,80 @@ const CourseTopic = () => {
       </div>
 
       {/* Logout Modal */}
+      {isTopicEditRequestModalOpen && (
+        <div className="edit-request-modal-overlay" onClick={closeTopicEditRequestModal}>
+          <div className={`edit-request-modal ${isDarkMode ? 'dark' : ''}`} onClick={(event) => event.stopPropagation()}>
+            <h3>Request Edit Permission</h3>
+            <p>
+              Send a request to the topic owner for Topic ID <strong>{topicEditRequestTarget?.id}</strong>.
+            </p>
+            <label htmlFor="topic-edit-request-message">Message (optional)</label>
+            <textarea
+              id="topic-edit-request-message"
+              value={topicEditRequestMessage}
+              onChange={(event) => setTopicEditRequestMessage(event.target.value)}
+              placeholder="Write why you need to edit this topic..."
+              maxLength={1000}
+            />
+            <div className="edit-request-modal-actions">
+              <button
+                type="button"
+                className="btn-cancel"
+                onClick={closeTopicEditRequestModal}
+                disabled={isSubmittingTopicEditRequest}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-confirm"
+                onClick={submitTopicEditRequest}
+                disabled={isSubmittingTopicEditRequest}
+              >
+                {isSubmittingTopicEditRequest ? 'Sending...' : 'Send Request'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isSubjectEditRequestModalOpen && (
+        <div className="edit-request-modal-overlay" onClick={closeSubjectEditRequestModal}>
+          <div className={`edit-request-modal ${isDarkMode ? 'dark' : ''}`} onClick={(event) => event.stopPropagation()}>
+            <h3>Request Edit Permission</h3>
+            <p>
+              Send a request to the course owner for Course ID <strong>{subjectEditRequestTarget?.subjectId}</strong>.
+            </p>
+            <label htmlFor="course-edit-request-message">Message (optional)</label>
+            <textarea
+              id="course-edit-request-message"
+              value={subjectEditRequestMessage}
+              onChange={(event) => setSubjectEditRequestMessage(event.target.value)}
+              placeholder="Write why you need to edit this course entry..."
+              maxLength={1000}
+            />
+            <div className="edit-request-modal-actions">
+              <button
+                type="button"
+                className="btn-cancel"
+                onClick={closeSubjectEditRequestModal}
+                disabled={isSubmittingSubjectEditRequest}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-confirm"
+                onClick={submitSubjectEditRequest}
+                disabled={isSubmittingSubjectEditRequest}
+              >
+                {isSubmittingSubjectEditRequest ? 'Sending...' : 'Send Request'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <LogoutModal
         isOpen={isLogoutModalOpen}
         onClose={() => setIsLogoutModalOpen(false)}

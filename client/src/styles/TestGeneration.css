@@ -1909,6 +1909,51 @@
   background: #1e293b;
 }
 
+.my-requests-refresh-btn,
+.my-requests-action-btn {
+  min-width: 34px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.my-requests-refresh-btn {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #1f2937;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.my-requests-refresh-btn:hover:not(:disabled) {
+  background: #f8fafc;
+}
+
+.my-requests-refresh-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.dashboard.dark .my-requests-refresh-btn {
+  border-color: #334155;
+  background: #1f2937;
+  color: #e5e7eb;
+}
+
+.dashboard.dark .my-requests-refresh-btn:hover:not(:disabled) {
+  background: #273548;
+}
+
+.my-requests-action-group {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  align-items: center;
+}
+
 
 .exam-modal-body {
   color: #44506a;

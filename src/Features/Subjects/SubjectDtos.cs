@@ -17,12 +17,14 @@ public sealed record SubjectResponse(
     string? Description,
     bool IsActive,
     DateTime CreatedAt,
-    DateTime UpdatedAt
+    DateTime UpdatedAt,
+    bool CanEdit,
+    bool CanDelete
 );
 
 public static class SubjectMappings
 {
-    public static SubjectResponse ToResponse(this Subject subject)
+    public static SubjectResponse ToResponse(this Subject subject, bool canEdit = false, bool canDelete = false)
     {
         return new SubjectResponse(
             subject.Id,
@@ -32,7 +34,9 @@ public static class SubjectMappings
             subject.Description,
             subject.IsActive,
             subject.CreatedAt,
-            subject.UpdatedAt
+            subject.UpdatedAt,
+            canEdit,
+            canDelete
         );
     }
 }

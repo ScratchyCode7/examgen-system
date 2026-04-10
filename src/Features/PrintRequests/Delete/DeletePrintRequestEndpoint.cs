@@ -40,9 +40,12 @@ public sealed class DeletePrintRequestEndpoint : IEndpoint
                 return Results.Forbid();
             }
 
-            if (!isAdmin && printRequest.Status != PrintRequestStatus.Pending && printRequest.Status != PrintRequestStatus.Rejected)
+            if (!isAdmin
+                && printRequest.Status != PrintRequestStatus.Pending
+                && printRequest.Status != PrintRequestStatus.Rejected
+                && printRequest.Status != PrintRequestStatus.Completed)
             {
-                return Results.BadRequest(new { error = "Only pending or rejected requests can be deleted." });
+                return Results.BadRequest(new { error = "Only pending, rejected, or completed requests can be deleted." });
             }
 
             db.PrintRequests.Remove(printRequest);

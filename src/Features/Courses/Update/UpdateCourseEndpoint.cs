@@ -1,4 +1,5 @@
 using Databank.Abstract;
+using Databank.Common;
 using Databank.Database;
 using Microsoft.EntityFrameworkCore;
 
@@ -31,20 +32,27 @@ public sealed class UpdateCourseEndpoint : IEndpoint
                 return TypedResults.BadRequest("Department not found.");
             }
 
-            // Check for duplicate code if code changed
-            if (course.Code != request.Code)
+            var normalizedCode = DuplicateKeyNormalizer.NormalizeKey(request.Code);
+            if (string.IsNullOrWhiteSpace(normalizedCode))
             {
-                var exists = await dbContext.Courses
-                    .AnyAsync(c => c.Code == request.Code && c.DepartmentId == request.DepartmentId && c.Id != id, ct);
+                return TypedResults.BadRequest("Course code is required.");
+            }
 
-                if (exists)
-                {
-                    return TypedResults.Conflict($"Course with code '{request.Code}' already exists in this department.");
-                }
+            var siblingCodes = await dbContext.Courses
+                .AsNoTracking()
+                .Where(c => c.DepartmentId == request.DepartmentId && c.Id != id)
+                .Select(c => c.Code)
+                .ToListAsync(ct);
+
+            var exists = siblingCodes.Any(code => DuplicateKeyNormalizer.NormalizeKey(code) == normalizedCode);
+
+            if (exists)
+            {
+                return TypedResults.Conflict($"Course with code '{request.Code}' already exists in this department.");
             }
 
             course.Name = request.Name;
-            course.Code = request.Code;
+            course.Code = request.Code?.Trim() ?? string.Empty;
             course.Description = request.Description;
             course.DepartmentId = request.DepartmentId;
             course.UpdatedAt = DateTime.UtcNow;

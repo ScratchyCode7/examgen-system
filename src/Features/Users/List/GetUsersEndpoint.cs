@@ -16,16 +16,21 @@ public sealed class GetUsersEndpoint : IEndpoint
                 CancellationToken ct = default) =>
         {
             var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
-            var query = dbContext.Users.AsNoTracking();
+            var query = dbContext.Users
+            .AsNoTracking()
+            .Include(u => u.UserDepartments);
 
             var totalCount = await query.CountAsync(ct);
 
-            var users = await query
+            var userEntities = await query
                 .OrderByDescending(u => u.CreatedAt)
                 .Skip(pagination.Skip)
                 .Take(pagination.Take)
-                .Select(u => u.ToResponse())
                 .ToListAsync(ct);
+
+            var users = userEntities
+                .Select(u => u.ToResponse())
+                .ToList();
 
             var response = new PagedResponse<UserResponse>
             {

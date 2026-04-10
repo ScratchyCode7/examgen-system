@@ -1,4 +1,5 @@
 using Databank.Abstract;
+using Databank.Common;
 using Databank.Database;
 using Databank.Features.Topics;
 using Microsoft.EntityFrameworkCore;
@@ -43,7 +44,25 @@ public sealed class UpdateTopicEndpoint : IEndpoint
                     statusCode: StatusCodes.Status403Forbidden);
             }
 
-            topic.Title = request.Title;
+            var normalizedTitle = DuplicateKeyNormalizer.NormalizeKey(request.Title);
+            if (string.IsNullOrWhiteSpace(normalizedTitle))
+            {
+                return TypedResults.BadRequest("Topic title is required.");
+            }
+
+            var siblingTitles = await dbContext.Topics
+                .AsNoTracking()
+                .Where(t => t.SubjectId == topic.SubjectId && t.Id != id)
+                .Select(t => t.Title)
+                .ToListAsync(ct);
+
+            var duplicateExists = siblingTitles.Any(title => DuplicateKeyNormalizer.NormalizeKey(title) == normalizedTitle);
+            if (duplicateExists)
+            {
+                return TypedResults.Conflict($"Topic '{request.Title}' already exists in this subject.");
+            }
+
+            topic.Title = request.Title.Trim();
             if (request.Description != null)
             {
                 topic.Description = request.Description;

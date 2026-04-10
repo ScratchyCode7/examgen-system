@@ -1,88 +1,87 @@
 using Databank.Abstract;
 using Databank.Database;
 using Databank.Entities;
-using Databank.Features.Topics;
+using Databank.Features.Subjects;
 using Microsoft.EntityFrameworkCore;
 
-namespace Databank.Features.Topics.EditRequests;
+namespace Databank.Features.Subjects.EditRequests;
 
-public sealed class TopicEditRequestEndpoint : IEndpoint
+public sealed class SubjectEditRequestEndpoint : IEndpoint
 {
-    private const string RequestAction = TopicPermissionResolver.RequestAction;
-    private const string ApproveAction = TopicPermissionResolver.ApproveEditOnlyAction;
-    private const string ApproveDeleteAction = TopicPermissionResolver.ApproveEditDeleteAction;
-    private const string RejectAction = TopicPermissionResolver.RejectAction;
-    private const string RevokeAction = TopicPermissionResolver.RevokeAction;
+    private const string RequestAction = SubjectPermissionResolver.RequestAction;
+    private const string ApproveAction = SubjectPermissionResolver.ApproveEditOnlyAction;
+    private const string ApproveDeleteAction = SubjectPermissionResolver.ApproveEditDeleteAction;
+    private const string RejectAction = SubjectPermissionResolver.RejectAction;
+    private const string RevokeAction = SubjectPermissionResolver.RevokeAction;
     private const string DismissAction = "EditRequestDismissed";
-    private const string RequestEntityType = TopicPermissionResolver.RequestEntityType;
-    private const string ResolutionEntityType = TopicPermissionResolver.ResolutionEntityType;
+    private const string RequestEntityType = SubjectPermissionResolver.RequestEntityType;
+    private const string ResolutionEntityType = SubjectPermissionResolver.ResolutionEntityType;
 
     public void Endpoint(IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/topics/{topicId:int}/edit-requests", CreateAsync)
+        app.MapPost("/api/subjects/{subjectId:int}/edit-requests", CreateAsync)
             .RequireAuthorization();
 
-        app.MapGet("/api/topics/edit-requests", ListAsync)
+        app.MapGet("/api/subjects/edit-requests", ListAsync)
             .RequireAuthorization();
 
-        app.MapPost("/api/topics/edit-requests/{requestId:long}/resolve", ResolveAsync)
+        app.MapPost("/api/subjects/edit-requests/{requestId:long}/resolve", ResolveAsync)
             .RequireAuthorization();
 
-        app.MapPost("/api/topics/edit-requests/{requestId:long}/revoke", RevokeAsync)
+        app.MapPost("/api/subjects/edit-requests/{requestId:long}/revoke", RevokeAsync)
             .RequireAuthorization();
 
-        app.MapPost("/api/topics/edit-requests/{requestId:long}/dismiss", DismissAsync)
+        app.MapPost("/api/subjects/edit-requests/{requestId:long}/dismiss", DismissAsync)
             .RequireAuthorization();
     }
 
     private static async Task<IResult> CreateAsync(
-        int topicId,
-        CreateTopicEditRequest request,
+        int subjectId,
+        CreateSubjectEditRequest request,
         AppDbContext dbContext,
         HttpContext httpContext,
         CancellationToken ct)
     {
-        var requesterId = TopicPermissionResolver.GetCurrentUserId(httpContext.User);
+        var requesterId = SubjectPermissionResolver.GetCurrentUserId(httpContext.User);
         if (!requesterId.HasValue)
         {
             return TypedResults.Problem("Unable to determine current user.", statusCode: StatusCodes.Status401Unauthorized);
         }
 
-        var topic = await dbContext.Topics
+        var subject = await dbContext.Subjects
             .AsNoTracking()
-            .Include(t => t.Subject)
-                .ThenInclude(s => s.Course)
-            .FirstOrDefaultAsync(t => t.Id == topicId, ct);
+            .Include(s => s.Course)
+            .FirstOrDefaultAsync(s => s.Id == subjectId, ct);
 
-        if (topic is null)
+        if (subject is null)
         {
-            return TypedResults.NotFound(new { message = "Topic not found." });
+            return TypedResults.NotFound(new { message = "Subject not found." });
         }
 
-        var ownerId = await GetTopicOwnerIdAsync(dbContext, topicId, ct);
+        var ownerId = await GetSubjectOwnerIdAsync(dbContext, subjectId, ct);
         if (!ownerId.HasValue)
         {
-            return TypedResults.BadRequest(new { message = "Topic owner could not be determined for this topic." });
+            return TypedResults.BadRequest(new { message = "Subject owner could not be determined for this course entry." });
         }
 
         if (ownerId.Value == requesterId.Value)
         {
-            return TypedResults.BadRequest(new { message = "You already own this topic. Edit request is not needed." });
+            return TypedResults.BadRequest(new { message = "You already own this course entry. Edit request is not needed." });
         }
 
-        var currentPermission = await TopicPermissionResolver.ResolvePermissionsForUserAsync(
+        var currentPermission = await SubjectPermissionResolver.ResolvePermissionsForUserAsync(
             dbContext,
             requesterId.Value,
-            new[] { topicId },
+            new[] { subjectId },
             ct);
 
-        if (currentPermission.TryGetValue(topicId, out var perms) && perms.CanEdit)
+        if (currentPermission.TryGetValue(subjectId, out var perms) && perms.CanEdit)
         {
-            return TypedResults.Conflict(new { message = "You already have active access to this topic." });
+            return TypedResults.Conflict(new { message = "You already have active access to this course entry." });
         }
 
         var requesterCreatedLogs = await dbContext.ActivityLogs
-            .Where(a => a.Action == RequestAction && a.EntityType == RequestEntityType && a.EntityId == topicId && a.UserId == requesterId.Value)
+            .Where(a => a.Action == RequestAction && a.EntityType == RequestEntityType && a.EntityId == subjectId && a.UserId == requesterId.Value)
             .Select(a => new { a.Id })
             .ToListAsync(ct);
 
@@ -94,7 +93,7 @@ public sealed class TopicEditRequestEndpoint : IEndpoint
         var hasPendingRequest = requesterCreatedLogs.Any(log => log.Id <= int.MaxValue && !requesterResolutionIds.Contains((int)log.Id));
         if (hasPendingRequest)
         {
-            return TypedResults.Conflict(new { message = "You already have a pending edit request for this topic." });
+            return TypedResults.Conflict(new { message = "You already have a pending edit request for this course entry." });
         }
 
         var message = (request.Message ?? string.Empty).Trim();
@@ -109,12 +108,12 @@ public sealed class TopicEditRequestEndpoint : IEndpoint
 
         var editRequestLog = new ActivityLog
         {
-            DepartmentId = topic.Subject.Course.DepartmentId,
+            DepartmentId = subject.Course.DepartmentId,
             UserId = requesterId.Value,
-            Category = "Topics",
+            Category = "Subjects",
             Action = RequestAction,
             EntityType = RequestEntityType,
-            EntityId = topicId,
+            EntityId = subjectId,
             Details = details,
             Severity = "Warning",
             CreatedAt = DateTime.UtcNow
@@ -127,7 +126,7 @@ public sealed class TopicEditRequestEndpoint : IEndpoint
         {
             message = "Edit request submitted successfully.",
             requestId = editRequestLog.Id,
-            topicId
+            subjectId
         });
     }
 
@@ -137,7 +136,7 @@ public sealed class TopicEditRequestEndpoint : IEndpoint
         HttpContext httpContext,
         CancellationToken ct)
     {
-        var currentUserId = TopicPermissionResolver.GetCurrentUserId(httpContext.User);
+        var currentUserId = SubjectPermissionResolver.GetCurrentUserId(httpContext.User);
         if (!currentUserId.HasValue)
         {
             return TypedResults.Problem("Unable to determine current user.", statusCode: StatusCodes.Status401Unauthorized);
@@ -151,18 +150,18 @@ public sealed class TopicEditRequestEndpoint : IEndpoint
 
         var requestLogs = await dbContext.ActivityLogs
             .AsNoTracking()
-            .Where(a => a.Category == "Topics" && a.Action == RequestAction && a.EntityType == RequestEntityType && a.EntityId.HasValue && a.UserId.HasValue)
+            .Where(a => a.Category == "Subjects" && a.Action == RequestAction && a.EntityType == RequestEntityType && a.EntityId.HasValue && a.UserId.HasValue)
             .OrderByDescending(a => a.CreatedAt)
             .Take(500)
             .ToListAsync(ct);
 
         if (requestLogs.Count == 0)
         {
-            return TypedResults.Ok(Array.Empty<TopicEditRequestResponse>());
+            return TypedResults.Ok(Array.Empty<SubjectEditRequestResponse>());
         }
 
-        var topicIds = requestLogs.Select(a => a.EntityId!.Value).Distinct().ToList();
-        var ownerByTopic = await TopicPermissionResolver.ResolveOwnerIdsAsync(dbContext, topicIds, ct);
+        var subjectIds = requestLogs.Select(a => a.EntityId!.Value).Distinct().ToList();
+        var ownerBySubject = await SubjectPermissionResolver.ResolveOwnerIdsAsync(dbContext, subjectIds, ct);
 
         IEnumerable<ActivityLog> scopedLogs = requestLogs;
         if (normalizedScope == "sent")
@@ -172,7 +171,7 @@ public sealed class TopicEditRequestEndpoint : IEndpoint
         else if (normalizedScope == "inbox")
         {
             scopedLogs = requestLogs.Where(log =>
-                ownerByTopic.TryGetValue(log.EntityId!.Value, out var ownerId) &&
+                ownerBySubject.TryGetValue(log.EntityId!.Value, out var ownerId) &&
                 ownerId == currentUserId.Value &&
                 log.UserId != currentUserId.Value);
         }
@@ -180,13 +179,13 @@ public sealed class TopicEditRequestEndpoint : IEndpoint
         {
             scopedLogs = requestLogs.Where(log =>
                 log.UserId == currentUserId.Value ||
-                (ownerByTopic.TryGetValue(log.EntityId!.Value, out var ownerId) && ownerId == currentUserId.Value));
+                (ownerBySubject.TryGetValue(log.EntityId!.Value, out var ownerId) && ownerId == currentUserId.Value));
         }
 
         var requestList = scopedLogs.ToList();
         if (requestList.Count == 0)
         {
-            return TypedResults.Ok(Array.Empty<TopicEditRequestResponse>());
+            return TypedResults.Ok(Array.Empty<SubjectEditRequestResponse>());
         }
 
         var requestIdsForDismissLookup = requestList
@@ -216,7 +215,7 @@ public sealed class TopicEditRequestEndpoint : IEndpoint
 
         if (requestList.Count == 0)
         {
-            return TypedResults.Ok(Array.Empty<TopicEditRequestResponse>());
+            return TypedResults.Ok(Array.Empty<SubjectEditRequestResponse>());
         }
 
         var requestIdMap = requestList
@@ -240,7 +239,7 @@ public sealed class TopicEditRequestEndpoint : IEndpoint
         var userIds = requestList
             .Select(log => log.UserId!.Value)
             .Concat(requestList
-                .Select(log => ownerByTopic.TryGetValue(log.EntityId!.Value, out var owner) ? owner : (Guid?)null)
+                .Select(log => ownerBySubject.TryGetValue(log.EntityId!.Value, out var owner) ? owner : (Guid?)null)
                 .Where(id => id.HasValue)
                 .Select(id => id!.Value))
             .Distinct()
@@ -261,12 +260,12 @@ public sealed class TopicEditRequestEndpoint : IEndpoint
         var userNameById = users.ToDictionary(u => u.UserId, u => u.Name);
 
         var response = requestList
-            .Where(log => ownerByTopic.ContainsKey(log.EntityId!.Value) && ownerByTopic[log.EntityId!.Value].HasValue)
+            .Where(log => ownerBySubject.ContainsKey(log.EntityId!.Value) && ownerBySubject[log.EntityId!.Value].HasValue)
             .Select(log =>
             {
                 var requestIdInt = log.Id <= int.MaxValue ? (int?)log.Id : null;
                 latestResolutionByRequestId.TryGetValue(requestIdInt ?? -1, out var resolution);
-                var ownerId = ownerByTopic[log.EntityId!.Value]!.Value;
+                var ownerId = ownerBySubject[log.EntityId!.Value]!.Value;
                 var requesterId = log.UserId!.Value;
 
                 var status = resolution is null
@@ -286,7 +285,7 @@ public sealed class TopicEditRequestEndpoint : IEndpoint
                     && (resolution.Action == ApproveAction || resolution.Action == ApproveDeleteAction)
                     && ownerId == currentUserId.Value;
 
-                return new TopicEditRequestResponse(
+                return new SubjectEditRequestResponse(
                     log.Id,
                     log.EntityId!.Value,
                     requesterId,
@@ -310,7 +309,7 @@ public sealed class TopicEditRequestEndpoint : IEndpoint
 
     private static async Task<IResult> ResolveAsync(
         long requestId,
-        ResolveTopicEditRequest request,
+        ResolveSubjectEditRequest request,
         AppDbContext dbContext,
         HttpContext httpContext,
         CancellationToken ct)
@@ -320,7 +319,7 @@ public sealed class TopicEditRequestEndpoint : IEndpoint
             return TypedResults.BadRequest(new { message = "Invalid request id." });
         }
 
-        var ownerUserId = TopicPermissionResolver.GetCurrentUserId(httpContext.User);
+        var ownerUserId = SubjectPermissionResolver.GetCurrentUserId(httpContext.User);
         if (!ownerUserId.HasValue)
         {
             return TypedResults.Problem("Unable to determine current user.", statusCode: StatusCodes.Status401Unauthorized);
@@ -329,7 +328,7 @@ public sealed class TopicEditRequestEndpoint : IEndpoint
         var requestLog = await dbContext.ActivityLogs
             .FirstOrDefaultAsync(a =>
                 a.Id == requestId &&
-                a.Category == "Topics" &&
+                a.Category == "Subjects" &&
                 a.Action == RequestAction &&
                 a.EntityType == RequestEntityType &&
                 a.EntityId.HasValue,
@@ -340,11 +339,11 @@ public sealed class TopicEditRequestEndpoint : IEndpoint
             return TypedResults.NotFound(new { message = "Edit request not found." });
         }
 
-        var topicId = requestLog.EntityId!.Value;
-        var topicOwnerId = await GetTopicOwnerIdAsync(dbContext, topicId, ct);
-        if (!topicOwnerId.HasValue || topicOwnerId.Value != ownerUserId.Value)
+        var subjectId = requestLog.EntityId!.Value;
+        var subjectOwnerId = await GetSubjectOwnerIdAsync(dbContext, subjectId, ct);
+        if (!subjectOwnerId.HasValue || subjectOwnerId.Value != ownerUserId.Value)
         {
-            return TypedResults.Problem("Only the topic owner can resolve this edit request.", statusCode: StatusCodes.Status403Forbidden);
+            return TypedResults.Problem("Only the subject owner can resolve this edit request.", statusCode: StatusCodes.Status403Forbidden);
         }
 
         var latestResolution = await dbContext.ActivityLogs
@@ -388,7 +387,7 @@ public sealed class TopicEditRequestEndpoint : IEndpoint
         {
             DepartmentId = requestLog.DepartmentId,
             UserId = ownerUserId.Value,
-            Category = "Topics",
+            Category = "Subjects",
             Action = resolutionAction,
             EntityType = ResolutionEntityType,
             EntityId = (int)requestId,
@@ -409,7 +408,7 @@ public sealed class TopicEditRequestEndpoint : IEndpoint
 
     private static async Task<IResult> RevokeAsync(
         long requestId,
-        RevokeTopicEditPermission request,
+        RevokeSubjectEditPermission request,
         AppDbContext dbContext,
         HttpContext httpContext,
         CancellationToken ct)
@@ -419,7 +418,7 @@ public sealed class TopicEditRequestEndpoint : IEndpoint
             return TypedResults.BadRequest(new { message = "Invalid request id." });
         }
 
-        var ownerUserId = TopicPermissionResolver.GetCurrentUserId(httpContext.User);
+        var ownerUserId = SubjectPermissionResolver.GetCurrentUserId(httpContext.User);
         if (!ownerUserId.HasValue)
         {
             return TypedResults.Problem("Unable to determine current user.", statusCode: StatusCodes.Status401Unauthorized);
@@ -428,7 +427,7 @@ public sealed class TopicEditRequestEndpoint : IEndpoint
         var requestLog = await dbContext.ActivityLogs
             .FirstOrDefaultAsync(a =>
                 a.Id == requestId &&
-                a.Category == "Topics" &&
+                a.Category == "Subjects" &&
                 a.Action == RequestAction &&
                 a.EntityType == RequestEntityType &&
                 a.EntityId.HasValue,
@@ -439,11 +438,11 @@ public sealed class TopicEditRequestEndpoint : IEndpoint
             return TypedResults.NotFound(new { message = "Edit request not found." });
         }
 
-        var topicId = requestLog.EntityId!.Value;
-        var topicOwnerId = await GetTopicOwnerIdAsync(dbContext, topicId, ct);
-        if (!topicOwnerId.HasValue || topicOwnerId.Value != ownerUserId.Value)
+        var subjectId = requestLog.EntityId!.Value;
+        var subjectOwnerId = await GetSubjectOwnerIdAsync(dbContext, subjectId, ct);
+        if (!subjectOwnerId.HasValue || subjectOwnerId.Value != ownerUserId.Value)
         {
-            return TypedResults.Problem("Only the topic owner can revoke this permission.", statusCode: StatusCodes.Status403Forbidden);
+            return TypedResults.Problem("Only the subject owner can revoke this permission.", statusCode: StatusCodes.Status403Forbidden);
         }
 
         var latestResolution = await dbContext.ActivityLogs
@@ -470,7 +469,7 @@ public sealed class TopicEditRequestEndpoint : IEndpoint
         {
             DepartmentId = requestLog.DepartmentId,
             UserId = ownerUserId.Value,
-            Category = "Topics",
+            Category = "Subjects",
             Action = RevokeAction,
             EntityType = ResolutionEntityType,
             EntityId = (int)requestId,
@@ -496,7 +495,7 @@ public sealed class TopicEditRequestEndpoint : IEndpoint
             return TypedResults.BadRequest(new { message = "Invalid request id." });
         }
 
-        var currentUserId = TopicPermissionResolver.GetCurrentUserId(httpContext.User);
+        var currentUserId = SubjectPermissionResolver.GetCurrentUserId(httpContext.User);
         if (!currentUserId.HasValue)
         {
             return TypedResults.Problem("Unable to determine current user.", statusCode: StatusCodes.Status401Unauthorized);
@@ -505,7 +504,7 @@ public sealed class TopicEditRequestEndpoint : IEndpoint
         var requestLog = await dbContext.ActivityLogs
             .FirstOrDefaultAsync(a =>
                 a.Id == requestId &&
-                a.Category == "Topics" &&
+                a.Category == "Subjects" &&
                 a.Action == RequestAction &&
                 a.EntityType == RequestEntityType &&
                 a.EntityId.HasValue &&
@@ -517,13 +516,13 @@ public sealed class TopicEditRequestEndpoint : IEndpoint
             return TypedResults.NotFound(new { message = "Edit request not found." });
         }
 
-        var topicId = requestLog.EntityId!.Value;
-        var ownerId = await GetTopicOwnerIdAsync(dbContext, topicId, ct);
+        var subjectId = requestLog.EntityId!.Value;
+        var ownerId = await GetSubjectOwnerIdAsync(dbContext, subjectId, ct);
         var isRequester = requestLog.UserId!.Value == currentUserId.Value;
         var isOwner = ownerId.HasValue && ownerId.Value == currentUserId.Value;
         if (!isRequester && !isOwner)
         {
-            return TypedResults.Problem("Only the topic owner or requester can dismiss this card.", statusCode: StatusCodes.Status403Forbidden);
+            return TypedResults.Problem("Only the subject owner or requester can dismiss this card.", statusCode: StatusCodes.Status403Forbidden);
         }
 
         var alreadyDismissed = await dbContext.ActivityLogs.AnyAsync(a =>
@@ -542,7 +541,7 @@ public sealed class TopicEditRequestEndpoint : IEndpoint
         {
             DepartmentId = requestLog.DepartmentId,
             UserId = currentUserId.Value,
-            Category = "Topics",
+            Category = "Subjects",
             Action = DismissAction,
             EntityType = ResolutionEntityType,
             EntityId = (int)requestId,
@@ -555,9 +554,9 @@ public sealed class TopicEditRequestEndpoint : IEndpoint
         return TypedResults.Ok(new { message = "Card dismissed." });
     }
 
-    private static async Task<Guid?> GetTopicOwnerIdAsync(AppDbContext dbContext, int topicId, CancellationToken ct)
+    private static async Task<Guid?> GetSubjectOwnerIdAsync(AppDbContext dbContext, int subjectId, CancellationToken ct)
     {
-        var ownerByTopic = await TopicPermissionResolver.ResolveOwnerIdsAsync(dbContext, new[] { topicId }, ct);
-        return ownerByTopic.TryGetValue(topicId, out var ownerId) ? ownerId : null;
+        var ownerBySubject = await SubjectPermissionResolver.ResolveOwnerIdsAsync(dbContext, new[] { subjectId }, ct);
+        return ownerBySubject.TryGetValue(subjectId, out var ownerId) ? ownerId : null;
     }
 }

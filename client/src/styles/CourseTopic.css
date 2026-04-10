@@ -233,20 +233,38 @@
   width: 100%;
   border-top: 2px solid #1C4DA1;
   border-radius: 8px;
-  overflow: hidden;
+  overflow-x: auto;
   margin-top: 30px;
 }
 
 .history-row {
   display: grid;
-  grid-template-columns: 5% 20% 50% 15% 10%;
+  grid-template-columns: 56px minmax(120px, 1fr) minmax(280px, 2.4fr) 130px 170px;
+  min-width: 760px;
   padding: 8px 12px;
   border-bottom: 1px solid #ddd;
   font-size: 13px;
-  align-items: flex-start;
+  align-items: center;
   color: #333;
   background-color: #ffffff;
   gap: 8px;
+}
+
+.history-cell.index,
+.history-cell.hours {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.history-cell.course-id,
+.history-cell.actions {
+  white-space: nowrap;
+}
+
+.history-cell.actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
 }
 
 .history-row.header {
@@ -280,13 +298,14 @@
   background-color: transparent;
   color: #1C4DA1;
   border: none;
-  padding: 4px 8px;
+  width: 30px;
+  height: 30px;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 14px;
-  font-weight: bold;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   transition: all 0.2s;
-  white-space: nowrap;
 }
 
 .expand-btn:hover {
@@ -300,6 +319,13 @@
   overflow-wrap: break-word;
   word-break: break-word;
   line-height: 1.4;
+}
+
+.history-row .history-cell.course-id,
+.history-row .history-cell.hours,
+.history-row .history-cell.actions {
+  word-break: normal;
+  overflow-wrap: normal;
 }
 
 .history-row .hours-cell {
@@ -456,12 +482,29 @@
   gap: 8px;
 }
 
+.topics-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 8px;
+}
+
 .topics-list-section h4 {
   margin: 0;
   font-size: 13px;
   font-weight: 600;
   color: #1C4DA1;
-  padding: 0 8px;
+  padding: 0;
+}
+
+.topic-action-btn.request.request-access-btn {
+  width: auto;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .no-topics-msg {
@@ -739,18 +782,34 @@
   gap: 8px;
 }
 
+.subject-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
 .topic-action-btn {
   border: 1px solid #cbd5e1;
   background: #ffffff;
   color: #1f2937;
   border-radius: 8px;
-  padding: 4px 8px;
+  width: 32px;
+  height: 32px;
   font-size: 12px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  white-space: nowrap;
+  justify-content: center;
+  padding: 0;
+  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.1s ease;
+}
+
+.topic-action-btn:hover {
+  background: #eef2ff;
+  border-color: #1c4da1;
+  transform: translateY(-1px);
 }
 
 .topic-action-btn.request {
@@ -813,7 +872,42 @@
 .topic-request-main {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
+}
+
+.topic-request-main-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.request-card-close-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid #d4dae5;
+  background: #ffffff;
+  color: #1C4DA1;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.request-card-close-btn:hover:not(:disabled) {
+  background: #FFC63E;
+  border-color: #FFC63E;
+  color: #1C4DA1;
+}
+
+.request-card-close-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .topic-request-message {
@@ -884,6 +978,18 @@
   color: #e2e8f0;
 }
 
+.dashboard.dark .request-card-close-btn {
+  background: #0f1724;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+.dashboard.dark .request-card-close-btn:hover:not(:disabled) {
+  background: #FFC63E;
+  border-color: #FFC63E;
+  color: #1C4DA1;
+}
+
 .dashboard.dark .topic-requests-panel {
   background: #101926;
   border-color: #334155;
@@ -899,6 +1005,56 @@
   color: #facc15;
 }
 
+.edit-request-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 1800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.edit-request-modal {
+  width: min(92vw, 520px);
+  background: #fff;
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.28);
+}
+
+.edit-request-modal.dark {
+  background: #132945;
+  color: #e2e8f0;
+}
+
+.edit-request-modal h3 {
+  margin: 0 0 0.5rem;
+}
+
+.edit-request-modal textarea {
+  width: 100%;
+  min-height: 110px;
+  margin-top: 0.45rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0.55rem 0.65rem;
+  resize: vertical;
+}
+
+.edit-request-modal.dark textarea {
+  border-color: #47658e;
+  background: #0f1f35;
+  color: #e2e8f0;
+}
+
+.edit-request-modal-actions {
+  margin-top: 0.85rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.55rem;
+}
+
 /* Responsive Design */
 @media (max-width: 1024px) {
   .course-topic-container {
@@ -906,7 +1062,8 @@
   }
 
   .history-row {
-    grid-template-columns: 8% 25% 40% 18% 9%;
+    grid-template-columns: 48px minmax(110px, 1fr) minmax(220px, 2fr) 100px 140px;
+    min-width: 640px;
     font-size: 12px;
   }
 
@@ -936,7 +1093,8 @@
   }
 
   .history-row {
-    grid-template-columns: 10% 25% 35% 20% 10%;
+    grid-template-columns: 44px minmax(100px, 1fr) minmax(180px, 1.8fr) 92px 126px;
+    min-width: 560px;
     font-size: 11px;
     padding: 8px 10px;
   }
@@ -960,8 +1118,8 @@
   }
 
   .expand-btn {
-    padding: 4px 8px;
-    font-size: 11px;
+    width: 28px;
+    height: 28px;
   }
 
   .topic-form {
@@ -1004,21 +1162,7 @@
   }
 
   .history-row {
-    grid-template-columns: 1fr;
-    gap: 8px;
-    padding: 8px;
-  }
-
-  .history-row span {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .history-row span::before {
-    content: attr(data-label);
-    font-weight: 600;
-    color: inherit;
+    min-width: 520px;
   }
 
   .row-fields {
@@ -1033,8 +1177,8 @@
   }
 
   .expand-btn {
-    padding: 4px 6px;
-    font-size: 10px;
+    width: 26px;
+    height: 26px;
   }
 
   .program-logo.large-logo {
