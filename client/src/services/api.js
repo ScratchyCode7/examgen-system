@@ -412,6 +412,39 @@ export const apiService = {
     return response.data;
   },
 
+  createTopicEditRequest: async (topicId, message) => {
+    const response = await apiClient.post(`/api/topics/${topicId}/edit-requests`, {
+      message,
+    });
+    return response.data;
+  },
+
+  getTopicEditRequests: async (scope = 'inbox') => {
+    const response = await apiClient.get(`/api/topics/edit-requests?scope=${encodeURIComponent(scope)}`);
+    return response.data;
+  },
+
+  resolveTopicEditRequest: async (requestId, approve, canDelete = false, note) => {
+    const response = await apiClient.post(`/api/topics/edit-requests/${requestId}/resolve`, {
+      approve,
+      canDelete,
+      note,
+    });
+    return response.data;
+  },
+
+  revokeTopicEditPermission: async (requestId, note = '') => {
+    const response = await apiClient.post(`/api/topics/edit-requests/${requestId}/revoke`, {
+      note,
+    });
+    return response.data;
+  },
+
+  dismissTopicEditRequest: async (requestId) => {
+    const response = await apiClient.post(`/api/topics/edit-requests/${requestId}/dismiss`);
+    return response.data;
+  },
+
   updateTopic: async (id, topicData) => {
     const response = await apiClient.put(`/api/topics/${id}`, topicData);
     return response.data;

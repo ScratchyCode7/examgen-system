@@ -732,6 +732,173 @@
   color: #FFC63E;
 }
 
+.topic-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.topic-action-btn {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #1f2937;
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.topic-action-btn.request {
+  border-color: #1c4da1;
+  color: #1c4da1;
+}
+
+.topic-action-btn.danger {
+  border-color: #dc2626;
+  color: #dc2626;
+}
+
+.topic-requests-panel {
+  margin-top: 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px;
+  background: #f8fafc;
+}
+
+.topic-requests-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.topic-request-scope {
+  display: flex;
+  gap: 8px;
+}
+
+.topic-request-scope button {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.topic-request-scope button.active {
+  border-color: #1c4da1;
+  color: #1c4da1;
+  font-weight: 700;
+}
+
+.topic-request-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.topic-request-item {
+  border: 1px solid #dbe2eb;
+  border-radius: 10px;
+  padding: 10px;
+  background: #ffffff;
+}
+
+.topic-request-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.topic-request-message {
+  margin: 6px 0;
+  color: #475569;
+}
+
+.topic-request-meta {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 8px;
+}
+
+.topic-request-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.topic-request-actions button {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 4px 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-icon {
+  flex-shrink: 0;
+}
+
+.topic-request-actions button.danger {
+  border-color: #dc2626;
+  color: #dc2626;
+}
+
+.status-badge {
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.status-pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-approved {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-rejected,
+.status-revoked {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.dashboard.dark .topic-action-btn,
+.dashboard.dark .topic-request-scope button,
+.dashboard.dark .topic-request-actions button,
+.dashboard.dark .topic-request-item {
+  background: #0f1724;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+.dashboard.dark .topic-requests-panel {
+  background: #101926;
+  border-color: #334155;
+}
+
+.dashboard.dark .topic-request-message,
+.dashboard.dark .topic-request-meta {
+  color: #94a3b8;
+}
+
+.dashboard.dark .topic-request-scope button.active {
+  border-color: #facc15;
+  color: #facc15;
+}
+
 /* Responsive Design */
 @media (max-width: 1024px) {
   .course-topic-container {

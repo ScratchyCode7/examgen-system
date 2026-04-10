@@ -1,5 +1,6 @@
 using Databank.Abstract;
 using Databank.Database;
+using Databank.Features.Topics;
 using Microsoft.EntityFrameworkCore;
 
 namespace Databank.Features.Topics.Delete;
@@ -11,6 +12,7 @@ public sealed class DeleteTopicEndpoint : IEndpoint
         app.MapDelete("/api/topics/{id:int}", async Task<IResult> (
                 int id,
                 AppDbContext dbContext,
+                HttpContext httpContext,
                 CancellationToken ct) =>
         {
             var topic = await dbContext.Topics
@@ -20,6 +22,26 @@ public sealed class DeleteTopicEndpoint : IEndpoint
             if (topic is null)
             {
                 return TypedResults.NotFound();
+            }
+
+            var requesterId = TopicPermissionResolver.GetCurrentUserId(httpContext.User);
+            if (!requesterId.HasValue)
+            {
+                return TypedResults.Problem("Unable to determine the current user.", statusCode: StatusCodes.Status401Unauthorized);
+            }
+
+            var permission = await TopicPermissionResolver.ResolvePermissionsForUserAsync(
+                dbContext,
+                requesterId.Value,
+                new[] { id },
+                ct);
+
+            var canDelete = permission.TryGetValue(id, out var perms) && perms.CanDelete;
+            if (!canDelete)
+            {
+                return TypedResults.Problem(
+                    "You do not have permission to delete this topic. Request delete permission from the owner.",
+                    statusCode: StatusCodes.Status403Forbidden);
             }
 
             // Check if topic has any questions
@@ -34,6 +56,6 @@ public sealed class DeleteTopicEndpoint : IEndpoint
             await dbContext.SaveChangesAsync(ct);
 
             return TypedResults.NoContent();
-        }).RequireAuthorization("AdminOnly");
+        }).RequireAuthorization();
     }
 }

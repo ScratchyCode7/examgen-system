@@ -11,7 +11,9 @@ public sealed record TopicResponse(
     decimal AllocatedHours,
     bool IsActive,
     DateTime CreatedAt,
-    DateTime UpdatedAt
+    DateTime UpdatedAt,
+    bool CanEdit,
+    bool CanDelete
 );
 
 public sealed record CreateTopicRequest(
@@ -32,7 +34,7 @@ public sealed record UpdateTopicRequest(
 
 public static class TopicMappings
 {
-    public static TopicResponse ToResponse(this Topic topic)
+    public static TopicResponse ToResponse(this Topic topic, bool canEdit = false, bool canDelete = false)
     {
         return new TopicResponse(
             topic.Id,
@@ -43,7 +45,9 @@ public static class TopicMappings
             topic.AllocatedHours,
             topic.IsActive,
             topic.CreatedAt,
-            topic.UpdatedAt
+            topic.UpdatedAt,
+            canEdit,
+            canDelete
         );
     }
 }

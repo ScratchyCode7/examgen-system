@@ -1,0 +1,175 @@
+using Databank.Database;
+using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
+
+namespace Databank.Features.Topics;
+
+public static class TopicPermissionResolver
+{
+    public const string RequestAction = "EditRequestCreated";
+    public const string ApproveEditOnlyAction = "EditRequestApproved";
+    public const string ApproveEditDeleteAction = "EditRequestApprovedWithDelete";
+    public const string RejectAction = "EditRequestRejected";
+    public const string RevokeAction = "EditPermissionRevoked";
+    public const string RequestEntityType = "Topic";
+    public const string ResolutionEntityType = "TopicEditRequest";
+
+    private static readonly string[] OwnerCreationActions =
+    {
+        "Created",
+        "Imported",
+        "Seeded",
+        "TopicCreated"
+    };
+
+    public static async Task<Dictionary<int, Guid?>> ResolveOwnerIdsAsync(
+        AppDbContext dbContext,
+        IReadOnlyCollection<int> topicIds,
+        CancellationToken ct)
+    {
+        var ownerByTopicId = topicIds
+            .Distinct()
+            .ToDictionary(id => id, _ => (Guid?)null);
+
+        if (ownerByTopicId.Count == 0)
+        {
+            return ownerByTopicId;
+        }
+
+        var ownerRows = await dbContext.ActivityLogs
+            .AsNoTracking()
+            .Where(a =>
+                a.Category == "Topics" &&
+                a.EntityType == RequestEntityType &&
+                a.EntityId.HasValue &&
+                topicIds.Contains(a.EntityId.Value) &&
+                a.UserId.HasValue &&
+                OwnerCreationActions.Contains(a.Action))
+            .OrderBy(a => a.CreatedAt)
+            .ThenBy(a => a.Id)
+            .Select(a => new { TopicId = a.EntityId!.Value, OwnerId = a.UserId!.Value })
+            .ToListAsync(ct);
+
+        foreach (var row in ownerRows)
+        {
+            if (!ownerByTopicId[row.TopicId].HasValue)
+            {
+                ownerByTopicId[row.TopicId] = row.OwnerId;
+            }
+        }
+
+        return ownerByTopicId;
+    }
+
+    public static async Task<Dictionary<int, (bool CanEdit, bool CanDelete)>> ResolvePermissionsForUserAsync(
+        AppDbContext dbContext,
+        Guid currentUserId,
+        IReadOnlyCollection<int> topicIds,
+        CancellationToken ct)
+    {
+        var permissions = topicIds
+            .Distinct()
+            .ToDictionary(id => id, _ => (CanEdit: false, CanDelete: false));
+
+        if (permissions.Count == 0)
+        {
+            return permissions;
+        }
+
+        var ownerByTopicId = await ResolveOwnerIdsAsync(dbContext, permissions.Keys.ToList(), ct);
+        foreach (var (topicId, ownerId) in ownerByTopicId)
+        {
+            if (ownerId.HasValue && ownerId.Value == currentUserId)
+            {
+                permissions[topicId] = (true, true);
+            }
+        }
+
+        var remainingTopicIds = permissions
+            .Where(kvp => !kvp.Value.CanEdit)
+            .Select(kvp => kvp.Key)
+            .ToList();
+
+        if (remainingTopicIds.Count == 0)
+        {
+            return permissions;
+        }
+
+        var requestRows = await dbContext.ActivityLogs
+            .AsNoTracking()
+            .Where(a =>
+                a.Action == RequestAction &&
+                a.EntityType == RequestEntityType &&
+                a.EntityId.HasValue &&
+                remainingTopicIds.Contains(a.EntityId.Value) &&
+                a.UserId == currentUserId)
+            .Select(a => new { RequestId = (int)a.Id, TopicId = a.EntityId!.Value })
+            .ToListAsync(ct);
+
+        if (requestRows.Count == 0)
+        {
+            return permissions;
+        }
+
+        var requestById = requestRows.ToDictionary(r => r.RequestId, r => r.TopicId);
+        var requestIds = requestRows.Select(r => r.RequestId).Distinct().ToList();
+
+        var resolutionRows = await dbContext.ActivityLogs
+            .AsNoTracking()
+            .Where(a =>
+                a.EntityType == ResolutionEntityType &&
+                a.EntityId.HasValue &&
+                requestIds.Contains(a.EntityId.Value) &&
+                (a.Action == ApproveEditOnlyAction ||
+                 a.Action == ApproveEditDeleteAction ||
+                 a.Action == RevokeAction))
+            .Select(a => new { RequestId = a.EntityId!.Value, a.Action, a.CreatedAt, a.Id })
+            .ToListAsync(ct);
+
+        var latestResolutionByTopicId = resolutionRows
+            .Where(r => requestById.ContainsKey(r.RequestId))
+            .Select(r => new
+            {
+                TopicId = requestById[r.RequestId],
+                r.Action,
+                r.CreatedAt,
+                r.Id
+            })
+            .GroupBy(row => row.TopicId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.OrderByDescending(row => row.CreatedAt).ThenByDescending(row => row.Id).First());
+
+        foreach (var (topicId, resolution) in latestResolutionByTopicId)
+        {
+            if (resolution.Action == ApproveEditDeleteAction)
+            {
+                permissions[topicId] = (true, true);
+            }
+            else if (resolution.Action == ApproveEditOnlyAction)
+            {
+                permissions[topicId] = (true, false);
+            }
+            else if (resolution.Action == RevokeAction)
+            {
+                permissions[topicId] = (false, false);
+            }
+        }
+
+        return permissions;
+    }
+
+    public static Guid? GetCurrentUserId(ClaimsPrincipal user)
+    {
+        var claimValue = user.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? user.FindFirst("sub")?.Value
+            ?? user.FindFirst("userId")?.Value
+            ?? user.FindFirst("UserId")?.Value
+            ?? user.FindFirst("userid")?.Value
+            ?? user.FindFirst("user_id")?.Value
+            ?? user.FindFirst("nameid")?.Value
+            ?? user.FindFirst("uid")?.Value;
+
+        return Guid.TryParse(claimValue, out var parsed) ? parsed : null;
+    }
+}

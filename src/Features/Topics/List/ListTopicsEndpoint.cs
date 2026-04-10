@@ -1,6 +1,7 @@
 using Databank.Abstract;
 using Databank.Common;
 using Databank.Database;
+using Databank.Features.Topics;
 using Microsoft.EntityFrameworkCore;
 
 namespace Databank.Features.Topics.List;
@@ -16,6 +17,7 @@ public sealed class ListTopicsEndpoint : IEndpoint
                 int pageNumber = 1,
                 int pageSize = 10,
                 AppDbContext dbContext = null!,
+                HttpContext httpContext = null!,
                 CancellationToken ct = default) =>
         {
             var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
@@ -38,13 +40,33 @@ public sealed class ListTopicsEndpoint : IEndpoint
 
             var totalCount = await query.CountAsync(ct);
 
-            var topics = await query
+            var currentUserId = TopicPermissionResolver.GetCurrentUserId(httpContext.User);
+
+            var topicRows = await query
                 .OrderBy(t => t.SubjectId)
                 .ThenBy(t => t.SequenceOrder)
                 .Skip(pagination.Skip)
                 .Take(pagination.Take)
-                .Select(t => t.ToResponse())
                 .ToListAsync(ct);
+
+            Dictionary<int, (bool CanEdit, bool CanDelete)> permissions = new();
+            if (currentUserId.HasValue)
+            {
+                permissions = await TopicPermissionResolver.ResolvePermissionsForUserAsync(
+                    dbContext,
+                    currentUserId.Value,
+                    topicRows.Select(t => t.Id).ToList(),
+                    ct);
+            }
+
+            var topics = topicRows
+                .Select(t =>
+                {
+                    var canEdit = permissions.TryGetValue(t.Id, out var perms) && perms.CanEdit;
+                    var canDelete = permissions.TryGetValue(t.Id, out var perms2) && perms2.CanDelete;
+                    return t.ToResponse(canEdit, canDelete);
+                })
+                .ToList();
 
             var response = new PagedResponse<TopicResponse>
             {

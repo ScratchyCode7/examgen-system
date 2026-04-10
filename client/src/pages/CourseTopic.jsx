@@ -4,7 +4,7 @@
 // See README for full details.
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search, FileText, Users, HelpCircle } from 'lucide-react';
+import { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search, FileText, Users, HelpCircle, Send, Check, X, ShieldOff } from 'lucide-react';
 import NavItem from '../components/NavItem';
 import DropdownNavItem from '../components/DropdownNavItem';
 import LogoutModal from '../components/LogoutModal';
@@ -58,7 +58,11 @@ const CourseTopic = () => {
   const [subjectTopicsMap, setSubjectTopicsMap] = useState({});
   const [topicFormData, setTopicFormData] = useState({ title: '', sequenceOrder: '', allocatedHours: '' });
   const [selectedSubjectForTopic, setSelectedSubjectForTopic] = useState(null);
+  const [editingTopic, setEditingTopic] = useState(null);
   const [topicCreating, setTopicCreating] = useState(false);
+  const [topicRequestScope, setTopicRequestScope] = useState('inbox');
+  const [topicEditRequests, setTopicEditRequests] = useState([]);
+  const [topicRequestsLoading, setTopicRequestsLoading] = useState(false);
 
   // Program Creation states (for admins)
   const [showProgramForm, setShowProgramForm] = useState(false);
@@ -230,6 +234,23 @@ const CourseTopic = () => {
     void loadCourses();
   }, [departmentCode, departments]);
 
+  useEffect(() => {
+    const loadTopicRequests = async () => {
+      try {
+        setTopicRequestsLoading(true);
+        const requests = await apiService.getTopicEditRequests(topicRequestScope);
+        setTopicEditRequests(Array.isArray(requests) ? requests : []);
+      } catch (err) {
+        console.error('Failed to load topic edit requests:', err);
+        setTopicEditRequests([]);
+      } finally {
+        setTopicRequestsLoading(false);
+      }
+    };
+
+    void loadTopicRequests();
+  }, [topicRequestScope]);
+
   const handleUserAction = (action) => {
     setIsUserMenuOpen(false);
     if (action === 'Logout') {
@@ -313,8 +334,8 @@ const CourseTopic = () => {
         const message =
           err.response?.data?.message ||
           err.response?.data ||
-          'Failed to save program topic. Make sure you are logged in as an admin.';
-        console.error(message);
+          'Failed to save program topic. Please verify your department access and try again.';
+        showToast({ message, type: 'error' });
       } finally {
         setIsLoading(false);
       }
@@ -333,6 +354,12 @@ const CourseTopic = () => {
         ...prev,
         [subjectId]: false
       }));
+
+      if (selectedSubjectForTopic === subjectId) {
+        setSelectedSubjectForTopic(null);
+        setEditingTopic(null);
+        setTopicFormData({ title: '', sequenceOrder: '', allocatedHours: '' });
+      }
     } else {
       // Expand and load topics
       setExpandedSubjectsMap(prev => ({
@@ -355,56 +382,224 @@ const CourseTopic = () => {
       }
       
       setSelectedSubjectForTopic(subjectId);
+      setEditingTopic(null);
       setTopicFormData({ title: '', sequenceOrder: '', allocatedHours: '' });
     }
   };
 
   // Create new topic for selected subject
-  const handleAddTopic = () => {
+  const handleAddTopic = async () => {
     if (!selectedSubjectForTopic || !topicFormData.title || !topicFormData.allocatedHours) {
       showToast({ message: 'Please fill in Topic Title and Hours.', type: 'error' });
       return;
     }
 
-    const createTopicAsync = async () => {
-      try {
-        setTopicCreating(true);
+    try {
+      setTopicCreating(true);
 
-        const topicPayload = {
-          subjectId: selectedSubjectForTopic,
-          title: topicFormData.title,
-          description: '',
-          sequenceOrder: parseInt(topicFormData.sequenceOrder) || 1,
-          allocatedHours: Number(topicFormData.allocatedHours),
-        };
+      const topicPayload = {
+        subjectId: selectedSubjectForTopic,
+        title: topicFormData.title,
+        description: '',
+        sequenceOrder: parseInt(topicFormData.sequenceOrder) || 1,
+        allocatedHours: Number(topicFormData.allocatedHours),
+      };
 
-        const createdTopic = await apiService.createTopic(topicPayload);
-        console.log('Topic created:', createdTopic);
+      const createdTopic = await apiService.createTopic(topicPayload);
+      console.log('Topic created:', createdTopic);
 
-        // Update local topics map
-        setSubjectTopicsMap(prev => ({
-          ...prev,
-          [selectedSubjectForTopic]: [
-            ...(prev[selectedSubjectForTopic] || []),
-            createdTopic
-          ]
-        }));
+      // Update local topics map
+      setSubjectTopicsMap(prev => ({
+        ...prev,
+        [selectedSubjectForTopic]: [
+          ...(prev[selectedSubjectForTopic] || []),
+          createdTopic
+        ]
+      }));
 
-        // Reset form
-        setTopicFormData({ title: '', sequenceOrder: '', allocatedHours: '' });
-      } catch (err) {
-        console.error('Failed to create topic:', err);
-        const message =
-          err.response?.data?.message ||
-          err.response?.data ||
-          'Failed to create topic.';
-        console.error(message);
-      } finally {
-        setTopicCreating(false);
-      }
-    };
+      // Reset form
+      setTopicFormData({ title: '', sequenceOrder: '', allocatedHours: '' });
+    } catch (err) {
+      console.error('Failed to create topic:', err);
+      const message =
+        err.response?.data?.message ||
+        err.response?.data ||
+        'Failed to create topic.';
+      showToast({ message, type: 'error' });
+    } finally {
+      setTopicCreating(false);
+    }
+  };
 
-    void createTopicAsync();
+  const refreshSubjectTopics = async (subjectId) => {
+    try {
+      const topics = await apiService.getTopics(subjectId);
+      const topicList = Array.isArray(topics) ? topics : topics.items || topics.data || [];
+      setSubjectTopicsMap(prev => ({
+        ...prev,
+        [subjectId]: topicList,
+      }));
+    } catch (err) {
+      console.error('Failed to refresh topics:', err);
+    }
+  };
+
+  const refreshTopicRequests = async () => {
+    try {
+      const requests = await apiService.getTopicEditRequests(topicRequestScope);
+      setTopicEditRequests(Array.isArray(requests) ? requests : []);
+    } catch (err) {
+      console.error('Failed to refresh topic edit requests:', err);
+    }
+  };
+
+  const handleEditTopic = (subjectId, topic) => {
+    if (!topic.canEdit) {
+      showToast({ message: 'You do not have permission to edit this topic.', type: 'error' });
+      return;
+    }
+
+    setSelectedSubjectForTopic(subjectId);
+    setEditingTopic(topic);
+    setTopicFormData({
+      title: topic.title || '',
+      sequenceOrder: String(topic.sequenceOrder ?? ''),
+      allocatedHours: String(topic.allocatedHours ?? ''),
+    });
+  };
+
+  const handleUpdateTopic = async () => {
+    if (!selectedSubjectForTopic || !editingTopic) {
+      return;
+    }
+
+    const trimmedTitle = topicFormData.title.trim();
+    if (!trimmedTitle) {
+      showToast({ message: 'Topic title is required.', type: 'error' });
+      return;
+    }
+
+    const nextHours = Number(topicFormData.allocatedHours);
+    if (!Number.isFinite(nextHours) || nextHours < 0) {
+      showToast({ message: 'Allocated hours must be a valid non-negative number.', type: 'error' });
+      return;
+    }
+
+    try {
+      setTopicCreating(true);
+
+      await apiService.updateTopic(editingTopic.id, {
+        title: trimmedTitle,
+        description: editingTopic.description || '',
+        sequenceOrder: parseInt(topicFormData.sequenceOrder) || editingTopic.sequenceOrder || 1,
+        allocatedHours: nextHours,
+        isActive: editingTopic.isActive,
+      });
+
+      await refreshSubjectTopics(selectedSubjectForTopic);
+      setEditingTopic(null);
+      setTopicFormData({ title: '', sequenceOrder: '', allocatedHours: '' });
+      showToast({ message: 'Topic updated successfully.', type: 'success' });
+    } catch (err) {
+      console.error('Failed to update topic:', err);
+      const message = err.response?.data?.message || err.response?.data || 'Failed to update topic.';
+      showToast({ message, type: 'error' });
+    } finally {
+      setTopicCreating(false);
+    }
+  };
+
+  const handleCancelTopicEdit = () => {
+    setEditingTopic(null);
+    setTopicFormData({ title: '', sequenceOrder: '', allocatedHours: '' });
+  };
+
+  const handleDeleteTopic = async (subjectId, topic) => {
+    if (!topic.canDelete) {
+      showToast({ message: 'You do not have permission to delete this topic.', type: 'error' });
+      return;
+    }
+
+    const shouldDelete = window.confirm(`Delete topic "${topic.title}"?`);
+    if (!shouldDelete) return;
+
+    try {
+      await apiService.deleteTopic(topic.id);
+      await refreshSubjectTopics(subjectId);
+      showToast({ message: 'Topic deleted successfully.', type: 'success' });
+    } catch (err) {
+      console.error('Failed to delete topic:', err);
+      const message = err.response?.data?.message || err.response?.data || 'Failed to delete topic.';
+      showToast({ message, type: 'error' });
+    }
+  };
+
+  const handleSubmitTopicForm = async () => {
+    if (editingTopic) {
+      await handleUpdateTopic();
+      return;
+    }
+
+    await handleAddTopic();
+  };
+
+  const handleRequestTopicAccess = async (topic) => {
+    const message = window.prompt('Add a message for the topic owner (optional):', '');
+    if (message === null) return;
+
+    try {
+      await apiService.createTopicEditRequest(topic.id, message);
+      await refreshTopicRequests();
+      showToast({ message: 'Access request submitted.', type: 'success' });
+    } catch (err) {
+      console.error('Failed to request topic access:', err);
+      const errorMessage = err.response?.data?.message || err.response?.data || 'Failed to submit request.';
+      showToast({ message: errorMessage, type: 'error' });
+    }
+  };
+
+  const handleResolveTopicRequest = async (requestId, approve, canDelete = false) => {
+    try {
+      await apiService.resolveTopicEditRequest(requestId, approve, canDelete, '');
+      await refreshTopicRequests();
+
+      const expandedSubjectIds = Object.keys(expandedSubjectsMap)
+        .filter(key => expandedSubjectsMap[key])
+        .map(key => Number(key));
+      await Promise.all(expandedSubjectIds.map(subjectId => refreshSubjectTopics(subjectId)));
+
+      showToast({
+        message: approve ? (canDelete ? 'Approved with edit + delete access.' : 'Approved with edit access.') : 'Request rejected.',
+        type: 'success',
+      });
+    } catch (err) {
+      console.error('Failed to resolve topic request:', err);
+      const message = err.response?.data?.message || err.response?.data || 'Failed to resolve request.';
+      showToast({ message, type: 'error' });
+    }
+  };
+
+  const handleRevokeTopicRequest = async (requestId) => {
+    try {
+      await apiService.revokeTopicEditPermission(requestId, '');
+      await refreshTopicRequests();
+      showToast({ message: 'Permission revoked.', type: 'success' });
+    } catch (err) {
+      console.error('Failed to revoke topic permission:', err);
+      const message = err.response?.data?.message || err.response?.data || 'Failed to revoke permission.';
+      showToast({ message, type: 'error' });
+    }
+  };
+
+  const handleDismissTopicRequest = async (requestId) => {
+    try {
+      await apiService.dismissTopicEditRequest(requestId);
+      await refreshTopicRequests();
+    } catch (err) {
+      console.error('Failed to dismiss topic request:', err);
+      const message = err.response?.data?.message || err.response?.data || 'Failed to dismiss request.';
+      showToast({ message, type: 'error' });
+    }
   };
 
   // Create new program for current department (admin only)
@@ -812,9 +1007,24 @@ const CourseTopic = () => {
                             <div key={topic.id} className="history-row topic-item-row">
                               <span style={{width: '5%'}}>{topicIdx + 1}</span>
                               <span style={{width: '20%'}}>{item.courseCode}</span>
-                              <span style={{width: '50%'}}>• {topic.title}</span>
+                              <span style={{width: '35%'}}>• {topic.title}</span>
                               <span className="hours-cell" style={{width: '15%'}}>{topic.allocatedHours}</span>
-                              <span style={{width: '10%'}}></span>
+                              <span className="topic-row-actions" style={{width: '25%'}}>
+                                {topic.canEdit ? (
+                                  <button className="topic-action-btn" onClick={() => handleEditTopic(item.subjectId, topic)}>
+                                    Edit
+                                  </button>
+                                ) : (
+                                  <button className="topic-action-btn request" onClick={() => handleRequestTopicAccess(topic)}>
+                                    <Send size={14} className="btn-icon" /> Request Access
+                                  </button>
+                                )}
+                                {topic.canDelete && (
+                                  <button className="topic-action-btn danger" onClick={() => handleDeleteTopic(item.subjectId, topic)}>
+                                    Delete
+                                  </button>
+                                )}
+                              </span>
                             </div>
                           ))}
                         </div>
@@ -829,7 +1039,7 @@ const CourseTopic = () => {
                         <div className="topic-form-card">
                           <div className="topic-form-header">
                             <div>
-                              <p className="topic-form-eyebrow">Add Topic</p>
+                              <p className="topic-form-eyebrow">{editingTopic ? 'Edit Topic' : 'Add Topic'}</p>
                               <h5>{item.courseTitle}</h5>
                               <span className="topic-form-subtext">Outline the lesson and pacing for this course.</span>
                             </div>
@@ -872,14 +1082,32 @@ const CourseTopic = () => {
                           </div>
 
                           <div className="topic-form-footer">
-                            <p className="helper-text">Need a refresher? Align sequence numbers with your actual lesson plan to keep encoding consistent.</p>
-                            <button 
-                              className="topic-submit-btn"
-                              onClick={handleAddTopic}
-                              disabled={topicCreating}
-                            >
-                              {topicCreating ? 'Creating…' : 'Add Topic'}
-                            </button>
+                            <p className="helper-text">
+                              {editingTopic
+                                ? 'Update the topic details below and save your changes.'
+                                : 'Need a refresher? Align sequence numbers with your actual lesson plan to keep encoding consistent.'}
+                            </p>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              {editingTopic && (
+                                <button
+                                  type="button"
+                                  className="cancel-btn"
+                                  onClick={handleCancelTopicEdit}
+                                  disabled={topicCreating}
+                                >
+                                  Cancel
+                                </button>
+                              )}
+                              <button 
+                                className="topic-submit-btn"
+                                onClick={handleSubmitTopicForm}
+                                disabled={topicCreating}
+                              >
+                                {topicCreating
+                                  ? (editingTopic ? 'Saving…' : 'Creating…')
+                                  : (editingTopic ? 'Save Changes' : 'Add Topic')}
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -888,6 +1116,79 @@ const CourseTopic = () => {
                 )}
               </React.Fragment>
             ))}
+          </div>
+
+          <div className="topic-requests-panel">
+            <div className="topic-requests-header">
+              <h4>Topic Access Requests</h4>
+              <div className="topic-request-scope">
+                <button
+                  type="button"
+                  className={topicRequestScope === 'inbox' ? 'active' : ''}
+                  onClick={() => setTopicRequestScope('inbox')}
+                >
+                  Inbox
+                </button>
+                <button
+                  type="button"
+                  className={topicRequestScope === 'sent' ? 'active' : ''}
+                  onClick={() => setTopicRequestScope('sent')}
+                >
+                  Sent
+                </button>
+                <button
+                  type="button"
+                  className={topicRequestScope === 'all' ? 'active' : ''}
+                  onClick={() => setTopicRequestScope('all')}
+                >
+                  All
+                </button>
+              </div>
+            </div>
+
+            {topicRequestsLoading ? (
+              <p>Loading access requests...</p>
+            ) : topicEditRequests.length === 0 ? (
+              <p>No topic access requests found.</p>
+            ) : (
+              <div className="topic-request-list">
+                {topicEditRequests.map((request) => (
+                  <div key={request.requestId} className="topic-request-item">
+                    <div className="topic-request-main">
+                      <strong>{request.requesterName}</strong> requested access to topic #{request.topicId}
+                      <span className={`status-badge status-${request.status.toLowerCase()}`}>{request.status}</span>
+                    </div>
+                    {request.message && <p className="topic-request-message">{request.message}</p>}
+                    <div className="topic-request-meta">
+                      <span>Permission: {request.permissionLevel}</span>
+                    </div>
+                    <div className="topic-request-actions">
+                      {request.status === 'Pending' && !request.isMine && (
+                        <>
+                          <button type="button" onClick={() => handleResolveTopicRequest(request.requestId, true, false)}>
+                            <Check size={14} className="btn-icon" /> Approve Edit
+                          </button>
+                          <button type="button" onClick={() => handleResolveTopicRequest(request.requestId, true, true)}>
+                            <Check size={14} className="btn-icon" /> Approve Edit+Delete
+                          </button>
+                          <button type="button" className="danger" onClick={() => handleResolveTopicRequest(request.requestId, false, false)}>
+                            <X size={14} className="btn-icon" /> Reject
+                          </button>
+                        </>
+                      )}
+                      {request.canRevoke && (
+                        <button type="button" className="danger" onClick={() => handleRevokeTopicRequest(request.requestId)}>
+                          <ShieldOff size={14} className="btn-icon" /> Revoke
+                        </button>
+                      )}
+                      {request.status === 'Revoked' && (
+                        <button type="button" onClick={() => handleDismissTopicRequest(request.requestId)}>Dismiss</button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
