@@ -28,7 +28,8 @@ const DEFAULT_QUESTION_EDIT_STATE = {
   levelGroup: null,
   courseId: null,
   subjectId: null,
-  selectedAnswer: ''
+  selectedAnswer: '',
+  availableAnswerChoices: ['A', 'B', 'C', 'D']
 };
 
 const getQuestionIdentifier = (question) => {
@@ -141,7 +142,7 @@ const getLevelKeyFromBloom = (value) => {
   return null;
 };
 
-const { Home, ClipboardList, BookOpen, Settings, LogOut, User, Users, Sun, Moon, Search, Printer, Save, Eye, Trash2, PlayCircle, CheckCircle, AlertTriangle, FileText, HelpCircle, RefreshCw } = Icons;
+const { Home, ClipboardList, BookOpen, Settings, LogOut, User, Users, Sun, Moon, Search, Printer, Save, Eye, Trash2, PlayCircle, CheckCircle, Check, AlertTriangle, FileText, HelpCircle, RefreshCw } = Icons;
 
 const TestGeneration = () => {
   const { user, logout, isAdmin } = useAuth();
@@ -215,7 +216,14 @@ const TestGeneration = () => {
   const normalizeAnswerChoice = React.useCallback((value) => {
     if (value === null || value === undefined) return '';
     const normalized = String(value).trim().toUpperCase();
-    return ['A', 'B', 'C', 'D'].includes(normalized) ? normalized : '';
+    return ['A', 'B', 'C', 'D', 'E'].includes(normalized) ? normalized : '';
+  }, []);
+
+  const getAvailableAnswerChoices = React.useCallback((question) => {
+    const optionList = question?.options || question?.Options || question?.choices || [];
+    const optionCount = Array.isArray(optionList) ? optionList.length : 0;
+    const normalizedCount = Math.max(2, Math.min(5, optionCount || 4));
+    return Array.from({ length: normalizedCount }, (_, index) => String.fromCharCode(65 + index));
   }, []);
 
   const applyCorrectAnswerForGeneratedExam = React.useCallback((question, answerChoice) => {
@@ -1472,7 +1480,7 @@ const TestGeneration = () => {
   const statusColorMap = {
     Pending: '#f59e0b',
     ReadyForPickup: '#16a34a',
-    Completed: '#0f172a',
+    Completed: '#15803d',
     Rejected: '#dc2626'
   };
   const selectedSubjectDetails = React.useMemo(() => {
@@ -2220,6 +2228,8 @@ const TestGeneration = () => {
       ? String(questionSubjectId)
       : (selectedSubject ? String(selectedSubject) : null);
     const levelGroup = getBloomGroupKey(level);
+    const availableAnswerChoices = getAvailableAnswerChoices(question);
+    const normalizedSelectedAnswer = normalizeAnswerChoice(getCorrectAnswerLetter(question));
     setQuestionEditModal({
       isOpen: true,
       questionIndex: index,
@@ -2230,7 +2240,10 @@ const TestGeneration = () => {
       currentQuestionId,
       courseId: normalizedCourseId,
       subjectId: normalizedSubjectId,
-      selectedAnswer: normalizeAnswerChoice(getCorrectAnswerLetter(question))
+      selectedAnswer: availableAnswerChoices.includes(normalizedSelectedAnswer)
+        ? normalizedSelectedAnswer
+        : '',
+      availableAnswerChoices
     });
     setQuestionEditSearchText('');
     setPendingReplacementCandidate(null);
@@ -2278,7 +2291,7 @@ const TestGeneration = () => {
     } finally {
       setIsLoadingReplacementCandidates(false);
     }
-  }, [fetchQuestionsForTopic, sampleExam, selectedCourse, selectedSubject, topics, bloomCategoryFromQuestion, normalizeAnswerChoice, getCorrectAnswerLetter]);
+  }, [fetchQuestionsForTopic, sampleExam, selectedCourse, selectedSubject, topics, bloomCategoryFromQuestion, normalizeAnswerChoice, getCorrectAnswerLetter, getAvailableAnswerChoices]);
 
   const handleSelectReplacementQuestion = React.useCallback((candidate) => {
     if (!candidate || !questionEditModal.isOpen || questionEditModal.questionIndex === null) {
@@ -2322,6 +2335,13 @@ const TestGeneration = () => {
   const handleSelectEditedCorrectAnswer = React.useCallback((answerChoice) => {
     const normalizedChoice = normalizeAnswerChoice(answerChoice);
     if (!normalizedChoice || !questionEditModal.isOpen || questionEditModal.questionIndex === null) {
+      return;
+    }
+    if (
+      Array.isArray(questionEditModal.availableAnswerChoices)
+      && questionEditModal.availableAnswerChoices.length > 0
+      && !questionEditModal.availableAnswerChoices.includes(normalizedChoice)
+    ) {
       return;
     }
 
@@ -2887,10 +2907,6 @@ const TestGeneration = () => {
 
   const handleDeletePrintRequest = async (request) => {
     if (!request?.printRequestId) return;
-
-    const confirmDelete = window.confirm('Delete this print request? This cannot be undone.');
-
-    if (!confirmDelete) return;
 
     try {
       setMyRequestsError('');
@@ -3955,11 +3971,13 @@ const TestGeneration = () => {
                   <p className="subtitle" style={{ marginBottom: 0 }}>Track the status of your submitted master set requests.</p>
                 </div>
                 <button
-                  className="btn btn-secondary btn-sm"
+                  className="my-requests-refresh-btn"
                   onClick={() => loadMyPrintRequests()}
                   disabled={isLoadingMyRequests}
+                  title="Refresh my print requests"
+                  aria-label="Refresh my print requests"
                 >
-                  Refresh
+                  <RefreshCw size={16} />
                 </button>
               </div>
               {isLoadingMyRequests ? (
@@ -3999,22 +4017,26 @@ const TestGeneration = () => {
                             <td style={{ padding: '10px' }}>{req.updatedAt ? new Date(req.updatedAt).toLocaleString() : '—'}</td>
                             <td style={{ padding: '10px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>{req.notes || '—'}</td>
                             <td style={{ padding: '10px', textAlign: 'center' }}>
-                              {statusLabel === 'ReadyForPickup' || statusLabel === 'Pending' || statusLabel === 'Rejected' ? (
-                                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                              {statusLabel === 'ReadyForPickup' || statusLabel === 'Pending' || statusLabel === 'Rejected' || statusLabel === 'Completed' ? (
+                                <div className="my-requests-action-group">
                                   {statusLabel === 'ReadyForPickup' && (
                                     <button
-                                      className="btn btn-sm btn-primary"
+                                      className="btn btn-sm btn-primary my-requests-action-btn"
                                       onClick={() => handleTeacherAcknowledgeRequest(req)}
+                                      title="Mark as read"
+                                      aria-label="Mark as read"
                                     >
-                                      Mark as Received
+                                      <Check size={16} />
                                     </button>
                                   )}
-                                  {(statusLabel === 'Pending' || statusLabel === 'Rejected') && (
+                                  {(statusLabel === 'Pending' || statusLabel === 'Rejected' || statusLabel === 'Completed') && (
                                     <button
-                                      className="btn btn-sm btn-danger"
+                                      className="btn btn-sm btn-danger my-requests-action-btn"
                                       onClick={() => handleDeletePrintRequest(req)}
+                                      title="Delete print request"
+                                      aria-label="Delete print request"
                                     >
-                                      Delete
+                                      <Trash2 size={16} />
                                     </button>
                                   )}
                                 </div>
@@ -4118,7 +4140,7 @@ const TestGeneration = () => {
                 <div className="question-edit-answer-controls">
                   <p className="question-edit-answer-label">Correct answer for this generated exam</p>
                   <div className="question-edit-answer-buttons">
-                    {['A', 'B', 'C', 'D'].map((choice) => (
+                    {questionEditModal.availableAnswerChoices.map((choice) => (
                       <button
                         key={choice}
                         type="button"
