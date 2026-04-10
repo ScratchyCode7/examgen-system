@@ -56,7 +56,7 @@ const CourseTopic = () => {
   // Topic Management states
   const [expandedSubjectsMap, setExpandedSubjectsMap] = useState({});
   const [subjectTopicsMap, setSubjectTopicsMap] = useState({});
-  const [topicFormData, setTopicFormData] = useState({ title: '', sequenceOrder: '', allocatedHours: '' });
+  const [topicFormData, setTopicFormData] = useState({ title: '', allocatedHours: '' });
   const [selectedSubjectForTopic, setSelectedSubjectForTopic] = useState(null);
   const [editingTopic, setEditingTopic] = useState(null);
   const [topicCreating, setTopicCreating] = useState(false);
@@ -377,7 +377,7 @@ const CourseTopic = () => {
       if (selectedSubjectForTopic === subjectId) {
         setSelectedSubjectForTopic(null);
         setEditingTopic(null);
-        setTopicFormData({ title: '', sequenceOrder: '', allocatedHours: '' });
+        setTopicFormData({ title: '', allocatedHours: '' });
       }
     } else {
       // Expand and load topics
@@ -402,7 +402,7 @@ const CourseTopic = () => {
       
       setSelectedSubjectForTopic(subjectId);
       setEditingTopic(null);
-      setTopicFormData({ title: '', sequenceOrder: '', allocatedHours: '' });
+      setTopicFormData({ title: '', allocatedHours: '' });
     }
   };
 
@@ -445,7 +445,7 @@ const CourseTopic = () => {
       }));
 
       // Reset form
-      setTopicFormData({ title: '', sequenceOrder: '', allocatedHours: '' });
+      setTopicFormData({ title: '', allocatedHours: '' });
     } catch (err) {
       console.error('Failed to create topic:', err);
       const message =
@@ -490,7 +490,6 @@ const CourseTopic = () => {
     setEditingTopic(topic);
     setTopicFormData({
       title: topic.title || '',
-      sequenceOrder: String(topic.sequenceOrder ?? ''),
       allocatedHours: String(topic.allocatedHours ?? ''),
     });
   };
@@ -538,7 +537,7 @@ const CourseTopic = () => {
 
   const handleCancelTopicEdit = () => {
     setEditingTopic(null);
-    setTopicFormData({ title: '', sequenceOrder: '', allocatedHours: '' });
+    setTopicFormData({ title: '', allocatedHours: '' });
   };
 
   const handleDeleteTopic = async (subjectId, topic) => {
@@ -1080,20 +1079,9 @@ const CourseTopic = () => {
                                 type="text"
                                 value={topicFormData.title}
                                 onChange={(e) => setTopicFormData({...topicFormData, title: e.target.value})}
-                                placeholder="Lesson 1 - Foundations"
+                                placeholder="Enter Topic Title"
                               />
                               <span className="input-hint">Use descriptive titles so students immediately know the focus.</span>
-                            </div>
-                            <div className="topic-input-group">
-                              <label>Sequence #</label>
-                              <input 
-                                type="number"
-                                min="1"
-                                value={topicFormData.sequenceOrder}
-                                onChange={(e) => setTopicFormData({...topicFormData, sequenceOrder: e.target.value})}
-                                placeholder="1"
-                              />
-                              <span className="input-hint">Controls how topics are ordered in the syllabus.</span>
                             </div>
                             <div className="topic-input-group">
                               <label>Allocated Hours</label>
@@ -1112,7 +1100,7 @@ const CourseTopic = () => {
                             <p className="helper-text">
                               {editingTopic
                                 ? 'Update the topic details below and save your changes.'
-                                : 'Need a refresher? Align sequence numbers with your actual lesson plan to keep encoding consistent.'}
+                                : 'Enter a descriptive topic title and allocate the appropriate hours for this lesson.'}
                             </p>
                             <div style={{ display: 'flex', gap: '8px' }}>
                               {editingTopic && (
