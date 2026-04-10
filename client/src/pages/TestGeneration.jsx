@@ -307,6 +307,60 @@ const TestGeneration = () => {
     __html: rawContent === undefined || rawContent === null ? '' : String(rawContent)
   }), []);
 
+  const normalizeImagePresentationInHtml = React.useCallback((rawContent, imageMeta = null) => {
+    const html = rawContent === undefined || rawContent === null ? '' : String(rawContent);
+    if (!html) return '';
+
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+    const images = tempDiv.querySelectorAll('img');
+    if (images.length === 0) return html;
+
+    const fallbackWidthRaw = Number(imageMeta?.widthPercentage ?? imageMeta?.WidthPercentage);
+    const fallbackWidth = Number.isFinite(fallbackWidthRaw)
+      ? Math.max(10, Math.min(100, fallbackWidthRaw))
+      : 50;
+    const fallbackAlignmentRaw = String(imageMeta?.alignment ?? imageMeta?.Alignment ?? 'Center');
+    const fallbackAlignment = ['Left', 'Center', 'Right'].includes(fallbackAlignmentRaw)
+      ? fallbackAlignmentRaw
+      : 'Center';
+
+    images.forEach((img) => {
+      const styleWidthMatch = /^([\d.]+)%$/.exec((img.style.width || '').trim());
+      const datasetWidth = Number(img.dataset?.width);
+      const styleWidth = styleWidthMatch ? Number(styleWidthMatch[1]) : NaN;
+      const width = Number.isFinite(datasetWidth)
+        ? datasetWidth
+        : (Number.isFinite(styleWidth) ? styleWidth : fallbackWidth);
+      const clampedWidth = Math.max(10, Math.min(100, width));
+
+      const datasetAlignment = img.dataset?.alignment;
+      const alignmentCandidate = datasetAlignment || fallbackAlignment;
+      const alignment = ['Left', 'Center', 'Right'].includes(alignmentCandidate) ? alignmentCandidate : 'Center';
+
+      const marginByAlignment = alignment === 'Left'
+        ? { marginLeft: '0', marginRight: 'auto' }
+        : alignment === 'Right'
+          ? { marginLeft: 'auto', marginRight: '0' }
+          : { marginLeft: 'auto', marginRight: 'auto' };
+
+      img.style.maxWidth = '100%';
+      img.style.width = `${clampedWidth}%`;
+      img.style.height = 'auto';
+      img.style.display = 'block';
+      img.style.marginTop = '8px';
+      img.style.marginBottom = '8px';
+      img.style.marginLeft = marginByAlignment.marginLeft;
+      img.style.marginRight = marginByAlignment.marginRight;
+      img.dataset.width = String(clampedWidth);
+      img.dataset.alignment = alignment;
+    });
+
+    return tempDiv.innerHTML;
+  }, []);
+
+  const hasInlineImageTag = React.useCallback((rawContent) => /<img\b/i.test(String(rawContent || '')), []);
+
   // Helper function to get school year
   const getAutoSchoolYear = () => {
     const now = new Date();
@@ -3753,7 +3807,8 @@ const TestGeneration = () => {
                       const questionText = q.content || q.Content || q.question || 'Question text not available';
                       const options = q.options || q.Options || q.choices || [];
                       const image = q.image || q.Image || null;
-                      const questionHtml = asHtml(questionText);
+                      const questionHtml = asHtml(normalizeImagePresentationInHtml(questionText, image));
+                      const shouldRenderSeparateQuestionImage = Boolean(image) && !hasInlineImageTag(questionText);
                       // preview debug logs removed for production
                       return (
                         <div key={idx} className="exam-question-item">
@@ -3773,7 +3828,7 @@ const TestGeneration = () => {
                               </button>
                             </div>
                           )}
-                          {image && (
+                          {shouldRenderSeparateQuestionImage && (
                             <div className="question-image-wrapper" style={{ 
                               textAlign: image.alignment?.toLowerCase() || 'center', 
                               margin: '10px 0'
@@ -3802,7 +3857,7 @@ const TestGeneration = () => {
                             {options.map((option, optIdx) => {
                               const letter = String.fromCharCode(65 + optIdx);
                               const optionText = option.content || option.Content || option.optionText || option.text || option || '';
-                              const optionHtml = asHtml(optionText);
+                              const optionHtml = asHtml(normalizeImagePresentationInHtml(optionText));
                               return (
                                 <div key={optIdx} className="option-line">
                                   <span className="option-letter">{letter}.</span>
@@ -4516,9 +4571,14 @@ const TestGeneration = () => {
                           <div class="questions-section">
                             ${processedQuestions.map((q, idx) => {
                               const questionText = q.content || q.Content || q.question || 'Question text not available';
+                              const normalizedQuestionText = normalizeImagePresentationInHtml(questionText, {
+                                widthPercentage: q.imageWidth,
+                                alignment: q.imageAlignment,
+                              });
+                              const shouldRenderSeparateQuestionImage = q.imageDataUrl && !hasInlineImageTag(normalizedQuestionText);
                               const options = q.options || q.Options || q.choices || [];
                               let imageHTML = '';
-                              if (q.imageDataUrl) {
+                              if (shouldRenderSeparateQuestionImage) {
                                 imageHTML = '<div class="question-image-wrapper text-' + q.imageAlignment + '"><img src="' + q.imageDataUrl + '" alt="Question ' + (idx + 1) + '" style="width: ' + q.imageWidth + '%;" /></div>';
                               }
                               let choicesHTML = '';
@@ -4526,10 +4586,11 @@ const TestGeneration = () => {
                                 choicesHTML = options.map((option, optIdx) => {
                                   const letter = String.fromCharCode(65 + optIdx);
                                   const optText = option.content || option.Content || option.optionText || option.text || option || '';
-                                  return '<div class="choice-item"><span class="choice-letter">' + letter + '.</span> ' + optText + '</div>';
+                                  const normalizedOptionText = normalizeImagePresentationInHtml(optText);
+                                  return '<div class="choice-item"><span class="choice-letter">' + letter + '.</span> ' + normalizedOptionText + '</div>';
                                 }).join('');
                               }
-                              return '<div class="question-item"><div class="question-text">' + (idx + 1) + '.) ' + questionText + '</div>' + imageHTML + '<div class="choices">' + choicesHTML + '</div></div>';
+                              return '<div class="question-item"><div class="question-text">' + (idx + 1) + '.) ' + normalizedQuestionText + '</div>' + imageHTML + '<div class="choices">' + choicesHTML + '</div></div>';
                             }).join('')}
                           </div>
                         </body>

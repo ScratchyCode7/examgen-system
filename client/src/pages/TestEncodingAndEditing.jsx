@@ -722,8 +722,14 @@ const TestEncodingAndEditing = () => {
     const getImageEditorSettingsFromElement = (imageElement) => {
         if (!imageElement) return { ...IMAGE_EDITOR_DEFAULTS };
 
-        const widthMatch = /^([\d.]+)%$/.exec((imageElement.style.width || '').trim());
-        const parsedSize = widthMatch ? Number(widthMatch[1]) : 50;
+        // Try to get width from dataset first, fall back to parsing style
+        let parsedSize = 50;
+        if (imageElement.dataset.width) {
+            parsedSize = Number(imageElement.dataset.width) || 50;
+        } else {
+            const widthMatch = /^([\d.]+)%$/.exec((imageElement.style.width || '').trim());
+            parsedSize = widthMatch ? Number(widthMatch[1]) : 50;
+        }
 
         const savedAlignment = imageElement.dataset?.alignment;
         let alignment = 'Center';
@@ -924,6 +930,7 @@ const TestEncodingAndEditing = () => {
         imageElement.style.marginLeft = marginStyle.marginLeft;
         imageElement.style.marginRight = marginStyle.marginRight;
         imageElement.dataset.alignment = alignment;
+        imageElement.dataset.width = imageSizePercent; // Store width for persistence
         if (originalSource) {
             imageElement.dataset.originalSrc = originalSource;
         }
@@ -1398,6 +1405,97 @@ const TestEncodingAndEditing = () => {
         }
     };
 
+    const applyPersistedImagePresentationToHtml = (htmlContent, imageMeta) => {
+        if (!htmlContent || !imageMeta) {
+            if (!htmlContent) {
+                return '';
+            }
+
+            const tempDivWithoutMeta = document.createElement('div');
+            tempDivWithoutMeta.innerHTML = htmlContent;
+            const imagesWithoutMeta = tempDivWithoutMeta.querySelectorAll('img');
+
+            if (imagesWithoutMeta.length === 0) {
+                return htmlContent;
+            }
+
+            imagesWithoutMeta.forEach((imageElement) => {
+                const styleWidthMatch = /^([\d.]+)%$/.exec((imageElement.style.width || '').trim());
+                const datasetWidth = Number(imageElement.dataset?.width);
+                const parsedStyleWidth = styleWidthMatch ? Number(styleWidthMatch[1]) : NaN;
+                const width = Number.isFinite(datasetWidth)
+                    ? datasetWidth
+                    : (Number.isFinite(parsedStyleWidth) ? parsedStyleWidth : 50);
+
+                const rawAlignment = imageElement.dataset?.alignment || 'Center';
+                const alignment = ['Left', 'Center', 'Right'].includes(rawAlignment) ? rawAlignment : 'Center';
+
+                const marginByAlignment = alignment === 'Left'
+                    ? { marginLeft: '0', marginRight: 'auto' }
+                    : alignment === 'Right'
+                        ? { marginLeft: 'auto', marginRight: '0' }
+                        : { marginLeft: 'auto', marginRight: 'auto' };
+
+                imageElement.style.maxWidth = '100%';
+                imageElement.style.width = `${Math.max(10, Math.min(100, width))}%`;
+                imageElement.style.height = 'auto';
+                imageElement.style.display = 'block';
+                imageElement.style.marginTop = '8px';
+                imageElement.style.marginBottom = '8px';
+                imageElement.style.marginLeft = marginByAlignment.marginLeft;
+                imageElement.style.marginRight = marginByAlignment.marginRight;
+                imageElement.dataset.width = String(Math.max(10, Math.min(100, width)));
+                imageElement.dataset.alignment = alignment;
+            });
+
+            return tempDivWithoutMeta.innerHTML;
+        }
+
+        const fallbackWidth = Math.max(10, Math.min(100, Number(imageMeta.widthPercentage ?? imageMeta.WidthPercentage ?? 50) || 50));
+        const fallbackAlignment = imageMeta.alignment || imageMeta.Alignment || 'Center';
+        const validFallbackAlignment = ['Left', 'Center', 'Right'].includes(fallbackAlignment) ? fallbackAlignment : 'Center';
+
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = htmlContent;
+
+        const imageElements = tempDiv.querySelectorAll('img');
+        if (imageElements.length === 0) {
+            return htmlContent;
+        }
+
+        imageElements.forEach((imageElement) => {
+            const styleWidthMatch = /^([\d.]+)%$/.exec((imageElement.style.width || '').trim());
+            const datasetWidth = Number(imageElement.dataset?.width);
+            const parsedStyleWidth = styleWidthMatch ? Number(styleWidthMatch[1]) : NaN;
+            const width = Number.isFinite(datasetWidth)
+                ? datasetWidth
+                : (Number.isFinite(parsedStyleWidth) ? parsedStyleWidth : fallbackWidth);
+
+            const datasetAlignment = imageElement.dataset?.alignment;
+            const alignmentCandidate = datasetAlignment || validFallbackAlignment;
+            const alignment = ['Left', 'Center', 'Right'].includes(alignmentCandidate) ? alignmentCandidate : 'Center';
+
+            const marginByAlignment = alignment === 'Left'
+                ? { marginLeft: '0', marginRight: 'auto' }
+                : alignment === 'Right'
+                    ? { marginLeft: 'auto', marginRight: '0' }
+                    : { marginLeft: 'auto', marginRight: 'auto' };
+
+            imageElement.style.maxWidth = '100%';
+            imageElement.style.width = `${Math.max(10, Math.min(100, width))}%`;
+            imageElement.style.height = 'auto';
+            imageElement.style.display = 'block';
+            imageElement.style.marginTop = '8px';
+            imageElement.style.marginBottom = '8px';
+            imageElement.style.marginLeft = marginByAlignment.marginLeft;
+            imageElement.style.marginRight = marginByAlignment.marginRight;
+            imageElement.dataset.width = String(Math.max(10, Math.min(100, width)));
+            imageElement.dataset.alignment = alignment;
+        });
+
+        return tempDiv.innerHTML;
+    };
+
     // Loads question data into input fields
     const handleEditQuestion = async (question) => {
         // Clear content state first
@@ -1414,16 +1512,19 @@ const TestEncodingAndEditing = () => {
         // Map bloom level to grouped selector value (supports backend/raw/grouped values)
         setBloomLevel(resolveGroupedBloomValue(question.bloomLevel)); 
         
-        // Populate the content fields with the question data
-        setQuestionText(question.content || '');
+        // Rehydrate persisted image width/alignment so edit mode reflects saved size.
+        const imageMeta = question?.image || question?.Image || null;
+
+        // Populate the content fields with question data
+        setQuestionText(applyPersistedImagePresentationToHtml(question.content || '', imageMeta));
         
         // Extract options (A, B, C, D) from question.options array
         if (question.options && Array.isArray(question.options)) {
             const sortedOptions = [...question.options].sort((a, b) => a.displayOrder - b.displayOrder);
-            setChoiceA(sortedOptions[0]?.content || '');
-            setChoiceB(sortedOptions[1]?.content || '');
-            setChoiceC(sortedOptions[2]?.content || '');
-            setChoiceD(sortedOptions[3]?.content || '');
+            setChoiceA(applyPersistedImagePresentationToHtml(sortedOptions[0]?.content || '', imageMeta));
+            setChoiceB(applyPersistedImagePresentationToHtml(sortedOptions[1]?.content || '', imageMeta));
+            setChoiceC(applyPersistedImagePresentationToHtml(sortedOptions[2]?.content || '', imageMeta));
+            setChoiceD(applyPersistedImagePresentationToHtml(sortedOptions[3]?.content || '', imageMeta));
             
             // Find the correct answer (A, B, C, or D)
             const correctOption = sortedOptions.find(opt => opt.isCorrect);
@@ -1668,6 +1769,71 @@ const TestEncodingAndEditing = () => {
             setIsDeletingQuestion(false);
         }
     };
+
+    // Extract image metadata from HTML content
+    const extractImagesFromHtml = (htmlContent) => {
+        const images = [];
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = htmlContent;
+        const imgElements = tempDiv.querySelectorAll('img');
+        
+        imgElements.forEach((img, index) => {
+            const widthMatch = /^([\d.]+)%$/.exec((img.style.width || '').trim());
+            const width = widthMatch ? Number(widthMatch[1]) : (Number(img.dataset.width) || 50);
+            const alignment = img.dataset.alignment || 'Center';
+            const src = img.getAttribute('src') || img.dataset.originalSrc || '';
+            
+            if (src) {
+                images.push({
+                    src,
+                    width: Math.max(10, Math.min(100, width)), // Ensure range 10-100
+                    alignment: ['Left', 'Center', 'Right'].includes(alignment) ? alignment : 'Center',
+                    index
+                });
+            }
+        });
+        
+        return images;
+    };
+
+    // Update image metadata for a question
+    const updateQuestionImages = async (questionId, allContent) => {
+        try {
+            // Extract images from question content and all choices
+            const allImages = [
+                ...extractImagesFromHtml(allContent.questionHtml),
+                ...extractImagesFromHtml(allContent.choiceAHtml),
+                ...extractImagesFromHtml(allContent.choiceBHtml),
+                ...extractImagesFromHtml(allContent.choiceCHtml),
+                ...extractImagesFromHtml(allContent.choiceDHtml)
+            ];
+            
+            if (allImages.length === 0) {
+                console.log('📷 No images found in question content');
+                return;
+            }
+            
+            console.log(`📷 Found ${allImages.length} image(s) in question content:`, allImages);
+            
+            // Update each image's metadata
+            for (const image of allImages) {
+                try {
+                    // For now, just log the image metadata
+                    // In a future iteration, this could call an API to update image metadata
+                    console.log(`✏️ Image metadata:`, {
+                        width: image.width,
+                        alignment: image.alignment,
+                        hasSrcData: image.src.startsWith('data:')
+                    });
+                } catch (err) {
+                    console.warn(`Failed to update image metadata for index ${image.index}:`, err);
+                }
+            }
+        } catch (err) {
+            console.warn('Failed to update question images:', err);
+            // Don't throw - this is non-critical
+        }
+    };
     
     // Handles both 'Add' and 'Save Edit' with backend API
     const handleAction = async () => { 
@@ -1752,6 +1918,16 @@ const TestEncodingAndEditing = () => {
             }
             
             console.log('✅ Saved question:', savedQuestion);
+            
+            // Update image metadata after question is saved
+            const questionId = savedQuestion.id;
+            await updateQuestionImages(questionId, {
+                questionHtml,
+                choiceAHtml,
+                choiceBHtml,
+                choiceCHtml,
+                choiceDHtml
+            });
             
             // 3. Reset content fields but keep filters
             resetInputContent(); 

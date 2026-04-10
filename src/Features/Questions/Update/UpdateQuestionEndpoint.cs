@@ -2,6 +2,7 @@ using Databank.Abstract;
 using Databank.Common;
 using Databank.Database;
 using Databank.Entities;
+using Databank.Features.Options;
 using Databank.Features.Questions;
 using Databank.Services;
 using Microsoft.EntityFrameworkCore;
@@ -24,6 +25,7 @@ public sealed class UpdateQuestionEndpoint : IEndpoint
         {
             var question = await dbContext.Questions
                 .Include(q => q.Options)
+                .Include(q => q.QuestionImage)
                 .FirstOrDefaultAsync(q => q.Id == id, ct);
             if (question is null)
             {
@@ -70,6 +72,35 @@ public sealed class UpdateQuestionEndpoint : IEndpoint
             question.Points = request.Points;
             question.DisplayOrder = request.DisplayOrder;
             question.UpdatedAt = DateTime.UtcNow;
+
+            var firstImageMetadata = ExtractFirstImageMetadata(request.Content, request.Options);
+            if (firstImageMetadata is not null)
+            {
+                var (src, widthPercentage, alignment) = firstImageMetadata.Value;
+                var isDataUrl = src.StartsWith("data:", StringComparison.OrdinalIgnoreCase);
+
+                if (question.QuestionImage is null)
+                {
+                    question.QuestionImage = new QuestionImage
+                    {
+                        QuestionId = question.Id,
+                        ImagePath = isDataUrl ? "inline/data-url" : src,
+                        ImageData = isDataUrl ? src : null,
+                        WidthPercentage = widthPercentage,
+                        Alignment = alignment,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+                }
+                else
+                {
+                    question.QuestionImage.ImagePath = isDataUrl ? "inline/data-url" : src;
+                    question.QuestionImage.ImageData = isDataUrl ? src : null;
+                    question.QuestionImage.WidthPercentage = widthPercentage;
+                    question.QuestionImage.Alignment = alignment;
+                    question.QuestionImage.UpdatedAt = DateTime.UtcNow;
+                }
+            }
 
             if (request.Options is not null)
             {
@@ -137,6 +168,33 @@ public sealed class UpdateQuestionEndpoint : IEndpoint
 
             return TypedResults.Ok(question.ToResponse());
         }).RequireAuthorization(); // Allow all authenticated users (teachers and admins)
+    }
+
+    private static (string Src, int WidthPercentage, string Alignment)? ExtractFirstImageMetadata(
+        string questionContent,
+        IReadOnlyList<OptionRequest>? options)
+    {
+        var questionImages = HtmlImageExtractor.ExtractImageMetadata(questionContent);
+        if (questionImages.Count > 0)
+        {
+            return questionImages[0];
+        }
+
+        if (options is null)
+        {
+            return null;
+        }
+
+        foreach (var option in options)
+        {
+            var optionImages = HtmlImageExtractor.ExtractImageMetadata(option.Content);
+            if (optionImages.Count > 0)
+            {
+                return optionImages[0];
+            }
+        }
+
+        return null;
     }
 }
 

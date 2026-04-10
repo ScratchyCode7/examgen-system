@@ -2,6 +2,7 @@ using Databank.Abstract;
 using Databank.Common;
 using Databank.Database;
 using Databank.Entities;
+using Databank.Features.Options;
 using Databank.Features.Questions;
 using Databank.Services;
 using Microsoft.EntityFrameworkCore;
@@ -61,6 +62,23 @@ public sealed class CreateQuestionEndpoint : IEndpoint
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
+
+            var firstImageMetadata = ExtractFirstImageMetadata(request.Content, request.Options);
+            if (firstImageMetadata is not null)
+            {
+                var (src, widthPercentage, alignment) = firstImageMetadata.Value;
+                var isDataUrl = src.StartsWith("data:", StringComparison.OrdinalIgnoreCase);
+
+                question.QuestionImage = new QuestionImage
+                {
+                    ImagePath = isDataUrl ? "inline/data-url" : src,
+                    ImageData = isDataUrl ? src : null,
+                    WidthPercentage = widthPercentage,
+                    Alignment = alignment,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+            }
 
             try
             {
@@ -123,6 +141,33 @@ public sealed class CreateQuestionEndpoint : IEndpoint
 
             return TypedResults.Created($"/api/questions/{question.Id}", createdQuestion.ToResponse());
         }).RequireAuthorization(); // Allow all authenticated users (teachers and admins)
+    }
+
+    private static (string Src, int WidthPercentage, string Alignment)? ExtractFirstImageMetadata(
+        string questionContent,
+        IReadOnlyList<OptionRequest>? options)
+    {
+        var questionImages = HtmlImageExtractor.ExtractImageMetadata(questionContent);
+        if (questionImages.Count > 0)
+        {
+            return questionImages[0];
+        }
+
+        if (options is null)
+        {
+            return null;
+        }
+
+        foreach (var option in options)
+        {
+            var optionImages = HtmlImageExtractor.ExtractImageMetadata(option.Content);
+            if (optionImages.Count > 0)
+            {
+                return optionImages[0];
+            }
+        }
+
+        return null;
     }
 }
 
