@@ -2043,8 +2043,31 @@ const TestEncodingAndEditing = () => {
                                 <label>Grayscale ({imageEditorSettings.grayscale}%)</label>
                                 <input type="range" min="0" max="100" value={imageEditorSettings.grayscale} onChange={(e) => setImageEditorSettings(prev => ({ ...prev, grayscale: Number(e.target.value) }))} />
 
-                                <label>Image Size ({imageEditorSettings.imageSize}%)</label>
-                                <input type="range" min="20" max="100" value={imageEditorSettings.imageSize} onChange={(e) => setImageEditorSettings(prev => ({ ...prev, imageSize: Number(e.target.value) }))} />
+                                <label>Image Width: {imageEditorSettings.imageSize}%</label>
+                                <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                                    <input type="range" min="20" max="100" value={imageEditorSettings.imageSize} onChange={(e) => setImageEditorSettings(prev => ({ ...prev, imageSize: Number(e.target.value) }))} style={{ flex: 1 }} />
+                                </div>
+                                <div style={{ display: 'flex', gap: '5px', marginTop: '8px' }}>
+                                    {[25, 50, 75, 100].map((size) => (
+                                        <button
+                                            key={size}
+                                            type="button"
+                                            style={{
+                                                padding: '6px 12px',
+                                                fontSize: '12px',
+                                                backgroundColor: imageEditorSettings.imageSize === size ? '#2563eb' : '#e5e7eb',
+                                                color: imageEditorSettings.imageSize === size ? 'white' : 'black',
+                                                border: '1px solid #d1d5db',
+                                                borderRadius: '4px',
+                                                cursor: 'pointer',
+                                                fontWeight: imageEditorSettings.imageSize === size ? 'bold' : 'normal',
+                                            }}
+                                            onClick={() => setImageEditorSettings(prev => ({ ...prev, imageSize: size }))}
+                                        >
+                                            {size}%
+                                        </button>
+                                    ))}
+                                </div>
 
                                 <label>Placement</label>
                                 <div className="align-action-row">

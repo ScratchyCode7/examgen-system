@@ -215,7 +215,7 @@ const QuestionImageUpload = forwardRef(({ questionId, existingImage, onImageUpda
 
           <div className="image-controls">
             <div className="control-group">
-              <label>Width: {widthPercentage}%</label>
+              <label>Image Width: {widthPercentage}%</label>
               <input
                 type="range"
                 min="10"
@@ -224,6 +224,28 @@ const QuestionImageUpload = forwardRef(({ questionId, existingImage, onImageUpda
                 onChange={(e) => handleWidthChange(parseInt(e.target.value))}
                 disabled={isUploading}
               />
+              <div style={{ display: 'flex', gap: '5px', marginTop: '8px', flexWrap: 'Wrap' }}>
+                {[25, 50, 75, 100].map((size) => (
+                  <button
+                    key={size}
+                    type="button"
+                    style={{
+                      padding: '6px 12px',
+                      fontSize: '12px',
+                      backgroundColor: widthPercentage === size ? '#2563eb' : '#e5e7eb',
+                      color: widthPercentage === size ? 'white' : 'black',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontWeight: widthPercentage === size ? 'bold' : 'normal',
+                    }}
+                    onClick={() => handleWidthChange(size)}
+                    disabled={isUploading}
+                  >
+                    {size}%
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="control-group">
