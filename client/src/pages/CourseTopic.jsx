@@ -278,7 +278,26 @@ const CourseTopic = () => {
 
   // Save course/topic mapping as a Subject in the backend
   const handleSave = () => {
-    if (!course || !courseCode || !courseTitle || !courseUnits || !courseHours) return;
+    if (!course) {
+      showToast({ message: 'Please select a Course.', type: 'error' });
+      return;
+    }
+    if (!courseCode) {
+      showToast({ message: 'Course Code is required.', type: 'error' });
+      return;
+    }
+    if (!courseTitle) {
+      showToast({ message: 'Course Title is required.', type: 'error' });
+      return;
+    }
+    if (!courseUnits) {
+      showToast({ message: 'Course Units is required.', type: 'error' });
+      return;
+    }
+    if (!courseHours) {
+      showToast({ message: 'Course Hours is required.', type: 'error' });
+      return;
+    }
 
     const saveAsync = async () => {
       try {
@@ -389,8 +408,16 @@ const CourseTopic = () => {
 
   // Create new topic for selected subject
   const handleAddTopic = async () => {
-    if (!selectedSubjectForTopic || !topicFormData.title || !topicFormData.allocatedHours) {
-      showToast({ message: 'Please fill in Topic Title and Hours.', type: 'error' });
+    if (!selectedSubjectForTopic) {
+      showToast({ message: 'Please select a Subject first.', type: 'error' });
+      return;
+    }
+    if (!topicFormData.title || !topicFormData.title.trim()) {
+      showToast({ message: 'Topic Title is required.', type: 'error' });
+      return;
+    }
+    if (!topicFormData.allocatedHours) {
+      showToast({ message: 'Allocated Hours is required.', type: 'error' });
       return;
     }
 
