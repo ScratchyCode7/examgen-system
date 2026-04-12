@@ -7,7 +7,7 @@
 # backend instance. Do NOT run this against production.
 # Requirements: `jq` installed, backend running, and an admin account.
 
-BASE_URL="http://localhost:5000"
+BASE_URL="http://localhost:5012"
 QUESTION_ID=1  # Use an existing question ID from your database
 
 echo "=========================================="

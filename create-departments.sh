@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Base API URL (defaults to local dev)
-BASE_URL="${BASE_URL:-http://localhost:5000}"
+BASE_URL="${BASE_URL:-http://localhost:5012}"
 
 # Get admin token
 TOKEN=$(curl -s -X POST "$BASE_URL/api/auth/login" \
