@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Databank.Configuration;
 
+#pragma warning disable CS0618 // Legacy DepartmentId is intentionally kept during migration to UserDepartments
 public sealed class UserConfiguration : IEntityTypeConfiguration<User>
 {
     public void Configure(EntityTypeBuilder<User> builder)
@@ -87,3 +88,4 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .OnDelete(DeleteBehavior.SetNull);
     }
 }
+#pragma warning restore CS0618
