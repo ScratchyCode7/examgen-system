@@ -5,6 +5,7 @@ import { API_BASE_URL, apiService } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { usePrintRequestNotifications } from '../contexts/PrintRequestNotificationContext';
 import ConfirmationModal from '../components/ConfirmationModal';
 import NavItem from '../components/NavItem';
 import DropdownNavItem from '../components/DropdownNavItem';
@@ -17,6 +18,30 @@ import '../styles/AccountSettings.css';
 
 const MIN_PASSWORD_LENGTH = 8;
 
+const getPasswordStrength = (password) => {
+  if (!password) {
+    return null;
+  }
+
+  let score = 0;
+  if (password.length >= MIN_PASSWORD_LENGTH) score += 1;
+  if (/[a-z]/.test(password)) score += 1;
+  if (/[A-Z]/.test(password)) score += 1;
+  if (/\d/.test(password)) score += 1;
+  if (/[^A-Za-z0-9]/.test(password)) score += 1;
+  if (password.length >= 12) score += 1;
+
+  if (score <= 2) {
+    return { label: 'Weak', tone: 'weak' };
+  }
+
+  if (score <= 4) {
+    return { label: 'Normal', tone: 'normal' };
+  }
+
+  return { label: 'Strong', tone: 'strong' };
+};
+
 const toAbsoluteImageUrl = (path) => {
   if (!path) return '';
   if (/^https?:\/\//i.test(path)) return path;
@@ -28,6 +53,7 @@ const AccountSettings = () => {
   const { user, isAdmin, updateCurrentUser, logout } = useAuth();
   const { showToast } = useToast();
   const { isDarkMode, toggleDarkMode } = useTheme();
+  const { pendingPrintRequestCount } = usePrintRequestNotifications();
 
   const [activeTab, setActiveTab] = useState('Edit Account');
   const [departments, setDepartments] = useState([]);
@@ -40,7 +66,10 @@ const AccountSettings = () => {
 
   const dataEntryItems = ['Program - Topic', 'Test Encoding', 'Test Question Editing'];
   const availableDataEntryItems = isAdmin ? ['Program - Topic'] : dataEntryItems;
-  const reportItems = ['Test Generation', 'Saved Exam Sets'];
+  const reportItems = isAdmin
+    ? ['Test Generation', 'Saved Exam Sets', 'Print Requests']
+    : ['Test Generation', 'Saved Exam Sets'];
+  const reportsNotificationCount = isAdmin ? pendingPrintRequestCount : 0;
   const isDataEntryActive = availableDataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
   const isReportsActive = reportItems.includes(activeTab) || activeTab === 'Reports';
 
@@ -149,6 +178,8 @@ const AccountSettings = () => {
     if (profileImagePath) return toAbsoluteImageUrl(profileImagePath);
     return '';
   }, [selectedImagePreview, profileImageData, profileImagePath]);
+
+  const passwordStrength = useMemo(() => getPasswordStrength(newPassword), [newPassword]);
 
   const validate = () => {
     const nextErrors = {};
@@ -335,6 +366,8 @@ const AccountSettings = () => {
               label="Reports"
               isActive={isReportsActive}
               dropdownItems={reportItems}
+              parentNotificationCount={reportsNotificationCount}
+              itemNotificationCounts={{ 'Print Requests': reportsNotificationCount }}
               onSelect={(item) => {
                 setActiveTab(item);
                 const code = resolveDepartmentCode();
@@ -342,6 +375,8 @@ const AccountSettings = () => {
                   navigate(`/test-generation/${code}`);
                 } else if (item === 'Saved Exam Sets') {
                   navigate(`/reports/saved-exams/${code}`);
+                } else if (item === 'Print Requests') {
+                  navigate(`/test-generation/${code}?view=printrequests`);
                 }
               }}
             />
@@ -452,7 +487,17 @@ const AccountSettings = () => {
                 </div>
 
                 <div className="field-container">
-                  <label htmlFor="newPassword">New Password (optional)</label>
+                  <div className="field-label-row">
+                    <label htmlFor="newPassword">New Password (optional)</label>
+                    {passwordStrength && (
+                      <span
+                        className={`password-strength password-strength-${passwordStrength.tone}`}
+                        aria-live="polite"
+                      >
+                        {passwordStrength.label}
+                      </span>
+                    )}
+                  </div>
                   <div className="password-input-wrapper">
                     <input
                       id="newPassword"
@@ -506,7 +551,7 @@ const AccountSettings = () => {
         </div>
       </div>
 
-      <LogoutModal isOpen={isLogoutModalOpen} onClose={() => setIsLogoutModalOpen(false)} onConfirm={handleConfirmLogout} />
+      <LogoutModal isOpen={isLogoutModalOpen} onClose={() => setIsLogoutModalOpen(false)} onConfirm={handleConfirmLogout} isDarkMode={isDarkMode} />
 
       <ConfirmationModal
         isOpen={showConfirmModal}

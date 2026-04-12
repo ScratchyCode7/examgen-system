@@ -21,22 +21,33 @@
   text-align: center;
 }
 
-.app-confirmation-modal.dark {
-  background: #1f1f1f;
-  color: #f8f9fa;
+.app-confirmation-modal.dark,
+.dashboard.dark .app-confirmation-modal {
+  background: #1E3A5F;
+  color: #E5E5E5;
 }
 
 .app-confirmation-modal h3 {
   margin: 0 0 0.75rem 0;
-  color: inherit;
+  color: #1C4DA1;
   font-size: 1.35rem;
+}
+
+.app-confirmation-modal.dark h3,
+.dashboard.dark .app-confirmation-modal h3 {
+  color: #93C5FD;
 }
 
 .app-confirmation-modal p {
   margin: 0;
-  color: inherit;
+  color: #666;
   font-size: 1rem;
   line-height: 1.45;
+}
+
+.app-confirmation-modal.dark p,
+.dashboard.dark .app-confirmation-modal p {
+  color: #A0AEC0;
 }
 
 .app-confirmation-actions {
@@ -66,6 +77,19 @@
   background: #5a6268;
 }
 
+.app-confirmation-modal.dark .app-confirmation-cancel,
+.dashboard.dark .app-confirmation-modal .app-confirmation-cancel {
+  background: #1E3A8A;
+  color: #93C5FD;
+  border: 1px solid #3B82F6;
+}
+
+.app-confirmation-modal.dark .app-confirmation-cancel:hover:not(:disabled),
+.dashboard.dark .app-confirmation-modal .app-confirmation-cancel:hover:not(:disabled) {
+  background: #1D4ED8;
+  color: #DBEAFE;
+}
+
 .app-confirmation-confirm {
   background: #0d6efd;
   color: #fff;
@@ -75,12 +99,34 @@
   background: #0b5ed7;
 }
 
+.app-confirmation-modal.dark .app-confirmation-confirm:not(.danger),
+.dashboard.dark .app-confirmation-modal .app-confirmation-confirm:not(.danger) {
+  background: #2563EB;
+  color: #F8FAFC;
+}
+
+.app-confirmation-modal.dark .app-confirmation-confirm:not(.danger):hover:not(:disabled),
+.dashboard.dark .app-confirmation-modal .app-confirmation-confirm:not(.danger):hover:not(:disabled) {
+  background: #1D4ED8;
+}
+
 .app-confirmation-confirm.danger {
   background: #dc3545;
 }
 
 .app-confirmation-confirm.danger:hover:not(:disabled) {
   background: #bb2d3b;
+}
+
+.app-confirmation-modal.dark .app-confirmation-confirm.danger,
+.dashboard.dark .app-confirmation-modal .app-confirmation-confirm.danger {
+  background: #DC2626;
+  color: #FEE2E2;
+}
+
+.app-confirmation-modal.dark .app-confirmation-confirm.danger:hover:not(:disabled),
+.dashboard.dark .app-confirmation-modal .app-confirmation-confirm.danger:hover:not(:disabled) {
+  background: #B91C1C;
 }
 
 .app-confirmation-cancel:disabled,

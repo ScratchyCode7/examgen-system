@@ -256,12 +256,14 @@
     color: inherit;
     font-weight: 700;
     font-size: 1.1rem;
-    transition: all 0.15s;
+    transition: background 0.18s, color 0.18s, transform 0.12s;
 }
 
 /* Hover/Active Fixes */
 .user-btn:hover {
-    background-color: rgba(255,198,62,0.2);
+    background-color: #FFC63E;
+    color: #1C4DA1;
+    transform: translateY(-1px);
 }
 
 .user-btn.active {

@@ -21,6 +21,7 @@ import ConfirmationModal from '../components/ConfirmationModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useToast } from '../contexts/ToastContext';
+import { usePrintRequestNotifications } from '../contexts/PrintRequestNotificationContext';
 import { apiService } from '../services/api';
 import DEPARTMENT_LOGOS from '../constants/departmentLogos';
 import { HELP_CENTER_URL } from '../constants/helpLinks';
@@ -681,6 +682,7 @@ const TestEncodingAndEditing = () => {
     const { user, logout, isAdmin } = useAuth();
     const { isDarkMode, toggleDarkMode } = useTheme();
     const { showToast } = useToast();
+    const { pendingPrintRequestCount } = usePrintRequestNotifications();
     const [activeTab, setActiveTab] = useState('Test Question Encoding');
     const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
     const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
@@ -2511,7 +2513,10 @@ const TestEncodingAndEditing = () => {
     const sortedBloomLevels = BLOOM_LEVELS.map(bl => bl.value).filter(level => groupedQuestions.hasOwnProperty(level));
 
     // Navigation helpers
-    const reportItems = ["Test Generation", "Saved Exam Sets"];
+        const reportItems = isAdmin
+            ? ["Test Generation", "Saved Exam Sets", "Print Requests"]
+            : ["Test Generation", "Saved Exam Sets"];
+        const reportsNotificationCount = isAdmin ? pendingPrintRequestCount : 0;
     const isDataEntryActive = dataEntryTabs.includes(activeTab) || activeTab === 'Data Entry';
     const isReportsActive = reportItems.includes(activeTab) || activeTab === 'Reports';
 
@@ -2529,7 +2534,7 @@ const TestEncodingAndEditing = () => {
                 style={{ display: 'none' }}
             />
             
-            <LogoutModal isOpen={isLogoutModalOpen} onClose={()=>setIsLogoutModalOpen(false)} onConfirm={handleConfirmLogout} />
+            <LogoutModal isOpen={isLogoutModalOpen} onClose={()=>setIsLogoutModalOpen(false)} onConfirm={handleConfirmLogout} isDarkMode={isDarkMode} />
 
             <ConfirmationModal
                 isOpen={isDeleteModalOpen}
@@ -2808,6 +2813,8 @@ const TestEncodingAndEditing = () => {
                             label="Reports"
                             isActive={isReportsActive}
                             dropdownItems={reportItems}
+                            parentNotificationCount={reportsNotificationCount}
+                            itemNotificationCounts={{ 'Print Requests': reportsNotificationCount }}
                             onSelect={(item) => {
                                 handleSetActiveTab(item);
                                 const deptCode = getActiveDepartmentCode();
@@ -2815,6 +2822,8 @@ const TestEncodingAndEditing = () => {
                                     navigate(`/test-generation/${deptCode}`);
                                 } else if (item === 'Saved Exam Sets') {
                                     navigate(`/reports/saved-exams/${deptCode}`);
+                                } else if (item === 'Print Requests') {
+                                    navigate(`/test-generation/${deptCode}?view=printrequests`);
                                 }
                             }}
                         />

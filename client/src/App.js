@@ -5,6 +5,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { ToastProvider } from './contexts/ToastContext';
+import { PrintRequestNotificationProvider } from './contexts/PrintRequestNotificationContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import PrintAccessControl from './components/PrintAccessControl';
 import Login from './pages/Login';
@@ -23,8 +24,9 @@ function App() {
       <ToastProvider>
         <AuthProvider>
           <ThemeProvider>
-            <PrintAccessControl />
-            <Routes>
+            <PrintRequestNotificationProvider>
+              <PrintAccessControl />
+              <Routes>
               <Route path="/login" element={<Login />} />
           <Route
             path="/"
@@ -91,7 +93,8 @@ function App() {
             }
           />
               <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+              </Routes>
+            </PrintRequestNotificationProvider>
           </ThemeProvider>
         </AuthProvider>
       </ToastProvider>

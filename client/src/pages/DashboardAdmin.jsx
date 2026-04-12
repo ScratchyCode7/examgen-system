@@ -7,6 +7,7 @@ import LogoutModal from '../components/LogoutModal';
 import UserManagement from '../components/UserManagement';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { usePrintRequestNotifications } from '../contexts/PrintRequestNotificationContext';
 import '../styles/Dashboard.css';
 
 import TDBLogo from '../assets/TDB logo.png';
@@ -19,6 +20,7 @@ import { getUserDisplayName, getUserProfileImageUrl } from '../utils/userDisplay
 const DashboardAdmin = () => {
   const { user, logout } = useAuth();
   const { isDarkMode, toggleDarkMode } = useTheme();
+  const { pendingPrintRequestCount } = usePrintRequestNotifications();
   const location = useLocation();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('Home');
@@ -108,7 +110,8 @@ const DashboardAdmin = () => {
   const dataEntryItems = ["Program - Topic"];
   const isDataEntryActive = dataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
   
-  const reportItems = ["Test Generation", "Saved Exam Sets"];
+  const reportItems = ["Test Generation", "Saved Exam Sets", "Print Requests"];
+  const reportsNotificationCount = pendingPrintRequestCount;
   const isReportsActive = reportItems.includes(activeTab) || activeTab === 'Reports';
 
   const visibleDepartments = departments.filter((department) => {
@@ -185,6 +188,8 @@ const DashboardAdmin = () => {
               label="Reports"
               isActive={isReportsActive}
               dropdownItems={reportItems}
+              parentNotificationCount={reportsNotificationCount}
+              itemNotificationCounts={{ 'Print Requests': reportsNotificationCount }}
               onSelect={(item) => {
                 setActiveTab(item);
                 if (item === 'Test Generation') {
@@ -195,6 +200,9 @@ const DashboardAdmin = () => {
                   const firstDept = departments?.find(d => d.code !== 'IT') || departments?.[0];
                   const code = firstDept?.code || 'CCS';
                   navigate(`/reports/saved-exams/${code}`);
+                } else if (item === 'Print Requests') {
+                  setActiveView('home');
+                  navigate('/test-generation?view=printrequests');
                 }
               }}
             />

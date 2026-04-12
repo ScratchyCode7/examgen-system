@@ -8,6 +8,7 @@ import ConfirmationModal from '../components/ConfirmationModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useToast } from '../contexts/ToastContext';
+import { usePrintRequestNotifications } from '../contexts/PrintRequestNotificationContext';
 import { apiService, API_BASE_URL } from '../services/api';
 import '../styles/Dashboard.css';
 import '../styles/TestGeneration.css';
@@ -75,11 +76,14 @@ const SavedExamsReport = () => {
   const { user, logout, isAdmin } = useAuth();
   const { isDarkMode, toggleDarkMode } = useTheme();
   const { showToast } = useToast();
+  const { pendingPrintRequestCount } = usePrintRequestNotifications();
   const navigate = useNavigate();
   const { departmentCode } = useParams();
   const [activeTab, setActiveTab] = useState('Saved Exam Sets');
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const hasLoggedReportPageViewRef = useRef(false);
   const userMenuRef = useRef(null);
 
   const displayName = getUserDisplayName(user, 'User');
@@ -92,6 +96,8 @@ const SavedExamsReport = () => {
   const [examType, setExamType] = useState('');
   const [semester, setSemester] = useState('');
   const [schoolYear, setSchoolYear] = useState(getAutoSchoolYear());
+  const [showFilters, setShowFilters] = useState(false);
+  const [hasUsedFilters, setHasUsedFilters] = useState(false);
 
   // Collections
   const [departments, setDepartments] = useState([]);
@@ -136,6 +142,27 @@ const SavedExamsReport = () => {
     return isExamOwner(selectedExam);
   }, [selectedExam, user?.isAdmin, isExamOwner]);
 
+  const normalizedSearchText = searchText.trim().toLowerCase();
+  const filteredSavedExamSets = React.useMemo(() => {
+    if (!normalizedSearchText) return savedExamSets;
+
+    return savedExamSets.filter((exam) => {
+      const haystack = [
+        exam?.setLabel,
+        exam?.title,
+        exam?.examType,
+        exam?.semester,
+        exam?.schoolYear,
+        exam?.createdByName,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return haystack.includes(normalizedSearchText);
+    });
+  }, [savedExamSets, normalizedSearchText]);
+
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target)) setIsUserMenuOpen(false);
@@ -143,6 +170,20 @@ const SavedExamsReport = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (hasLoggedReportPageViewRef.current) return;
+    hasLoggedReportPageViewRef.current = true;
+
+    void apiService.logActivity({
+      category: 'Reports',
+      action: 'Viewed Saved Exam Sets',
+      entityType: 'Page',
+      details: `Opened Saved Exam Sets report page${departmentCode ? ` (${departmentCode})` : ''}`,
+    }).catch(() => {
+      // Avoid blocking report page if activity logging fails.
+    });
+  }, [departmentCode]);
 
   useEffect(() => {
     const loadDepartments = async () => {
@@ -201,7 +242,8 @@ const SavedExamsReport = () => {
           return;
         }
         const data = await apiService.getCourses(dept.id);
-        setCourses(Array.isArray(data) ? data : []);
+        const nextCourses = Array.isArray(data) ? data : [];
+        setCourses(nextCourses);
         setSelectedCourse('');
         setSelectedSubject('');
       } catch (err) {
@@ -228,7 +270,8 @@ const SavedExamsReport = () => {
       try {
         setIsLoadingSubjects(true);
         const subjectsList = await apiService.getSubjects({ courseId: parseInt(selectedCourse, 10), pageSize: 500 });
-        setSubjects(Array.isArray(subjectsList) ? subjectsList : []);
+        const nextSubjects = Array.isArray(subjectsList) ? subjectsList : [];
+        setSubjects(nextSubjects);
         setSelectedSubject('');
         setSavedExamSets([]);
         setSelectedExam(null);
@@ -244,22 +287,26 @@ const SavedExamsReport = () => {
   }, [selectedCourse]);
 
   const loadSavedExamSets = React.useCallback(async () => {
-    if (!selectedSubject || !examType || !semester) {
-      setSavedExamSets([]);
-      setSelectedExam(null);
-      return;
-    }
-
     try {
       setIsLoadingSavedSets(true);
-      const subjectId = parseInt(selectedSubject, 10);
-      const saved = await apiService.getExams({
-        subjectId,
-        examType,
-        semester,
-        schoolYear,
-        pageSize: 50
-      });
+      const params = { pageSize: 50 };
+
+      if (hasUsedFilters) {
+        if (selectedSubject) {
+          params.subjectId = parseInt(selectedSubject, 10);
+        }
+        if (examType) {
+          params.examType = examType;
+        }
+        if (semester) {
+          params.semester = semester;
+        }
+        if (schoolYear?.trim()) {
+          params.schoolYear = schoolYear.trim();
+        }
+      }
+
+      const saved = await apiService.getExams(params);
       const list = Array.isArray(saved) ? saved : (saved?.items || []);
       setSavedExamSets(list);
       if (list.length === 0) {
@@ -271,13 +318,14 @@ const SavedExamsReport = () => {
     } finally {
       setIsLoadingSavedSets(false);
     }
-  }, [selectedSubject, examType, semester, schoolYear]);
+  }, [selectedSubject, examType, semester, schoolYear, hasUsedFilters]);
 
   useEffect(() => {
     void loadSavedExamSets();
   }, [loadSavedExamSets]);
 
   const handleDepartmentChange = (deptId) => {
+    setHasUsedFilters(true);
     setSelectedDepartment(deptId);
     setSelectedCourse('');
     setSelectedSubject('');
@@ -326,6 +374,14 @@ const SavedExamsReport = () => {
       setError('Failed to load the selected exam.');
     } finally {
       setIsLoadingExamDetail(false);
+    }
+  };
+
+  const handleSearchNavigate = () => {
+    if (!normalizedSearchText) return;
+    const firstMatch = filteredSavedExamSets[0];
+    if (firstMatch?.id) {
+      void handleViewSavedExam(firstMatch.id);
     }
   };
 
@@ -543,7 +599,7 @@ const SavedExamsReport = () => {
         </head>
         <body>
           <div class="header">
-            <h1>University of Perpetual Help System</h1>
+            <h1>University of Perpetual Help System Laguna</h1>
             <p>Test Data Bank System</p>
             <p>Biñan Campus</p>
             <div class="filename">${filename}</div>
@@ -712,7 +768,7 @@ const SavedExamsReport = () => {
           <div class="exam-header">
             <div class="logo-section"><img src="${logoDataUrl}" alt="UPHSL Logo" /></div>
             <div class="header-text">
-              <h2>University of Perpetual Help System</h2>
+              <h2>University of Perpetual Help System Laguna</h2>
               <p>Test Data Bank System</p>
               <p>Biñan Campus</p>
               <div class="filename">${filename}</div>
@@ -822,7 +878,7 @@ const SavedExamsReport = () => {
               <img src="${logoDataUrl}" alt="UPHSL Logo" />
             </div>
             <div class="header-text">
-              <h2>University of Perpetual Help System</h2>
+              <h2>University of Perpetual Help System Laguna</h2>
               <p>Test Data Bank System</p>
               <p>Biñan Campus</p>
               <div class="filename">${filename}</div>
@@ -904,7 +960,10 @@ const SavedExamsReport = () => {
   };
 
   const dataEntryItems = ['Program - Topic', 'Test Encoding', 'Test Question Editing'];
-  const reportItems = ['Test Generation', 'Saved Exam Sets'];
+  const reportItems = isAdmin
+    ? ['Test Generation', 'Saved Exam Sets', 'Print Requests']
+    : ['Test Generation', 'Saved Exam Sets'];
+  const reportsNotificationCount = isAdmin ? pendingPrintRequestCount : 0;
   const availableDataEntryItems = isAdmin ? ['Program - Topic'] : dataEntryItems;
   const isDataEntryActive = availableDataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
   const isReportsActive = reportItems.includes(activeTab) || activeTab === 'Reports';
@@ -955,6 +1014,8 @@ const SavedExamsReport = () => {
               label="Reports"
               isActive={isReportsActive}
               dropdownItems={reportItems}
+              parentNotificationCount={reportsNotificationCount}
+              itemNotificationCounts={{ 'Print Requests': reportsNotificationCount }}
               onSelect={(item) => {
                 setActiveTab(item);
                 const code = resolveDepartmentCode();
@@ -962,6 +1023,8 @@ const SavedExamsReport = () => {
                   navigate(`/test-generation/${code}`);
                 } else if (item === 'Saved Exam Sets') {
                   navigate(`/reports/saved-exams/${code}`);
+                } else if (item === 'Print Requests') {
+                  navigate(`/test-generation/${code}?view=printrequests`);
                 }
               }}
             />
@@ -1001,8 +1064,19 @@ const SavedExamsReport = () => {
 
         <div className="search-and-view" style={{ maxWidth: '1140px', margin: '0 auto 20px auto' }}>
           <div className="search-bar">
-            <Search className="search-icon" />
-            <input type="text" placeholder="Search..." disabled />
+            <Search className="search-icon" onClick={handleSearchNavigate} />
+            <input
+              type="text"
+              placeholder="Search..."
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  handleSearchNavigate();
+                }
+              }}
+            />
           </div>
         </div>
 
@@ -1014,7 +1088,25 @@ const SavedExamsReport = () => {
             <div className="error-message">{error}</div>
           )}
 
-          <div className="input-section saved-exams-input-section">
+          <div className="action-buttons" style={{ justifyContent: 'flex-end', marginTop: '1rem' }}>
+            <button
+              className="btn btn-secondary"
+              type="button"
+              onClick={() => setShowFilters((prev) => !prev)}
+            >
+              {showFilters ? 'Hide Filters' : 'Show Filters'}
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={() => void loadSavedExamSets()}
+              disabled={isLoadingSavedSets}
+            >
+              <RefreshCcw size={16} /> Refresh Saved Sets
+            </button>
+          </div>
+
+          {showFilters && (
+            <div className="input-section saved-exams-input-section">
             <div className="field-container">
               <label>Department</label>
               <select
@@ -1038,7 +1130,10 @@ const SavedExamsReport = () => {
               <label>Program</label>
               <select
                 value={selectedCourse}
-                onChange={(e) => setSelectedCourse(e.target.value)}
+                onChange={(e) => {
+                  setHasUsedFilters(true);
+                  setSelectedCourse(e.target.value);
+                }}
                 className={!selectedCourse ? 'unselected-placeholder' : ''}
                 disabled={!selectedDepartment || isLoadingCourses}
               >
@@ -1059,7 +1154,10 @@ const SavedExamsReport = () => {
               <label>Course</label>
               <select
                 value={selectedSubject}
-                onChange={(e) => setSelectedSubject(e.target.value)}
+                onChange={(e) => {
+                  setHasUsedFilters(true);
+                  setSelectedSubject(e.target.value);
+                }}
                 disabled={!selectedCourse || isLoadingSubjects}
               >
                 <option value="">Select Course</option>
@@ -1079,7 +1177,10 @@ const SavedExamsReport = () => {
               <label>Exam Period</label>
               <select
                 value={examType}
-                onChange={(e) => setExamType(e.target.value)}
+                onChange={(e) => {
+                  setHasUsedFilters(true);
+                  setExamType(e.target.value);
+                }}
                 className={!examType ? 'unselected-placeholder' : ''}
               >
                 <option value="" disabled>Select Exam Period</option>
@@ -1093,7 +1194,10 @@ const SavedExamsReport = () => {
               <label>Semester</label>
               <select
                 value={semester}
-                onChange={(e) => setSemester(e.target.value)}
+                onChange={(e) => {
+                  setHasUsedFilters(true);
+                  setSemester(e.target.value);
+                }}
                 className={!semester ? 'unselected-placeholder' : ''}
               >
                 <option value="" disabled>Select Semester</option>
@@ -1108,22 +1212,16 @@ const SavedExamsReport = () => {
               <input
                 type="text"
                 value={schoolYear}
-                onChange={(e) => setSchoolYear(e.target.value)}
+                onChange={(e) => {
+                  setHasUsedFilters(true);
+                  setSchoolYear(e.target.value);
+                }}
                 placeholder="e.g., 20252026"
               />
             </div>
 
-          </div>
-
-          <div className="action-buttons" style={{ justifyContent: 'flex-end', marginTop: '1rem' }}>
-            <button
-              className="btn btn-secondary"
-              onClick={() => void loadSavedExamSets()}
-              disabled={isLoadingSavedSets}
-            >
-              <RefreshCcw size={16} /> Refresh Saved Sets
-            </button>
-          </div>
+            </div>
+          )}
 
           <div className="saved-exams-layout" style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '20px' }}>
             <div className="saved-exams-list saved-exams-list-card" style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '16px', background: 'var(--card-bg)' }}>
@@ -1133,9 +1231,11 @@ const SavedExamsReport = () => {
               </div>
               {savedExamSets.length === 0 ? (
                 <p style={{ fontSize: '14px', color: 'var(--text-muted)' }}>No saved exams found for the selected filters.</p>
+              ) : filteredSavedExamSets.length === 0 ? (
+                <p style={{ fontSize: '14px', color: 'var(--text-muted)' }}>No saved exams match your search.</p>
               ) : (
                 <div className="saved-exam-scroll" style={{ maxHeight: '420px', overflowY: 'auto' }}>
-                  {savedExamSets.map(test => {
+                  {filteredSavedExamSets.map(test => {
                     const isActive = selectedExam?.id === test.id;
                     return (
                       <button
@@ -1204,12 +1304,12 @@ const SavedExamsReport = () => {
                     </p>
                   )}
 
-                  <div style={{ marginTop: '20px' }}>
-                    <div className="exam-paper" style={{ boxShadow: 'none', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
+                  <div className="sample-exam saved-exam-preview" style={{ marginTop: '20px' }}>
+                    <div className="exam-paper" style={{ boxShadow: 'none', border: '1px solid #d1d5db', borderRadius: '8px' }}>
                       <div className="exam-header">
                         <img src={UPHSLLogo} alt="UPHSL Logo" className="exam-logo" />
                         <div className="university-header">
-                          <h2>University of Perpetual Help System</h2>
+                          <h2>University of Perpetual Help System Laguna</h2>
                           <p>Test Data Bank System</p>
                           <p>Biñan Campus</p>
                           <p className="exam-filename">{buildFilename('ExamPreview')}</p>
@@ -1283,6 +1383,7 @@ const SavedExamsReport = () => {
         isOpen={isLogoutModalOpen}
         onClose={() => setIsLogoutModalOpen(false)}
         onConfirm={handleConfirmLogout}
+        isDarkMode={isDarkMode}
       />
 
       {showPrintModal && (

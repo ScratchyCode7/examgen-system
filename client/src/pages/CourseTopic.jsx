@@ -2,15 +2,17 @@
 // - Added navigation for Test Encoding/Test Question Editing in the Data Entry dropdown.
 // - Integrated ThemeContext usage and ensured logout modal respects theme.
 // See README for full details.
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search, FileText, Users, HelpCircle, Send, Check, X, ShieldOff, Pencil, Trash2, ChevronRight, ChevronDown } from 'lucide-react';
 import NavItem from '../components/NavItem';
 import DropdownNavItem from '../components/DropdownNavItem';
 import LogoutModal from '../components/LogoutModal';
+import ConfirmationModal from '../components/ConfirmationModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useToast } from '../contexts/ToastContext';
+import { usePrintRequestNotifications } from '../contexts/PrintRequestNotificationContext';
 import { apiService } from '../services/api';
 import '../styles/CourseTopic.css';
 
@@ -25,19 +27,28 @@ const CourseTopic = () => {
   const { user, logout, isAdmin } = useAuth();
   const { isDarkMode, toggleDarkMode } = useTheme();
   const { showToast } = useToast();
+  const { pendingPrintRequestCount } = usePrintRequestNotifications();
   const navigate = useNavigate();
   const { departmentCode } = useParams();
   const [activeTab, setActiveTab] = useState('Program - Topic');
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+  const [searchText, setSearchText] = useState('');
   const userMenuRef = useRef(null);
   const departmentGridRef = useRef(null);
   const activeDepartmentRef = useRef(null);
+  const courseSectionRef = useRef(null);
+  const courseFormRef = useRef(null);
+  const courseCodeInputRef = useRef(null);
+  const historyTableRef = useRef(null);
 
   const displayName = getUserDisplayName(user, 'User');
   const profileImageUrl = user?.profileImageData || getUserProfileImageUrl(user?.profileImagePath, user?.userId);
 
-  const reportItems = ["Test Generation", "Saved Exam Sets"];
+  const reportItems = isAdmin
+    ? ["Test Generation", "Saved Exam Sets", "Print Requests"]
+    : ["Test Generation", "Saved Exam Sets"];
+  const reportsNotificationCount = isAdmin ? pendingPrintRequestCount : 0;
 
   // Course topic form states
   const [course, setCourse] = useState("");
@@ -72,6 +83,8 @@ const CourseTopic = () => {
   const [topicRequestScope, setTopicRequestScope] = useState('inbox');
   const [topicEditRequests, setTopicEditRequests] = useState([]);
   const [topicRequestsLoading, setTopicRequestsLoading] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState(null);
+  const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false);
 
   // Program Creation states (for admins)
   const [showProgramForm, setShowProgramForm] = useState(false);
@@ -82,6 +95,27 @@ const CourseTopic = () => {
 
   const isDataEntryActive = availableDataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
   const isReportsActive = reportItems.includes(activeTab) || activeTab === 'Reports';
+  const normalizedSearchText = searchText.trim().toLowerCase();
+
+  const filteredHistory = useMemo(() => {
+    if (!normalizedSearchText) return history;
+
+    return history.filter((item) => {
+      const topics = subjectTopicsMap[item.subjectId] || [];
+      const searchableTopicTitles = topics.map((topic) => topic?.title || '').join(' ');
+      const searchableText = [
+        item.courseCode,
+        item.courseTitle,
+        String(item.courseHours ?? ''),
+        searchableTopicTitles,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return searchableText.includes(normalizedSearchText);
+    });
+  }, [history, subjectTopicsMap, normalizedSearchText]);
 
   const resolveDepartmentCode = () => {
     if (departmentCode) return departmentCode;
@@ -431,6 +465,23 @@ const CourseTopic = () => {
     setCourseTitle(item.courseTitle || '');
     setCourseUnits(String(item.courseUnits || ''));
     setCourseHours(String(item.courseHours || ''));
+
+    requestAnimationFrame(() => {
+      if (courseSectionRef.current) {
+        const sectionTop = courseSectionRef.current.getBoundingClientRect().top + window.scrollY;
+        const topOffset = 84;
+        window.scrollTo({
+          top: Math.max(0, sectionTop - topOffset),
+          behavior: 'smooth',
+        });
+      }
+
+      setTimeout(() => {
+        if (courseCodeInputRef.current) {
+          courseCodeInputRef.current.focus({ preventScroll: true });
+        }
+      }, 250);
+    });
   };
 
   const handleDeleteSubjectRow = async (item) => {
@@ -439,28 +490,51 @@ const CourseTopic = () => {
       return;
     }
 
-    const shouldDelete = window.confirm(`Delete course entry "${item.courseTitle}"?`);
-    if (!shouldDelete) return;
+    setDeleteConfirmation({
+      type: 'course',
+      subjectId: item.subjectId,
+      courseTitle: item.courseTitle,
+    });
+  };
+
+  const closeDeleteConfirmation = () => {
+    if (isDeleteSubmitting) return;
+    setDeleteConfirmation(null);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirmation) return;
 
     try {
-      setIsLoading(true);
-      await apiService.deleteSubject(item.subjectId);
-      setHistory((prev) => prev.filter((entry) => entry.subjectId !== item.subjectId));
-      if (editingSubjectId === item.subjectId) {
-        setEditingSubjectId(null);
-        setCourse("");
-        setCourseCode("");
-        setCourseTitle("");
-        setCourseUnits("");
-        setCourseHours("");
+      setIsDeleteSubmitting(true);
+
+      if (deleteConfirmation.type === 'course') {
+        await apiService.deleteSubject(deleteConfirmation.subjectId);
+        setHistory((prev) => prev.filter((entry) => entry.subjectId !== deleteConfirmation.subjectId));
+        if (editingSubjectId === deleteConfirmation.subjectId) {
+          setEditingSubjectId(null);
+          setCourse("");
+          setCourseCode("");
+          setCourseTitle("");
+          setCourseUnits("");
+          setCourseHours("");
+        }
+        showToast({ message: 'Course entry deleted successfully.', type: 'success' });
+      } else if (deleteConfirmation.type === 'topic') {
+        await apiService.deleteTopic(deleteConfirmation.topicId);
+        await refreshSubjectTopics(deleteConfirmation.subjectId);
+        showToast({ message: 'Topic deleted successfully.', type: 'success' });
       }
-      showToast({ message: 'Course entry deleted successfully.', type: 'success' });
     } catch (err) {
-      console.error('Failed to delete course entry:', err);
-      const message = err.response?.data?.message || err.response?.data || 'Failed to delete course entry.';
+      console.error('Failed to delete entry:', err);
+      const fallbackMessage = deleteConfirmation.type === 'course'
+        ? 'Failed to delete course entry.'
+        : 'Failed to delete topic.';
+      const message = err.response?.data?.message || err.response?.data || fallbackMessage;
       showToast({ message, type: 'error' });
     } finally {
-      setIsLoading(false);
+      setIsDeleteSubmitting(false);
+      setDeleteConfirmation(null);
     }
   };
 
@@ -581,6 +655,29 @@ const CourseTopic = () => {
       setEditingTopic(null);
       setTopicFormData({ title: '', allocatedHours: '' });
     }
+  };
+
+  const handleSearchNavigate = async () => {
+    if (!normalizedSearchText) return;
+
+    const firstMatch = filteredHistory[0];
+    if (!firstMatch) return;
+
+    if (!expandedSubjectsMap[firstMatch.subjectId]) {
+      await toggleSubjectExpansion(firstMatch.subjectId);
+    }
+
+    requestAnimationFrame(() => {
+      const targetRow = document.querySelector(`[data-subject-id="${firstMatch.subjectId}"]`);
+      if (targetRow) {
+        targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
+  };
+
+  const scrollToHistoryTable = () => {
+    if (!historyTableRef.current) return;
+    historyTableRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   // Create new topic for selected subject
@@ -708,24 +805,22 @@ const CourseTopic = () => {
     setTopicFormData({ title: '', allocatedHours: '' });
   };
 
+  const preventNumberInputWheel = (event) => {
+    event.currentTarget.blur();
+  };
+
   const handleDeleteTopic = async (subjectId, topic) => {
     if (!topic.canDelete) {
       showToast({ message: 'You do not have permission to delete this topic.', type: 'error' });
       return;
     }
 
-    const shouldDelete = window.confirm(`Delete topic "${topic.title}"?`);
-    if (!shouldDelete) return;
-
-    try {
-      await apiService.deleteTopic(topic.id);
-      await refreshSubjectTopics(subjectId);
-      showToast({ message: 'Topic deleted successfully.', type: 'success' });
-    } catch (err) {
-      console.error('Failed to delete topic:', err);
-      const message = err.response?.data?.message || err.response?.data || 'Failed to delete topic.';
-      showToast({ message, type: 'error' });
-    }
+    setDeleteConfirmation({
+      type: 'topic',
+      subjectId,
+      topicId: topic.id,
+      topicTitle: topic.title,
+    });
   };
 
   const handleSubmitTopicForm = async () => {
@@ -920,6 +1015,8 @@ const CourseTopic = () => {
               label="Reports"
               isActive={isReportsActive}
               dropdownItems={reportItems}
+              parentNotificationCount={reportsNotificationCount}
+              itemNotificationCounts={{ 'Print Requests': reportsNotificationCount }}
               onSelect={(item) => {
                 setActiveTab(item);
                 const targetCode = resolveDepartmentCode();
@@ -927,6 +1024,8 @@ const CourseTopic = () => {
                   navigate(`/test-generation/${targetCode}`);
                 } else if (item === 'Saved Exam Sets') {
                   navigate(`/reports/saved-exams/${targetCode}`);
+                } else if (item === 'Print Requests') {
+                  navigate(`/test-generation/${targetCode}?view=printrequests`);
                 }
               }}
             />
@@ -967,13 +1066,25 @@ const CourseTopic = () => {
         {/* Search bar (same as Dashboard.jsx) */}
         <div className="search-and-view" style={{ maxWidth: '1140px', margin: '0 auto 20px auto' }}>
           <div className="search-bar">
-            <Search className="search-icon" />
-            <input type="text" placeholder="Search Program/Topic..." />
+            <Search className="search-icon" onClick={() => void handleSearchNavigate()} />
+            <input
+              type="text"
+              placeholder="Search Course/Topics"
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  scrollToHistoryTable();
+                  void handleSearchNavigate();
+                }
+              }}
+            />
           </div>
         </div>
 
         {/* Course & Topic Container */}
-        <div className="course-topic-container">
+        <div className="course-topic-container" ref={courseSectionRef}>
           <h2>Program & Topic Management</h2>
 
           {/* Program Header */}
@@ -1034,7 +1145,7 @@ const CourseTopic = () => {
           </div>
 
           {/* Fields */}
-          <div className="field-container">
+          <div className="field-container" ref={courseFormRef}>
             <label>Program</label>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
               <select 
@@ -1143,6 +1254,7 @@ const CourseTopic = () => {
             <div className="field-container half-width">
               <label>Course ID</label>
               <input
+                ref={courseCodeInputRef}
                 type="text"
                 value={courseCode}
                 onChange={(e) => setCourseCode(e.target.value)}
@@ -1167,7 +1279,7 @@ const CourseTopic = () => {
             </div>
             <div className="field-container flex-1">
               <label>Allotted Hours</label>
-              <input type="number" value={courseHours} onChange={(e) => setCourseHours(e.target.value)} placeholder="Enter hours" />
+              <input type="number" value={courseHours} onChange={(e) => setCourseHours(e.target.value)} onWheel={preventNumberInputWheel} placeholder="Enter hours" />
             </div>
           </div>
 
@@ -1179,7 +1291,7 @@ const CourseTopic = () => {
           </div>
 
           {/* History Table - Subject and Topic */}
-          <div className="history-table">
+          <div className="history-table" ref={historyTableRef}>
             <div className="history-row header">
               <span className="history-cell index">#</span>
               <span className="history-cell course-id">Course ID</span>
@@ -1197,36 +1309,21 @@ const CourseTopic = () => {
                 <span colSpan={5}>No subjects created yet</span>
               </div>
             )}
-            {history.map((item, index) => (
+            {history.length > 0 && filteredHistory.length === 0 && (
+              <div className="history-row">
+                <span colSpan={5}>No programs or topics match your search.</span>
+              </div>
+            )}
+            {filteredHistory.map((item, index) => (
               <React.Fragment key={item.subjectId}>
                 {/* Subject Row with Manage Topics button */}
-                <div className="history-row subject-row">
+                <div className={`history-row subject-row ${expandedSubjectsMap[item.subjectId] ? 'selected-subject-row' : ''}`} data-subject-id={item.subjectId}>
                   <span className="history-cell index">{index + 1}</span>
                   <span className="history-cell course-id">{item.courseCode}</span>
                   <span className="history-cell course-title"><strong>{item.courseTitle}</strong></span>
                   <span className="history-cell hours">{item.courseHours}</span>
                   <span className="history-cell actions">
                     <div className="subject-row-actions">
-                      {item.canEdit ? (
-                        <button
-                          className="topic-action-btn"
-                          onClick={() => handleEditSubjectRow(item)}
-                          title="Edit course"
-                          aria-label="Edit course"
-                        >
-                          <Pencil size={14} />
-                        </button>
-                      ) : null}
-                      {item.canDelete && (
-                        <button
-                          className="topic-action-btn danger"
-                          onClick={() => handleDeleteSubjectRow(item)}
-                          title="Delete course"
-                          aria-label="Delete course"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
                       <button 
                         className={`expand-btn ${expandedSubjectsMap[item.subjectId] ? 'expanded' : ''}`}
                         onClick={() => toggleSubjectExpansion(item.subjectId)}
@@ -1246,7 +1343,28 @@ const CourseTopic = () => {
                     <div className="topics-list-section">
                       <div className="topics-list-header">
                         <h4>Topics for {item.courseTitle}</h4>
-                        {!item.canEdit && (
+                        {item.canEdit ? (
+                          <div className="subject-row-actions topic-header-actions">
+                            <button
+                              className="topic-action-btn"
+                              onClick={() => handleEditSubjectRow(item)}
+                              title="Edit course"
+                              aria-label="Edit course"
+                            >
+                              <Pencil size={14} />
+                            </button>
+                            {item.canDelete && (
+                              <button
+                                className="topic-action-btn danger"
+                                onClick={() => handleDeleteSubjectRow(item)}
+                                title="Delete course"
+                                aria-label="Delete course"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </div>
+                        ) : (
                           <button
                             className="topic-action-btn request request-access-btn"
                             onClick={() => handleRequestSubjectAccess(item)}
@@ -1257,6 +1375,77 @@ const CourseTopic = () => {
                           </button>
                         )}
                       </div>
+
+                      {/* Form to Add/Edit Topic (placed directly under header for faster encoding flow) */}
+                      {selectedSubjectForTopic === item.subjectId && (
+                        <div className="topic-form-section">
+                          <div className="topic-form-card">
+                            <div className="topic-form-header">
+                              <div>
+                                <p className="topic-form-eyebrow">{editingTopic ? 'Edit Topic' : 'Add Topic'}</p>
+                                <h5>{item.courseTitle}</h5>
+                                <span className="topic-form-subtext">Outline the lesson and pacing for this course.</span>
+                              </div>
+                              <span className="course-chip">{item.courseCode}</span>
+                            </div>
+
+                            <div className="topic-form-grid">
+                              <div className="topic-input-group span-2">
+                                <label>Topic Title</label>
+                                <input 
+                                  type="text"
+                                  value={topicFormData.title}
+                                  onChange={(e) => setTopicFormData({...topicFormData, title: e.target.value})}
+                                  placeholder="Enter Topic Title"
+                                />
+                                <span className="input-hint">Use descriptive titles so students immediately know the focus.</span>
+                              </div>
+                              <div className="topic-input-group">
+                                <label>Allocated Hours</label>
+                                <input 
+                                  type="number"
+                                  min="0"
+                                  value={topicFormData.allocatedHours}
+                                  onChange={(e) => setTopicFormData({...topicFormData, allocatedHours: e.target.value})}
+                                  onWheel={preventNumberInputWheel}
+                                  placeholder="3"
+                                />
+                                <span className="input-hint">Total contact time reserved for this lesson.</span>
+                              </div>
+                            </div>
+
+                            <div className="topic-form-footer">
+                              <p className="helper-text">
+                                {editingTopic
+                                  ? 'Update the topic details below and save your changes.'
+                                  : 'Enter a descriptive topic title and allocate the appropriate hours for this lesson.'}
+                              </p>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                {editingTopic && (
+                                  <button
+                                    type="button"
+                                    className="cancel-btn"
+                                    onClick={handleCancelTopicEdit}
+                                    disabled={topicCreating}
+                                  >
+                                    Cancel
+                                  </button>
+                                )}
+                                <button 
+                                  className="topic-submit-btn"
+                                  onClick={handleSubmitTopicForm}
+                                  disabled={topicCreating}
+                                >
+                                  {topicCreating
+                                    ? (editingTopic ? 'Saving…' : 'Creating…')
+                                    : (editingTopic ? 'Save Changes' : 'Add Topic')}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                       {subjectTopicsMap[item.subjectId] && subjectTopicsMap[item.subjectId].length > 0 ? (
                         <div className="topics-list">
                           {subjectTopicsMap[item.subjectId].map((topic, topicIdx) => (
@@ -1303,75 +1492,6 @@ const CourseTopic = () => {
                         <p className="no-topics-msg">No additional topics created yet</p>
                       )}
                     </div>
-
-                    {/* Form to Add New Topic */}
-                    {selectedSubjectForTopic === item.subjectId && (
-                      <div className="topic-form-section">
-                        <div className="topic-form-card">
-                          <div className="topic-form-header">
-                            <div>
-                              <p className="topic-form-eyebrow">{editingTopic ? 'Edit Topic' : 'Add Topic'}</p>
-                              <h5>{item.courseTitle}</h5>
-                              <span className="topic-form-subtext">Outline the lesson and pacing for this course.</span>
-                            </div>
-                            <span className="course-chip">{item.courseCode}</span>
-                          </div>
-
-                          <div className="topic-form-grid">
-                            <div className="topic-input-group span-2">
-                              <label>Topic Title</label>
-                              <input 
-                                type="text"
-                                value={topicFormData.title}
-                                onChange={(e) => setTopicFormData({...topicFormData, title: e.target.value})}
-                                placeholder="Enter Topic Title"
-                              />
-                              <span className="input-hint">Use descriptive titles so students immediately know the focus.</span>
-                            </div>
-                            <div className="topic-input-group">
-                              <label>Allocated Hours</label>
-                              <input 
-                                type="number"
-                                min="0"
-                                value={topicFormData.allocatedHours}
-                                onChange={(e) => setTopicFormData({...topicFormData, allocatedHours: e.target.value})}
-                                placeholder="3"
-                              />
-                              <span className="input-hint">Total contact time reserved for this lesson.</span>
-                            </div>
-                          </div>
-
-                          <div className="topic-form-footer">
-                            <p className="helper-text">
-                              {editingTopic
-                                ? 'Update the topic details below and save your changes.'
-                                : 'Enter a descriptive topic title and allocate the appropriate hours for this lesson.'}
-                            </p>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                              {editingTopic && (
-                                <button
-                                  type="button"
-                                  className="cancel-btn"
-                                  onClick={handleCancelTopicEdit}
-                                  disabled={topicCreating}
-                                >
-                                  Cancel
-                                </button>
-                              )}
-                              <button 
-                                className="topic-submit-btn"
-                                onClick={handleSubmitTopicForm}
-                                disabled={topicCreating}
-                              >
-                                {topicCreating
-                                  ? (editingTopic ? 'Saving…' : 'Creating…')
-                                  : (editingTopic ? 'Save Changes' : 'Add Topic')}
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 )}
               </React.Fragment>
@@ -1548,6 +1668,23 @@ const CourseTopic = () => {
         onClose={() => setIsLogoutModalOpen(false)}
         onConfirm={handleConfirmLogout}
         isDarkMode={isDarkMode}
+      />
+
+      <ConfirmationModal
+        isOpen={Boolean(deleteConfirmation)}
+        title={deleteConfirmation?.type === 'course' ? 'Delete course entry?' : 'Delete topic?'}
+        message={
+          deleteConfirmation?.type === 'course'
+            ? `Delete course entry "${deleteConfirmation?.courseTitle || ''}"? This action cannot be undone.`
+            : `Delete topic "${deleteConfirmation?.topicTitle || ''}"? This action cannot be undone.`
+        }
+        onCancel={closeDeleteConfirmation}
+        onConfirm={confirmDelete}
+        confirmText={isDeleteSubmitting ? 'Deleting...' : 'Delete'}
+        cancelText="Cancel"
+        isLoading={isDeleteSubmitting}
+        isDarkMode={isDarkMode}
+        isDanger
       />
     </div>
   );

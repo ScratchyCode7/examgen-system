@@ -32,10 +32,12 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
 builder.Services.Configure<SessionOptions>(builder.Configuration.GetSection(SessionOptions.SectionName));
+builder.Services.Configure<EmailOtpOptions>(builder.Configuration.GetSection(EmailOtpOptions.SectionName));
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
 builder.Services.AddScoped<IUserSessionService, UserSessionService>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<ILoggingService, LoggingService>();
+builder.Services.AddScoped<IEmailOtpService, SmtpEmailOtpService>();
 builder.Services.AddScoped<IDepartmentAccessService, DepartmentAccessService>();
 builder.Services.AddScoped<IFileStorageService, FileStorageService>();
 builder.Services.AddScoped<ISearchService, LuceneSearchService>();

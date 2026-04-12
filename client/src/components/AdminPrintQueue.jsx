@@ -176,7 +176,7 @@ const AdminPrintQueue = () => {
         </head>
         <body>
           <div class="header">
-            <h1>University of Perpetual Help System</h1>
+            <h1>University of Perpetual Help System Laguna</h1>
             <p>Test Data Bank System</p>
             <p>Biñan Campus</p>
             <div class="filename">${filename}</div>
@@ -311,7 +311,7 @@ const AdminPrintQueue = () => {
           <div class="exam-header">
             <div class="logo-section"><img src="${logoDataUrl}" alt="UPHSL Logo" /></div>
             <div class="header-text">
-              <h2>University of Perpetual Help System</h2>
+              <h2>University of Perpetual Help System Laguna</h2>
               <p>Test Data Bank System</p>
               <p>Biñan Campus</p>
               <div class="filename">${filename}</div>
@@ -420,7 +420,7 @@ const AdminPrintQueue = () => {
               <img src="${logoDataUrl}" alt="UPHSL Logo" />
             </div>
             <div class="header-text">
-              <h2>University of Perpetual Help System</h2>
+              <h2>University of Perpetual Help System Laguna</h2>
               <p>Test Data Bank System</p>
               <p>Biñan Campus</p>
               <div class="filename">${filename}</div>

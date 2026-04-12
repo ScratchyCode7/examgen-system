@@ -53,6 +53,33 @@
   font-size: 1.05rem;
 }
 
+.dashboard.dark .report-mode-switch-row .report-mode-switch-btn {
+  border-radius: 12px;
+  border: 2px solid #FFC63E;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.dashboard.dark .report-mode-switch-row .report-mode-switch-btn.btn-primary {
+  background: #FFC63E;
+  border-color: #FFC63E;
+  color: #1C4DA1;
+}
+
+.dashboard.dark .report-mode-switch-row .report-mode-switch-btn.btn-secondary {
+  background: transparent;
+  border-color: #FFC63E;
+  color: #FFC63E;
+}
+
+.dashboard.dark .report-mode-switch-row .report-mode-switch-btn.btn-secondary:hover:not(:disabled) {
+  background: #FFC63E;
+  color: #1C4DA1;
+}
+
+.dashboard.dark .report-mode-switch-row .report-mode-switch-btn:disabled {
+  opacity: 0.6;
+}
+
 @media (max-width: 768px) {
   .report-mode-switch-row {
     flex-direction: column;
@@ -1547,6 +1574,16 @@
   color: #000000;
 }
 
+.dashboard.dark .saved-exam-preview .exam-paper,
+.dashboard.dark .saved-exam-preview .exam-paper * {
+  color: #000000;
+}
+
+.dashboard.dark .saved-exam-preview .exam-paper {
+  background: #ffffff;
+  border-color: #d1d5db !important;
+}
+
 .exam-header {
   display: flex;
   align-items: center;
@@ -1948,10 +1985,72 @@
 }
 
 .my-requests-action-group {
-  display: flex;
-  gap: 8px;
-  justify-content: center;
+  position: relative;
+  min-height: 34px;
+}
+
+.my-requests-action-cell {
+  position: relative;
+}
+
+.my-requests-action-cell .request-card-close-btn {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid #d9e1ef;
+  background: #f8fafc;
+  color: #1C4DA1;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.my-requests-action-cell .request-card-close-btn:hover:not(:disabled) {
+  background: #FFC63E;
+  border-color: #FFC63E;
+  color: #1C4DA1;
+}
+
+.my-requests-action-cell .my-requests-mark-read-btn {
+  border-color: #16a34a;
+  color: #16a34a;
+}
+
+.my-requests-action-cell .my-requests-mark-read-btn:hover:not(:disabled) {
+  background: #16a34a;
+  border-color: #16a34a;
+  color: #ffffff;
+}
+
+.my-requests-action-cell .my-requests-close-btn {
+  left: 10px;
+  right: auto;
+}
+
+.dashboard.dark .my-requests-action-cell .request-card-close-btn {
+  background: #0f1724;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+.dashboard.dark .my-requests-action-cell .request-card-close-btn:hover:not(:disabled) {
+  background: #FFC63E;
+  border-color: #FFC63E;
+  color: #1C4DA1;
+}
+
+.dashboard.dark .my-requests-action-cell .my-requests-mark-read-btn {
+  border-color: #22c55e;
+  color: #22c55e;
+}
+
+.dashboard.dark .my-requests-action-cell .my-requests-close-btn {
+  color: #93b5f7;
 }
 
 

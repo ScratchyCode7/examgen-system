@@ -172,6 +172,13 @@
   font-size: 0.95rem;
 }
 
+.field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
 .dashboard.dark .field-container label {
   color: #60A5FA;
 }
@@ -252,6 +259,37 @@
 
 .dashboard.dark .password-toggle-btn:hover {
   color: #60A5FA;
+}
+
+.password-strength {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.password-strength-weak {
+  color: #dc2626;
+}
+
+.password-strength-normal {
+  color: #d97706;
+}
+
+.password-strength-strong {
+  color: #16a34a;
+}
+
+.dashboard.dark .password-strength-weak {
+  color: #f87171;
+}
+
+.dashboard.dark .password-strength-normal {
+  color: #fbbf24;
+}
+
+.dashboard.dark .password-strength-strong {
+  color: #4ade80;
 }
 
 /* Error Messages */

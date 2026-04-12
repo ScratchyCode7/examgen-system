@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import * as Icons from 'lucide-react';
 import NavItem from '../components/NavItem';
 import DropdownNavItem from '../components/DropdownNavItem';
@@ -8,6 +8,7 @@ import ConfirmationModal from '../components/ConfirmationModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useToast } from '../contexts/ToastContext';
+import { usePrintRequestNotifications } from '../contexts/PrintRequestNotificationContext';
 import { apiService, API_BASE_URL } from '../services/api';
 import '../styles/Dashboard.css';
 import '../styles/TestGeneration.css';
@@ -142,12 +143,14 @@ const getLevelKeyFromBloom = (value) => {
   return null;
 };
 
-const { Home, ClipboardList, BookOpen, Settings, LogOut, User, Users, Sun, Moon, Search, Printer, Save, Eye, Trash2, PlayCircle, CheckCircle, Check, AlertTriangle, FileText, HelpCircle, RefreshCw } = Icons;
+const { Home, ClipboardList, BookOpen, Settings, LogOut, User, Users, Sun, Moon, Search, Printer, Save, Eye, Trash2, PlayCircle, CheckCircle, Check, X, AlertTriangle, FileText, HelpCircle, RefreshCw } = Icons;
 
 const TestGeneration = () => {
   const { user, logout, isAdmin } = useAuth();
   const { isDarkMode, toggleDarkMode } = useTheme();
   const { showToast } = useToast();
+  const { pendingPrintRequestCount, refreshPrintRequestNotifications } = usePrintRequestNotifications();
+  const location = useLocation();
   const navigate = useNavigate();
   const { departmentCode } = useParams();
   const [activeTab, setActiveTab] = useState('Reports');
@@ -156,6 +159,7 @@ const TestGeneration = () => {
   const userMenuRef = useRef(null);
   const sampleExamSectionRef = useRef(null);
   const tosSectionRef = useRef(null);
+  const hasLoggedTestGenerationPageViewRef = useRef(false);
 
   const displayName = getUserDisplayName(user, 'User');
   const profileImageUrl = user?.profileImageData || getUserProfileImageUrl(user?.profileImagePath, user?.userId);
@@ -182,6 +186,20 @@ const TestGeneration = () => {
     if (payload?.data && Array.isArray(payload.data)) return payload.data;
     return [];
   }, []);
+
+  useEffect(() => {
+    if (hasLoggedTestGenerationPageViewRef.current) return;
+    hasLoggedTestGenerationPageViewRef.current = true;
+
+    void apiService.logActivity({
+      category: 'Reports',
+      action: 'Viewed Test Generation',
+      entityType: 'Page',
+      details: `Opened Test Generation page${departmentCode ? ` (${departmentCode})` : ''}`,
+    }).catch(() => {
+      // Avoid blocking UI if activity logging fails.
+    });
+  }, [departmentCode]);
 
   const isOptionMarkedCorrect = React.useCallback((option) => {
     if (!option) return false;
@@ -501,6 +519,10 @@ const TestGeneration = () => {
       }, 120);
     }
   }, [totalExamItemsInput]);
+
+  const preventNumberInputWheel = React.useCallback((event) => {
+    event.currentTarget.blur();
+  }, []);
 
   const handleDepartmentChange = (deptId) => {
     setSelectedDepartment(deptId);
@@ -2189,6 +2211,15 @@ const TestGeneration = () => {
       setShowAnswerSheet(false);
       setLastSavedSignature('');
 
+      void apiService.logActivity({
+        category: 'Tests',
+        action: 'Generated Sample Exam',
+        entityType: 'Exam',
+        details: `Generated sample exam with ${total} items (${examType} ${semester} SY ${schoolYear})`,
+      }).catch(() => {
+        // Keep generation flow uninterrupted if activity logging fails.
+      });
+
       // Ensure preview is visible and guide user directly to it after generation.
       window.setTimeout(() => {
         scrollToSampleExamSection();
@@ -2763,6 +2794,7 @@ const TestGeneration = () => {
       showToast({ message: 'Print request marked as Ready for Pickup. The teacher will be notified.', type: 'success' });
       setActivePrintRequest(null);
       await loadPrintRequests();
+      await refreshPrintRequestNotifications();
       // Clear the exam
       handleClearGeneration();
     } catch (err) {
@@ -2782,6 +2814,7 @@ const TestGeneration = () => {
       showToast({ message: 'Print request rejected. The teacher will be notified.', type: 'info' });
       setActivePrintRequest(null);
       await loadPrintRequests();
+      await refreshPrintRequestNotifications();
       // Clear the exam
       handleClearGeneration();
     } catch (err) {
@@ -2815,6 +2848,7 @@ const TestGeneration = () => {
       autoReadyRef.current.marked = true;
       setActivePrintRequest(prev => prev ? { ...prev, status: 'ReadyForPickup' } : prev);
       await loadPrintRequests();
+      await refreshPrintRequestNotifications();
       showToast({ message: 'Printed copy logged. Request marked as Ready for Pickup.', type: 'success' });
     } catch (err) {
       console.error('Failed to auto-mark request ready:', err);
@@ -2842,6 +2876,16 @@ const TestGeneration = () => {
       marked: false
     };
   }, [activePrintRequest?.printRequestId]);
+
+  useEffect(() => {
+    if (!user?.isAdmin) return;
+    const params = new URLSearchParams(location.search || '');
+    const requestedView = String(params.get('view') || '').toLowerCase();
+    if (requestedView === 'printrequests') {
+      setViewMode('printrequests');
+      setActiveTab('Print Requests');
+    }
+  }, [location.search, user?.isAdmin]);
 
   // Handle print
   const handlePrint = () => {
@@ -2898,7 +2942,7 @@ const TestGeneration = () => {
       setMyRequestsError('');
       await apiService.updatePrintRequestStatus(request.printRequestId, 'Completed', null);
       showToast({ message: 'Thank you! This request is now marked as completed.', type: 'success' });
-      await loadMyPrintRequests();
+      setMyPrintRequests((prev) => prev.filter((item) => item?.printRequestId !== request.printRequestId));
     } catch (err) {
       console.error('Failed to mark request as received:', err);
       setMyRequestsError('Unable to mark this request as received. Please try again.');
@@ -3079,10 +3123,13 @@ const TestGeneration = () => {
   }, [sampleExam, showToast, syncSpecWithExamQuestions]);
 
   const dataEntryItems = ["Program - Topic", "Test Encoding", "Test Question Editing"];
-  const reportItems = ["Test Generation", "Saved Exam Sets"];
+  const reportItems = isAdmin
+    ? ["Test Generation", "Saved Exam Sets", "Print Requests"]
+    : ["Test Generation", "Saved Exam Sets"];
   const availableDataEntryItems = isAdmin ? ["Program - Topic"] : dataEntryItems;
   const isDataEntryActive = availableDataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
   const isReportsActive = reportItems.includes(activeTab) || activeTab === 'Reports';
+  const reportsNotificationCount = isAdmin ? pendingPrintRequestCount : 0;
 
   const resolveDepartmentCode = () => {
     if (departmentCode) return departmentCode;
@@ -3141,6 +3188,8 @@ const TestGeneration = () => {
               label="Reports"
               isActive={isReportsActive}
               dropdownItems={reportItems}
+              parentNotificationCount={reportsNotificationCount}
+              itemNotificationCounts={{ 'Print Requests': reportsNotificationCount }}
               onSelect={(item) => {
                 setActiveTab(item);
                 const code = resolveDepartmentCode();
@@ -3148,6 +3197,9 @@ const TestGeneration = () => {
                   navigate(`/test-generation/${code}`);
                 } else if (item === 'Saved Exam Sets') {
                   navigate(`/reports/saved-exams/${code}`);
+                } else if (item === 'Print Requests') {
+                  setViewMode('printrequests');
+                  navigate(`/test-generation/${code}?view=printrequests`);
                 }
               }}
             />
@@ -3223,7 +3275,7 @@ const TestGeneration = () => {
                   title={isViewSwitchLocked ? 'Finish or cancel the current review before switching modes.' : undefined}
                 >
                   <Printer size={16} style={{ marginRight: '6px', verticalAlign: 'text-bottom' }} />
-                  Print Requests {printRequests.length > 0 && <span style={{ background: 'red', color: 'white', borderRadius: '50%', padding: '2px 6px', fontSize: '12px', marginLeft: '5px' }}>{printRequests.length}</span>}
+                  Print Requests {pendingPrintRequestCount > 0 && <span style={{ background: 'red', color: 'white', borderRadius: '50%', padding: '2px 6px', fontSize: '12px', marginLeft: '5px' }}>{pendingPrintRequestCount}</span>}
                 </button>
               </div>
               {isViewSwitchLocked && (
@@ -3445,6 +3497,7 @@ const TestGeneration = () => {
                   type="number"
                   value={totalExamItemsInput}
                   onChange={(e) => setTotalExamItemsInput(e.target.value)}
+                  onWheel={preventNumberInputWheel}
                   placeholder="e.g., 50"
                   min="1"
                   disabled={!selectedSubject}
@@ -3781,7 +3834,7 @@ const TestGeneration = () => {
                 <div className="exam-header">
                   <img src={UPHSLLogo} alt="UPHSL Logo" className="exam-logo" />
                   <div className="university-header">
-                    <h2>University of Perpetual Help System</h2>
+                    <h2>University of Perpetual Help System Laguna</h2>
                     <p>Test Data Bank System</p>
                     <p>Biñan Campus</p>
                     <p className="exam-filename">{(() => {
@@ -4016,27 +4069,27 @@ const TestGeneration = () => {
                             <td style={{ padding: '10px' }}>{req.createdAt ? new Date(req.createdAt).toLocaleString() : '—'}</td>
                             <td style={{ padding: '10px' }}>{req.updatedAt ? new Date(req.updatedAt).toLocaleString() : '—'}</td>
                             <td style={{ padding: '10px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>{req.notes || '—'}</td>
-                            <td style={{ padding: '10px', textAlign: 'center' }}>
+                            <td className="my-requests-action-cell" style={{ padding: '10px', textAlign: 'center' }}>
                               {statusLabel === 'ReadyForPickup' || statusLabel === 'Pending' || statusLabel === 'Rejected' || statusLabel === 'Completed' ? (
                                 <div className="my-requests-action-group">
                                   {statusLabel === 'ReadyForPickup' && (
                                     <button
-                                      className="btn btn-sm btn-primary my-requests-action-btn"
+                                      className="request-card-close-btn my-requests-mark-read-btn"
                                       onClick={() => handleTeacherAcknowledgeRequest(req)}
                                       title="Mark as read"
                                       aria-label="Mark as read"
                                     >
-                                      <Check size={16} />
+                                      <Check size={16} strokeWidth={2.5} />
                                     </button>
                                   )}
                                   {(statusLabel === 'Pending' || statusLabel === 'Rejected' || statusLabel === 'Completed') && (
                                     <button
-                                      className="btn btn-sm btn-danger my-requests-action-btn"
+                                      className="request-card-close-btn my-requests-close-btn"
                                       onClick={() => handleDeletePrintRequest(req)}
-                                      title="Delete print request"
-                                      aria-label="Delete print request"
+                                      title="Close card"
+                                      aria-label="Close card"
                                     >
-                                      <Trash2 size={16} />
+                                      <X size={14} strokeWidth={2.5} />
                                     </button>
                                   )}
                                 </div>
@@ -4333,7 +4386,7 @@ const TestGeneration = () => {
                       </head>
                       <body>
                         <div class="header">
-                          <h1>University of Perpetual Help System</h1>
+                          <h1>University of Perpetual Help System Laguna</h1>
                           <p>Test Data Bank System</p>
                           <p>Biñan Campus</p>
                           <div class="filename">${filename}</div>
@@ -4558,7 +4611,7 @@ const TestGeneration = () => {
                               <img src="${logoDataUrl}" alt="UPHSL Logo" />
                             </div>
                             <div class="header-text">
-                              <h2>University of Perpetual Help System</h2>
+                              <h2>University of Perpetual Help System Laguna</h2>
                               <p>Test Data Bank System</p>
                               <p>Biñan Campus</p>
                               <div class="filename">${filename}</div>
@@ -4765,7 +4818,7 @@ const TestGeneration = () => {
                               <img src="${dataUrl}" alt="UPHSL Logo" />
                             </div>
                             <div class="header-text">
-                              <h2>University of Perpetual Help System</h2>
+                              <h2>University of Perpetual Help System Laguna</h2>
                               <p>Test Data Bank System</p>
                               <p>Biñan Campus</p>
                               <div class="filename">${filename}</div>

@@ -117,6 +117,27 @@
   background: transparent;
 }
 
+.nav-label-with-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.nav-notification-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .nav-center .nav-item svg,
 .nav-center .dropdown-btn svg {
   margin-right: 0.5rem;
@@ -160,10 +181,21 @@
   padding: 0.6rem 0.9rem;
   border: none;
   background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
   text-align: left;
   cursor: pointer;
   transition: background 0.12s;
   font-size: 0.95rem;
+}
+
+.dropdown-item-badge {
+  min-width: 18px;
+  height: 18px;
+  font-size: 0.68rem;
+  padding: 0 5px;
 }
 
 .dropdown-menu-item:hover {
@@ -200,11 +232,13 @@
   color: inherit;
   font-weight: 700;
   font-size: 1.1rem;
-  transition: all 0.15s;
+  transition: background 0.18s, color 0.18s, transform 0.12s;
 }
 
 .user-btn:hover {
-  background-color: rgba(255,198,62,0.2); /* subtle hover */
+  background-color: #FFC63E;
+  color: #1C4DA1;
+  transform: translateY(-1px);
 }
 
 .user-btn.active {

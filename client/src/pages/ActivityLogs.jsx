@@ -6,6 +6,7 @@ import DropdownNavItem from '../components/DropdownNavItem';
 import LogoutModal from '../components/LogoutModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { usePrintRequestNotifications } from '../contexts/PrintRequestNotificationContext';
 import { apiService } from '../services/api';
 import '../styles/Dashboard.css';
 import '../styles/ActivityLogs.css';
@@ -18,6 +19,7 @@ import UPHSL from '../assets/uphsl.png';
 const ActivityLogs = () => {
   const { user, logout } = useAuth();
   const { isDarkMode, toggleDarkMode } = useTheme();
+  const { pendingPrintRequestCount } = usePrintRequestNotifications();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('Activity Logs');
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -62,7 +64,10 @@ const ActivityLogs = () => {
   const availableDataEntryItems = user?.isAdmin ? ["Program - Topic"] : dataEntryItems;
   const isDataEntryActive = availableDataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
   
-  const reportItems = ["Test Generation", "Saved Exam Sets"];
+  const reportItems = user?.isAdmin
+    ? ["Test Generation", "Saved Exam Sets", "Print Requests"]
+    : ["Test Generation", "Saved Exam Sets"];
+  const reportsNotificationCount = user?.isAdmin ? pendingPrintRequestCount : 0;
   const isReportsActive = reportItems.includes(activeTab) || activeTab === 'Reports';
 
   useEffect(() => {
@@ -255,6 +260,8 @@ const ActivityLogs = () => {
               label="Reports"
               isActive={isReportsActive}
               dropdownItems={reportItems}
+              parentNotificationCount={reportsNotificationCount}
+              itemNotificationCounts={{ 'Print Requests': reportsNotificationCount }}
               onSelect={(item) => {
                 setActiveTab(item);
                 const firstDept = departments?.find(d => d.code !== 'IT') || departments?.[0];
@@ -263,6 +270,8 @@ const ActivityLogs = () => {
                   navigate(`/test-generation/${code}`);
                 } else if (item === 'Saved Exam Sets') {
                   navigate(`/reports/saved-exams/${code}`);
+                } else if (item === 'Print Requests') {
+                  navigate(`/test-generation/${code}?view=printrequests`);
                 }
               }}
             />
