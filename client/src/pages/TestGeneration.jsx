@@ -669,10 +669,87 @@ const TestGeneration = () => {
   const totalItemsDirtyRef = useRef(false);
   const [myPrintRequests, setMyPrintRequests] = useState([]);
   const [isLoadingMyRequests, setIsLoadingMyRequests] = useState(false);
+  const [searchText, setSearchText] = useState('');
   const coursesCacheRef = useRef(new Map());
   const subjectsCacheRef = useRef(new Map());
   const topicsCacheRef = useRef(new Map());
   const subjectQuestionCacheRef = useRef(new Map());
+
+  const normalizedSearchText = React.useMemo(() => String(searchText || '').trim().toLowerCase(), [searchText]);
+
+  const filteredPrintRequests = React.useMemo(() => {
+    if (!normalizedSearchText) return printRequests;
+
+    return printRequests.filter((request) => {
+      const searchableText = [
+        request?.requestedBy,
+        request?.testTitle,
+        request?.departmentName,
+        request?.notes,
+        request?.status,
+        request?.copiesRequested,
+        request?.createdAt ? new Date(request.createdAt).toLocaleString() : ''
+      ]
+        .map((value) => String(value || '').toLowerCase())
+        .join(' ');
+
+      return searchableText.includes(normalizedSearchText);
+    });
+  }, [printRequests, normalizedSearchText]);
+
+  const handleSearchNavigate = React.useCallback(() => {
+    if (!normalizedSearchText) return;
+
+    if (viewMode === 'printrequests' && user?.isAdmin) {
+      const count = filteredPrintRequests.length;
+      showToast({
+        message: count > 0
+          ? `Found ${count} print request${count === 1 ? '' : 's'} matching "${searchText.trim()}".`
+          : `No print requests matched "${searchText.trim()}".`,
+        type: count > 0 ? 'info' : 'warning'
+      });
+      return;
+    }
+
+    if (normalizedSearchText.includes('print') && user?.isAdmin) {
+      setViewMode('printrequests');
+      showToast({ message: 'Switched to Print Requests view.', type: 'info' });
+      return;
+    }
+
+    if (
+      normalizedSearchText.includes('tos')
+      || normalizedSearchText.includes('table of specification')
+      || normalizedSearchText.includes('specification')
+      || normalizedSearchText.includes('table')
+    ) {
+      tosSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      showToast({ message: 'Navigated to Table of Specifications.', type: 'info' });
+      return;
+    }
+
+    if (
+      normalizedSearchText.includes('sample')
+      || normalizedSearchText.includes('exam')
+      || normalizedSearchText.includes('question')
+    ) {
+      sampleExamSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      showToast({ message: 'Navigated to Sample Exam Preview.', type: 'info' });
+      return;
+    }
+
+    showToast({
+      message: 'No matching section found. Try searching for TOS, sample exam, questions, or print requests.',
+      type: 'warning'
+    });
+  }, [
+    normalizedSearchText,
+    viewMode,
+    user,
+    filteredPrintRequests.length,
+    searchText,
+    showToast
+  ]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -3240,8 +3317,19 @@ const TestGeneration = () => {
         {/* Search bar */}
         <div className="search-and-view" style={{ maxWidth: '1140px', margin: '0 auto 20px auto' }}>
           <div className="search-bar">
-            <Search className="search-icon" />
-            <input type="text" placeholder="Search..." disabled />
+            <Search className="search-icon" onClick={handleSearchNavigate} />
+            <input
+              type="text"
+              placeholder="Search..."
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  handleSearchNavigate();
+                }
+              }}
+              aria-label="Search test generation page"
+            />
           </div>
         </div>
 
@@ -3344,6 +3432,10 @@ const TestGeneration = () => {
                 <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
                   <p>No pending print requests</p>
                 </div>
+              ) : filteredPrintRequests.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                  <p>No print requests match your search.</p>
+                </div>
               ) : (
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px' }}>
@@ -3359,7 +3451,7 @@ const TestGeneration = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {printRequests.map((request) => {
+                      {filteredPrintRequests.map((request) => {
                         const isRowActive = activePrintRequest?.printRequestId === request.printRequestId;
                         return (
                           <tr
