@@ -64,10 +64,7 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     const requestUrl = error.config?.url || '';
-    const isAuthHandshakeRequest =
-      requestUrl.includes('/api/auth/login')
-      || requestUrl.includes('/api/auth/otp/verify')
-      || requestUrl.includes('/api/auth/otp/resend');
+    const isAuthHandshakeRequest = requestUrl.includes('/api/auth/login');
 
     if (error.response?.status === 401 && !isAuthHandshakeRequest) {
       localStorage.removeItem('token');
@@ -82,21 +79,6 @@ export const apiService = {
   // Auth
   login: async (credentials) => {
     const response = await apiClient.post('/api/auth/login', credentials);
-    return response.data;
-  },
-
-  verifyLoginOtp: async (challengeToken, code) => {
-    const response = await apiClient.post('/api/auth/otp/verify', {
-      challengeToken,
-      code,
-    });
-    return response.data;
-  },
-
-  resendLoginOtp: async (challengeToken) => {
-    const response = await apiClient.post('/api/auth/otp/resend', {
-      challengeToken,
-    });
     return response.data;
   },
 

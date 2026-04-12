@@ -7,21 +7,7 @@
       "launchBrowser": true,
       "applicationUrl": "http://localhost:5012",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development",
-        "EmailOtp__Enabled": "false",
-        "EmailOtp__RequireForAdmins": "true",
-        "EmailOtp__CodeLength": "6",
-        "EmailOtp__ExpiresInMinutes": "5",
-        "EmailOtp__MaxAttempts": "5",
-        "EmailOtp__ResendCooldownSeconds": "60",
-        "EmailOtp__Subject": "Your Databank verification code",
-        "EmailOtp__FromEmail": "noreply.testdatabank@gmail.com",
-        "EmailOtp__FromName": "Databank",
-        "EmailOtp__SmtpHost": "smtp.gmail.com",
-        "EmailOtp__SmtpPort": "587",
-        "EmailOtp__UseSsl": "true",
-        "EmailOtp__SmtpUsername": "noreply.testdatabank@gmail.com",
-        "EmailOtp__SmtpPassword": "hxtzopmobbqbczep"
+        "ASPNETCORE_ENVIRONMENT": "Development"
       }
     },
     "https": {
@@ -30,21 +16,7 @@
       "launchBrowser": true,
       "applicationUrl": "https://localhost:7088;http://localhost:5012",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development",
-        "EmailOtp__Enabled": "false",
-        "EmailOtp__RequireForAdmins": "true",
-        "EmailOtp__CodeLength": "6",
-        "EmailOtp__ExpiresInMinutes": "5",
-        "EmailOtp__MaxAttempts": "5",
-        "EmailOtp__ResendCooldownSeconds": "60",
-        "EmailOtp__Subject": "Your Databank verification code",
-        "EmailOtp__FromEmail": "noreply.testdatabank@gmail.com",
-        "EmailOtp__FromName": "Databank",
-        "EmailOtp__SmtpHost": "smtp.gmail.com",
-        "EmailOtp__SmtpPort": "587",
-        "EmailOtp__UseSsl": "true",
-        "EmailOtp__SmtpUsername": "noreply.testdatabank@gmail.com",
-        "EmailOtp__SmtpPassword": "hxtzopmobbqbczep"
+        "ASPNETCORE_ENVIRONMENT": "Development"
       }
     }
   }

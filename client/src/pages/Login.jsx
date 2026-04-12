@@ -9,22 +9,16 @@ import { useToast } from '../contexts/ToastContext';
 
 const LOGIN_GUARD_STORAGE_KEY = 'loginGuardState';
 const LOGIN_COOLDOWN_SECONDS = 60;
-const OTP_RESEND_DEFAULT_SECONDS = 60;
 
 const Login = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [otpCode, setOtpCode] = useState('');
-  const [isOtpStep, setIsOtpStep] = useState(false);
-  const [otpChallengeToken, setOtpChallengeToken] = useState('');
-  const [otpDeliveryHint, setOtpDeliveryHint] = useState('your registered email');
-  const [otpResendCooldown, setOtpResendCooldown] = useState(0);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [cooldownRemaining, setCooldownRemaining] = useState(0);
-  const { login, verifyLoginOtp, resendLoginOtp, isAuthenticated, isAdmin } = useAuth();
+  const { login, isAuthenticated, isAdmin } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
 
@@ -98,93 +92,11 @@ const Login = () => {
     return () => window.clearInterval(intervalId);
   }, [cooldownRemaining]);
 
-  useEffect(() => {
-    if (!isOtpStep || otpResendCooldown <= 0) return;
-
-    const intervalId = window.setInterval(() => {
-      setOtpResendCooldown((previous) => (previous <= 1 ? 0 : previous - 1));
-    }, 1000);
-
-    return () => window.clearInterval(intervalId);
-  }, [isOtpStep, otpResendCooldown]);
-
   const isFormComplete = username.trim().length > 0 && password.trim().length > 0;
-  const isOtpFormComplete = otpCode.trim().length > 0;
   const isCooldownActive = cooldownRemaining > 0;
-
-  const resetOtpStep = () => {
-    setIsOtpStep(false);
-    setOtpCode('');
-    setOtpChallengeToken('');
-    setOtpDeliveryHint('your registered email');
-    setOtpResendCooldown(0);
-  };
-
-  const handleResendOtp = async () => {
-    if (!otpChallengeToken || otpResendCooldown > 0) {
-      return;
-    }
-
-    setError('');
-    setLoading(true);
-    try {
-      const resendResponse = await resendLoginOtp(otpChallengeToken);
-      const retryAfter = Number(resendResponse?.retryAfterSeconds || OTP_RESEND_DEFAULT_SECONDS);
-      setOtpResendCooldown(retryAfter > 0 ? retryAfter : OTP_RESEND_DEFAULT_SECONDS);
-      showToast({ message: resendResponse?.message || 'A new verification code was sent to your email.', type: 'success' });
-    } catch (err) {
-      const message = err?.response?.data?.message || err?.message || 'Failed to resend OTP. Please login again.';
-      setError(message);
-      showToast({ message, type: 'error' });
-      if (String(message).toLowerCase().includes('login again')) {
-        resetOtpStep();
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
-
-    if (isOtpStep) {
-      if (!isOtpFormComplete) {
-        const message = 'Please enter the verification code sent to your email.';
-        setError(message);
-        showToast({ message, type: 'error' });
-        return;
-      }
-
-      setError('');
-      setLoading(true);
-      try {
-        await verifyLoginOtp({
-          challengeToken: otpChallengeToken,
-          code: otpCode,
-          username,
-        });
-        clearLoginGuardState();
-        resetOtpStep();
-        showToast({ message: 'Verification successful. Redirecting you to your dashboard.', type: 'success' });
-        const user = JSON.parse(localStorage.getItem('user') || '{}');
-        if (user.isAdmin) {
-          navigate('/admin');
-        } else {
-          navigate('/');
-        }
-      } catch (err) {
-        const message =
-          err?.response?.data?.message
-          || err?.response?.data?.detail
-          || 'Invalid verification code. Please try again.';
-        setError(message);
-        showToast({ message, type: 'error' });
-      } finally {
-        setLoading(false);
-      }
-
-      return;
-    }
 
     if (isCooldownActive) {
       const message = `Too many failed attempts. Try again in ${cooldownRemaining}s.`;
@@ -204,25 +116,9 @@ const Login = () => {
     setLoading(true);
 
     try {
-      const loginResult = await login({ username, password });
-
-      if (loginResult?.requiresOtp) {
-        clearLoginGuardState();
-        setIsOtpStep(true);
-        setOtpCode('');
-        setOtpChallengeToken(loginResult.otpChallengeToken || '');
-        setOtpDeliveryHint(loginResult.otpDeliveryHint || 'your registered email');
-        setOtpResendCooldown(OTP_RESEND_DEFAULT_SECONDS);
-        setPassword('');
-        setShowPassword(false);
-        const otpMessage = loginResult.message || `A verification code was sent to ${loginResult.otpDeliveryHint || 'your registered email'}.`;
-        setError('');
-        showToast({ message: otpMessage, type: 'info' });
-        return;
-      }
+      await login({ username, password });
 
       clearLoginGuardState();
-      resetOtpStep();
       showToast({ message: 'Login successful. Redirecting you to your dashboard.', type: 'success' });
       // Navigate based on admin status
       const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -327,88 +223,37 @@ const Login = () => {
             </div>
           )}
 
-          {!isOtpStep ? (
-            <>
-              <label htmlFor="username">Username or Email</label>
-              <input
-                id="username"
-                type="text"
-                placeholder="Enter username or email"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-              />
+          <label htmlFor="username">Username or Email</label>
+          <input
+            id="username"
+            type="text"
+            placeholder="Enter username or email"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+          />
 
-              <label htmlFor="password">Password</label>
-              <div className="password-wrapper">
-                <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="toggle-password"
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                >
-                  {showPassword ? <EyeOff /> : <Eye />}
-                </button>
-              </div>
+          <label htmlFor="password">Password</label>
+          <div className="password-wrapper">
+            <input
+              id="password"
+              type={showPassword ? 'text' : 'password'}
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="toggle-password"
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? <EyeOff /> : <Eye />}
+            </button>
+          </div>
 
-              <button type="submit" disabled={loading || isCooldownActive} className="login-button">
-                {loading ? 'Logging in...' : isCooldownActive ? `Try again in ${cooldownRemaining}s` : 'Login'}
-              </button>
-            </>
-          ) : (
-            <>
-              <p style={{ marginTop: 0, marginBottom: '0.9rem', fontSize: '0.95rem', color: '#374151' }}>
-                Enter the 6-digit verification code sent to <strong>{otpDeliveryHint}</strong>.
-              </p>
-
-              <label htmlFor="otpCode">Verification Code</label>
-              <input
-                id="otpCode"
-                type="text"
-                placeholder="Enter 6-digit code"
-                value={otpCode}
-                onChange={(e) => setOtpCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 8))}
-                autoComplete="one-time-code"
-              />
-
-              <button type="submit" disabled={loading || !isOtpFormComplete} className="login-button">
-                {loading ? 'Verifying...' : 'Verify Code'}
-              </button>
-
-              <button
-                type="button"
-                className="login-button"
-                onClick={handleResendOtp}
-                disabled={loading || otpResendCooldown > 0}
-                style={{ marginTop: '0.6rem', background: '#e5e7eb', color: '#111827' }}
-              >
-                {otpResendCooldown > 0 ? `Resend code in ${otpResendCooldown}s` : 'Resend Code'}
-              </button>
-
-              <button
-                type="button"
-                onClick={resetOtpStep}
-                disabled={loading}
-                style={{
-                  marginTop: '0.6rem',
-                  width: '100%',
-                  border: 'none',
-                  background: 'transparent',
-                  color: '#1c4da1',
-                  cursor: 'pointer',
-                  textDecoration: 'underline'
-                }}
-              >
-                Back to password login
-              </button>
-            </>
-          )}
+          <button type="submit" disabled={loading || isCooldownActive} className="login-button">
+            {loading ? 'Logging in...' : isCooldownActive ? `Try again in ${cooldownRemaining}s` : 'Login'}
+          </button>
 
           <p className="contact-us">
             Don't have an account?

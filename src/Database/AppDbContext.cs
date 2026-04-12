@@ -25,8 +25,6 @@ public sealed class AppDbContext(DbContextOptions options) : DbContext(options)
     public required DbSet<PrintRequest> PrintRequests { get; init; }
     public required DbSet<ActivityLog> ActivityLogs { get; init; }
     public required DbSet<UserSession> UserSessions { get; init; }
-    public required DbSet<UserTrustedDevice> UserTrustedDevices { get; init; }
-    public required DbSet<LoginOtpChallenge> LoginOtpChallenges { get; init; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

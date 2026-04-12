@@ -133,16 +133,6 @@ export const AuthProvider = ({ children }) => {
   const login = async (credentials) => {
     try {
       const response = await apiService.login(credentials);
-      if (response?.requiresOtp) {
-        return {
-          requiresOtp: true,
-          otpChallengeToken: response.otpChallengeToken,
-          otpExpiresAt: response.otpExpiresAt,
-          otpDeliveryHint: response.otpDeliveryHint,
-          message: response.message,
-        };
-      }
-
       return await finalizeLogin(response, credentials);
     } catch (error) {
       console.error('Login error:', error);
@@ -150,22 +140,6 @@ export const AuthProvider = ({ children }) => {
       localStorage.removeItem('user');
       throw error;
     }
-  };
-
-  const verifyLoginOtp = async ({ challengeToken, code, username }) => {
-    try {
-      const response = await apiService.verifyLoginOtp(challengeToken, code);
-      return await finalizeLogin(response, { username: username || '' });
-    } catch (error) {
-      console.error('OTP verification error:', error);
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      throw error;
-    }
-  };
-
-  const resendLoginOtp = async (challengeToken) => {
-    return await apiService.resendLoginOtp(challengeToken);
   };
 
   const logout = useCallback(() => {
@@ -273,8 +247,6 @@ export const AuthProvider = ({ children }) => {
     hasAccessToDepartment,
     hasAccessToDepartmentCode,
     login,
-    verifyLoginOtp,
-    resendLoginOtp,
     logout,
     updateCurrentUser,
   };

@@ -1,27 +1,15 @@
 using Databank.Abstract;
 using Databank.Database;
 using Databank.Entities;
-using Databank.Options;
 using Databank.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 
 namespace Databank.Features.Auth.Login;
 
 public sealed record LoginRequest(string Username, string Password);
-public sealed record LoginOtpVerifyRequest(string ChallengeToken, string Code);
-public sealed record LoginOtpResendRequest(string ChallengeToken);
-public sealed record LoginResponse(
-    string? AccessToken,
-    DateTime? ExpiresAt,
-    bool RequiresOtp = false,
-    string? OtpChallengeToken = null,
-    DateTime? OtpExpiresAt = null,
-    string? OtpDeliveryHint = null,
-    string? Message = null,
-    int? RetryAfterSeconds = null);
+public sealed record LoginResponse(string AccessToken, DateTime ExpiresAt);
 
 public sealed class LoginEndpoint : IEndpoint
 {
@@ -37,13 +25,10 @@ public sealed class LoginEndpoint : IEndpoint
                 IPasswordHasher<User> passwordHasher,
                 ITokenService tokenService,
                 IUserSessionService userSessionService,
-                ILoginOtpService loginOtpService,
                 ILoggingService loggingService,
-                IOptions<EmailOtpOptions> otpOptions,
                 HttpContext httpContext,
                 CancellationToken ct) =>
         {
-            var emailOtpOptions = otpOptions.Value;
             var contextDetails = BuildLoginContextDetails(httpContext);
 
             // Support both username and email login
@@ -152,39 +137,6 @@ public sealed class LoginEndpoint : IEndpoint
 
             await dbContext.SaveChangesAsync(ct);
 
-            var otpRequired = emailOtpOptions.Enabled && (!user.IsAdmin || emailOtpOptions.RequireForAdmins);
-            if (otpRequired)
-            {
-                var challengeResult = await loginOtpService.CreateChallengeAsync(user, ct);
-                if (!challengeResult.Success)
-                {
-                    await loggingService.LogWarningAsync(
-                        user.UserId.ToString(),
-                        "Auth",
-                        "Login OTP Send Failed",
-                        $"Failed to dispatch OTP for '{user.Username}'. {challengeResult.ErrorMessage}. {contextDetails}");
-
-                    return TypedResults.Problem(
-                        detail: challengeResult.ErrorMessage ?? "Failed to send OTP email.",
-                        statusCode: StatusCodes.Status503ServiceUnavailable);
-                }
-
-                await loggingService.LogActivityAsync(
-                    user.UserId.ToString(),
-                    "Auth",
-                    "Login OTP Sent",
-                    $"OTP challenge issued to {challengeResult.DeliveryHint}. {contextDetails}");
-
-                return TypedResults.Ok(new LoginResponse(
-                    AccessToken: null,
-                    ExpiresAt: null,
-                    RequiresOtp: true,
-                    OtpChallengeToken: challengeResult.ChallengeToken,
-                    OtpExpiresAt: challengeResult.ExpiresAt,
-                    OtpDeliveryHint: challengeResult.DeliveryHint,
-                    Message: "A verification code was sent to your email."));
-            }
-
             var sessionId = await userSessionService.StartSessionIfAvailableAsync(user.UserId, terminateExistingSessions: true, ct);
             if (!sessionId.HasValue)
             {
@@ -208,90 +160,6 @@ public sealed class LoginEndpoint : IEndpoint
                 $"User '{user.Username}' logged in. {contextDetails}");
 
             return TypedResults.Ok(response);
-        });
-
-        app.MapPost("/api/auth/otp/verify", async Task<IResult>(
-                LoginOtpVerifyRequest request,
-                AppDbContext dbContext,
-                ITokenService tokenService,
-                IUserSessionService userSessionService,
-                ILoginOtpService loginOtpService,
-                ILoggingService loggingService,
-                HttpContext httpContext,
-                CancellationToken ct) =>
-        {
-            var contextDetails = BuildLoginContextDetails(httpContext);
-            var verifyResult = await loginOtpService.VerifyAsync(request.ChallengeToken, request.Code, ct);
-            if (!verifyResult.Success || !verifyResult.UserId.HasValue)
-            {
-                return TypedResults.BadRequest(new { message = verifyResult.ErrorMessage ?? "Invalid OTP verification request." });
-            }
-
-            var user = await dbContext.Users
-                .Include(u => u.UserDepartments)
-                .SingleOrDefaultAsync(u => u.UserId == verifyResult.UserId.Value, ct);
-            if (user is null)
-            {
-                return TypedResults.BadRequest(new { message = "User not found for OTP verification." });
-            }
-
-            if (!user.IsActive)
-            {
-                return TypedResults.Problem(
-                    detail: PermanentLockMessage,
-                    statusCode: StatusCodes.Status423Locked);
-            }
-
-            if (user.LockoutEnd.HasValue && user.LockoutEnd.Value > DateTime.UtcNow)
-            {
-                return TypedResults.Problem(
-                    detail: $"Too many failed attempts. Account locked until {user.LockoutEnd:O}.",
-                    statusCode: StatusCodes.Status423Locked);
-            }
-
-            var sessionId = await userSessionService.StartSessionIfAvailableAsync(user.UserId, terminateExistingSessions: true, ct);
-            if (!sessionId.HasValue)
-            {
-                const string activeSessionMessage = "This account is already logged in on another device.";
-                return TypedResults.Conflict(new { message = activeSessionMessage });
-            }
-
-            var token = tokenService.CreateToken(user, sessionId.Value);
-            await loggingService.LogActivityAsync(
-                user.UserId.ToString(),
-                "Auth",
-                "Login Success",
-                $"User '{user.Username}' completed OTP login. {contextDetails}");
-
-            return TypedResults.Ok(new LoginResponse(token.AccessToken, token.ExpiresAt));
-        });
-
-        app.MapPost("/api/auth/otp/resend", async Task<IResult>(
-                LoginOtpResendRequest request,
-                ILoginOtpService loginOtpService,
-                CancellationToken ct) =>
-        {
-            var resendResult = await loginOtpService.ResendAsync(request.ChallengeToken, ct);
-            if (!resendResult.Success)
-            {
-                return TypedResults.BadRequest(new LoginResponse(
-                    AccessToken: null,
-                    ExpiresAt: null,
-                    RequiresOtp: true,
-                    OtpChallengeToken: request.ChallengeToken,
-                    OtpExpiresAt: resendResult.ExpiresAt,
-                    Message: resendResult.ErrorMessage,
-                    RetryAfterSeconds: resendResult.RetryAfterSeconds));
-            }
-
-            return TypedResults.Ok(new LoginResponse(
-                AccessToken: null,
-                ExpiresAt: null,
-                RequiresOtp: true,
-                OtpChallengeToken: request.ChallengeToken,
-                OtpExpiresAt: resendResult.ExpiresAt,
-                Message: "A new verification code was sent to your email.",
-                RetryAfterSeconds: resendResult.RetryAfterSeconds));
         });
     }
 
