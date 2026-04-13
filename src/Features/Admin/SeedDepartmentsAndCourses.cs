@@ -25,56 +25,57 @@ public sealed class SeedDepartmentsAndCoursesEndpoint : IEndpoint
         var departmentDefinitions = new Dictionary<string, (string Name, string Description, List<(string Name, string Code)> Courses)>
         {
             // Existing departments - only add courses
-            ["CCS"] = ("College of Computer Studies", "Computer Science and IT programs", new List<(string, string)>
+            ["CCS"] = ("COMPUTER STUDIES", "Computer Science and IT programs", new List<(string, string)>
             {
                 ("BS Computer Science", "BSCS"),
                 ("BS Information Technology", "BSIT"),
                 ("BS Information Technology – Cybersecurity", "BSIT-CS"),
                 ("BS Entertainment and Multimedia Computing", "BSEMC")
             }),
-            ["CBA"] = ("College of Business Administration", "Business and Management programs", new List<(string, string)>
+            ["CBA"] = ("BUSINESS & ACCOUNTANCY", "Business and Management programs", new List<(string, string)>
             {
                 ("BS Business Administration – Marketing Management", "BSBA-MM"),
                 ("BS Business Administration – Financial Management", "BSBA-FM"),
                 ("BS Business Administration – Human Resource Management", "BSBA-HRM"),
                 ("BS Entrepreneurship", "BSENTREP")
             }),
-            ["CAS"] = ("College of Arts and Sciences", "Liberal Arts and Sciences programs", new List<(string, string)>
+            ["CAS"] = ("ARTS & SCIENCES", "Liberal Arts and Sciences programs", new List<(string, string)>
             {
                 ("BA Communication", "BACOMM"),
                 ("BS Psychology", "BSPSY"),
                 ("AB Political Science", "ABPOLSCI")
             }),
+            ["BED"] = ("BASIC EDUCATION", "Basic education programs", new List<(string, string)>()),
             
             // New departments to create
-            ["CIHM"] = ("College of International Hospitality Management", "Hospitality and Tourism programs", new List<(string, string)>
+            ["CIHM"] = ("INTERNATIONAL HOSPITALITY MANAGEMENT", "Hospitality and Tourism programs", new List<(string, string)>
             {
                 ("BS Hospitality Management", "BSHM"),
                 ("BS Tourism Management", "BSTM"),
                 ("BS Nutrition and Dietetics", "BSND")
             }),
-            ["CME"] = ("College of Maritime Education", "Maritime and Marine programs", new List<(string, string)>
+            ["CME"] = ("MARITIME", "Maritime and Marine programs", new List<(string, string)>
             {
                 ("BS Marine Transportation", "BSMT"),
                 ("BS Marine Engineering", "BSMARE")
             }),
-            ["COEA"] = ("College of Engineering and Architecture", "Engineering and Architecture programs", new List<(string, string)>
+            ["COEA"] = ("ENGINEERING & ARCHITECTURE", "Engineering and Architecture programs", new List<(string, string)>
             {
                 ("BS Civil Engineering", "BSCE"),
                 ("BS Computer Engineering", "BSCPE"),
                 ("BS Industrial Engineering", "BSIE"),
                 ("BS Architecture", "BSARCH")
             }),
-            ["CRIM"] = ("College of Criminology", "Criminology programs", new List<(string, string)>
+            ["CRIM"] = ("CRIMINOLOGY", "Criminology programs", new List<(string, string)>
             {
                 ("BS Criminology", "BSCRIM")
             }),
-            ["EDUC"] = ("College of Education", "Education programs", new List<(string, string)>
+            ["EDUC"] = ("EDUCATION", "Education programs", new List<(string, string)>
             {
                 ("Bachelor of Elementary Education", "BEED"),
                 ("Bachelor of Secondary Education", "BSED")
             }),
-            ["GRAD"] = ("Graduate School", "Graduate programs", new List<(string, string)>
+            ["GRAD"] = ("GRADUATE SCHOOL", "Graduate programs", new List<(string, string)>
             {
                 ("Master of Arts in Education", "MAED"),
                 ("Master in Business Administration", "MBA"),
@@ -82,11 +83,11 @@ public sealed class SeedDepartmentsAndCoursesEndpoint : IEndpoint
                 ("Master of Science in Criminology", "MSCRIM"),
                 ("Master of Science in Nursing", "MSN")
             }),
-            ["LJD"] = ("College of Law", "Law programs", new List<(string, string)>
+            ["LJD"] = ("LAW/JURIS DOCTOR", "Law programs", new List<(string, string)>
             {
                 ("Juris Doctor", "JD")
             }),
-            ["SOA"] = ("School of Aviation", "Aviation programs", new List<(string, string)>
+            ["SOA"] = ("AVIATION", "Aviation programs", new List<(string, string)>
             {
                 ("BS Aviation Major in Flying", "BSAV-FLY"),
                 ("BS Aviation Major in Aviation Management", "BSAV-MGT")
@@ -119,6 +120,22 @@ public sealed class SeedDepartmentsAndCoursesEndpoint : IEndpoint
                 }
                 else
                 {
+                    var hasDepartmentUpdate = false;
+                    if (!string.Equals(department.Name, name, StringComparison.Ordinal))
+                    {
+                        department.Name = name;
+                        hasDepartmentUpdate = true;
+                    }
+                    if (!string.Equals(department.Description, description, StringComparison.Ordinal))
+                    {
+                        department.Description = description;
+                        hasDepartmentUpdate = true;
+                    }
+                    if (hasDepartmentUpdate)
+                    {
+                        department.UpdatedAt = DateTime.UtcNow;
+                        await dbContext.SaveChangesAsync(ct);
+                    }
                     response.DepartmentsSkipped.Add($"{code} - {name} (already exists)");
                 }
 

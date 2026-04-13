@@ -12,110 +12,110 @@ echo "Creating departments..."
 echo ""
 
 # Create CCS
-echo "1. Creating CCS - College of Computer Studies..."
+echo "1. Creating CCS - COMPUTER STUDIES..."
 curl -X POST "$BASE_URL/api/departments" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"name":"College of Computer Studies","code":"CCS","description":"Computer Science and IT programs","isActive":true}'
+  -d '{"name":"COMPUTER STUDIES","code":"CCS","description":"Computer Science and IT programs","isActive":true}'
 echo ""
 echo ""
 
 # Create CBA
-echo "2. Creating CBA - College of Business Administration..."
+echo "2. Creating CBA - BUSINESS & ACCOUNTANCY..."
 curl -X POST "$BASE_URL/api/departments" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"name":"College of Business Administration","code":"CBA","description":"Business and Management programs","isActive":true}'
+  -d '{"name":"BUSINESS & ACCOUNTANCY","code":"CBA","description":"Business and Management programs","isActive":true}'
 echo ""
 echo ""
 
 # Create CAS
-echo "3. Creating CAS - College of Arts and Sciences..."
+echo "3. Creating CAS - ARTS & SCIENCES..."
 curl -X POST "$BASE_URL/api/departments" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"name":"College of Arts and Sciences","code":"CAS","description":"Liberal Arts and Sciences programs","isActive":true}'
+  -d '{"name":"ARTS & SCIENCES","code":"CAS","description":"Liberal Arts and Sciences programs","isActive":true}'
 echo ""
 echo ""
 
 # Create BED
-echo "4. Creating BED - College of Basic Education..."
+echo "4. Creating BED - BASIC EDUCATION..."
 curl -X POST "$BASE_URL/api/departments" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"name":"College of Basic Education","code":"BED","description":"Basic education programs","isActive":true}'
+  -d '{"name":"BASIC EDUCATION","code":"BED","description":"Basic education programs","isActive":true}'
 echo ""
 echo ""
 
 # Create SOA
-echo "5. Creating SOA - College of Aviation..."
+echo "5. Creating SOA - AVIATION..."
 curl -X POST "$BASE_URL/api/departments" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"name":"College of Aviation","code":"SOA","description":"Aviation programs","isActive":true}'
+  -d '{"name":"AVIATION","code":"SOA","description":"Aviation programs","isActive":true}'
 echo ""
 echo ""
 
 # Create CRIM
-echo "6. Creating CRIM - College of Criminology..."
+echo "6. Creating CRIM - CRIMINOLOGY..."
 curl -X POST "$BASE_URL/api/departments" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"name":"College of Criminology","code":"CRIM","description":"Criminology programs","isActive":true}'
+  -d '{"name":"CRIMINOLOGY","code":"CRIM","description":"Criminology programs","isActive":true}'
 echo ""
 echo ""
 
 # Create EDUC
-echo "7. Creating EDUC - College of Education..."
+echo "7. Creating EDUC - EDUCATION..."
 curl -X POST "$BASE_URL/api/departments" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"name":"College of Education","code":"EDUC","description":"Education programs","isActive":true}'
+  -d '{"name":"EDUCATION","code":"EDUC","description":"Education programs","isActive":true}'
 echo ""
 echo ""
 
 # Create COEA
-echo "8. Creating COEA - College of Engineering & Architecture..."
+echo "8. Creating COEA - ENGINEERING & ARCHITECTURE..."
 curl -X POST "$BASE_URL/api/departments" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"name":"College of Engineering & Architecture","code":"COEA","description":"Engineering and Architecture programs","isActive":true}'
+  -d '{"name":"ENGINEERING & ARCHITECTURE","code":"COEA","description":"Engineering and Architecture programs","isActive":true}'
 echo ""
 echo ""
 
 # Create CIHM
-echo "9. Creating CIHM - College of International Hospitality Management..."
+echo "9. Creating CIHM - INTERNATIONAL HOSPITALITY MANAGEMENT..."
 curl -X POST "$BASE_URL/api/departments" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"name":"College of International Hospitality Management","code":"CIHM","description":"Hospitality management programs","isActive":true}'
+  -d '{"name":"INTERNATIONAL HOSPITALITY MANAGEMENT","code":"CIHM","description":"Hospitality management programs","isActive":true}'
 echo ""
 echo ""
 
 # Create CME
-echo "10. Creating CME - College of Maritime..."
+echo "10. Creating CME - MARITIME..."
 curl -X POST "$BASE_URL/api/departments" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"name":"College of Maritime","code":"CME","description":"Maritime education programs","isActive":true}'
+  -d '{"name":"MARITIME","code":"CME","description":"Maritime education programs","isActive":true}'
 echo ""
 echo ""
 
 # Create LJD
-echo "11. Creating LJD - College of Law/ Juris Doctor..."
+echo "11. Creating LJD - LAW/JURIS DOCTOR..."
 curl -X POST "$BASE_URL/api/departments" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"name":"College of Law/ Juris Doctor","code":"LJD","description":"Law and Juris Doctor programs","isActive":true}'
+  -d '{"name":"LAW/JURIS DOCTOR","code":"LJD","description":"Law and Juris Doctor programs","isActive":true}'
 echo ""
 echo ""
 
 # Create GRAD
-echo "12. Creating GRAD - Graduate School..."
+echo "12. Creating GRAD - GRADUATE SCHOOL..."
 curl -X POST "$BASE_URL/api/departments" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"name":"Graduate School","code":"GRAD","description":"Graduate programs","isActive":true}'
+  -d '{"name":"GRADUATE SCHOOL","code":"GRAD","description":"Graduate programs","isActive":true}'
 echo ""
 echo ""
 

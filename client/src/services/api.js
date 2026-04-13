@@ -9,8 +9,20 @@ const apiClient = axios.create({
   },
 });
 
-const UPDATED_COEA_NAME = 'College of Engineering, Architecture and Aviation';
-const UPDATED_COEA_DESCRIPTION = 'Engineering, Architecture and Aviation programs';
+const DEPARTMENT_NAME_BY_CODE = {
+  BED: 'BASIC EDUCATION',
+  SOA: 'AVIATION',
+  CAS: 'ARTS & SCIENCES',
+  CBA: 'BUSINESS & ACCOUNTANCY',
+  CCS: 'COMPUTER STUDIES',
+  CRIM: 'CRIMINOLOGY',
+  EDUC: 'EDUCATION',
+  COEA: 'ENGINEERING & ARCHITECTURE',
+  CIHM: 'INTERNATIONAL HOSPITALITY MANAGEMENT',
+  CME: 'MARITIME',
+  LJD: 'LAW/JURIS DOCTOR',
+  GRAD: 'GRADUATE SCHOOL',
+};
 
 const normalizeDepartmentRecord = (department) => {
   if (!department || typeof department !== 'object') return department;
@@ -20,19 +32,16 @@ const normalizeDepartmentRecord = (department) => {
     .trim()
     .toUpperCase();
 
-  if (code !== 'COEA') {
+  const normalizedName = DEPARTMENT_NAME_BY_CODE[code];
+
+  if (!normalizedName) {
     return department;
   }
 
-  const updatedDescription = department.description && department.description.trim().length > 0
-    ? department.description.replace(/College of Engineering and Architecture/gi, UPDATED_COEA_NAME)
-    : UPDATED_COEA_DESCRIPTION;
-
   return {
     ...department,
-    name: UPDATED_COEA_NAME,
-    departmentName: UPDATED_COEA_NAME,
-    description: updatedDescription,
+    name: normalizedName,
+    departmentName: normalizedName,
   };
 };
 
