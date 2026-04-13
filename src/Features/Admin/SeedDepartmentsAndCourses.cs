@@ -28,8 +28,6 @@ public sealed class SeedDepartmentsAndCoursesEndpoint : IEndpoint
             ["CCS"] = ("College of Computer Studies", "Computer Science and IT programs", new List<(string, string)>
             {
                 ("BS Computer Science", "BSCS"),
-                ("BS Information Technology", "BSIT"),
-                ("BS Information Technology – Cybersecurity", "BSIT-CS"),
                 ("BS Entertainment and Multimedia Computing", "BSEMC")
             }),
             ["CBA"] = ("College of Business & Accountancy", "Business and Management programs", new List<(string, string)>

@@ -26,22 +26,22 @@ public sealed class SeedAdminEndpoint : IEndpoint
                 return TypedResults.BadRequest("Admin user already exists. Use regular registration endpoint.");
             }
 
-            // Create default IT department if it doesn't exist
-            var itDept = await dbContext.Departments
-                .FirstOrDefaultAsync(d => d.Code == "IT", ct);
-            
-            if (itDept == null)
+            // Use CCS as the default admin department; do not create legacy IT/ITS departments.
+            var defaultDept = await dbContext.Departments
+                .FirstOrDefaultAsync(d => d.Code == "CCS", ct);
+
+            if (defaultDept == null)
             {
-                itDept = new Department
+                defaultDept = new Department
                 {
-                    Code = "IT",
-                    Name = "Information Technology",
-                    Description = "IT Department",
+                    Code = "CCS",
+                    Name = "College of Computer Studies",
+                    Description = "Computer Science programs",
                     IsActive = true,
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
-                await dbContext.Departments.AddAsync(itDept, ct);  
+                await dbContext.Departments.AddAsync(defaultDept, ct);
                 await dbContext.SaveChangesAsync(ct);
             }
 
@@ -61,7 +61,7 @@ public sealed class SeedAdminEndpoint : IEndpoint
             {
                 new UserDepartment
                 {
-                    DepartmentId = itDept.Id,
+                    DepartmentId = defaultDept.Id,
                     UserId = admin.UserId
                 }
             };

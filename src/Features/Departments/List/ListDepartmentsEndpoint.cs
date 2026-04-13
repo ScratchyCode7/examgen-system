@@ -20,6 +20,8 @@ public sealed class ListDepartmentsEndpoint : IEndpoint
             var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
             var query = dbContext.Departments.AsNoTracking();
 
+            query = query.Where(d => d.Code != "IT" && d.Code != "ITS");
+
             if (!string.IsNullOrWhiteSpace(search))
             {
                 query = query.Where(d => d.Name.Contains(search) || d.Code.Contains(search));

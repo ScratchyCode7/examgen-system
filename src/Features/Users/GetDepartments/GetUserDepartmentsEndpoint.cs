@@ -26,6 +26,7 @@ public sealed class GetUserDepartmentsEndpoint : IEndpoint
             }
 
             var departments = user.UserDepartments
+                .Where(ud => ud.Department.Code != "IT" && ud.Department.Code != "ITS")
                 .Select(ud => new UserDepartmentDto(
                     ud.Department.Id,
                     ud.Department.Name,
