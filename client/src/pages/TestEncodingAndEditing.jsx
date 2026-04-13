@@ -2885,6 +2885,9 @@ const TestEncodingAndEditing = () => {
                         onDeleteQuestion={handleDeleteQuestion}
                         onSearchStateChange={setIsBm25SearchActive}
                         resultsMountId="bm25-results-anchor"
+                        courseId={course || undefined}
+                        subjectId={subject || undefined}
+                        topicId={topic || undefined}
                     />
                 )}
 

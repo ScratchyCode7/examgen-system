@@ -1,4 +1,5 @@
 using Databank.Database;
+using Databank.Entities;
 using Databank.Features.Subjects;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
@@ -7,6 +8,7 @@ namespace Databank.Features.Topics;
 
 public static class TopicPermissionResolver
 {
+    public const string OwnershipTransferredAction = "OwnershipTransferred";
     public const string RequestAction = "EditRequestCreated";
     public const string ApproveEditOnlyAction = "EditRequestApproved";
     public const string ApproveEditDeleteAction = "EditRequestApprovedWithDelete";
@@ -51,6 +53,28 @@ public static class TopicPermissionResolver
             .Select(a => new { TopicId = a.EntityId!.Value, OwnerId = a.UserId!.Value })
             .ToListAsync(ct);
 
+        var transferRows = await dbContext.ActivityLogs
+            .AsNoTracking()
+            .Where(a =>
+                a.Category == "Topics" &&
+                a.EntityType == RequestEntityType &&
+                a.EntityId.HasValue &&
+                topicIds.Contains(a.EntityId.Value) &&
+                a.UserId.HasValue &&
+                a.Action == OwnershipTransferredAction)
+            .OrderByDescending(a => a.CreatedAt)
+            .ThenByDescending(a => a.Id)
+            .Select(a => new { TopicId = a.EntityId!.Value, OwnerId = a.UserId!.Value })
+            .ToListAsync(ct);
+
+        foreach (var row in transferRows)
+        {
+            if (!ownerByTopicId[row.TopicId].HasValue)
+            {
+                ownerByTopicId[row.TopicId] = row.OwnerId;
+            }
+        }
+
         foreach (var row in ownerRows)
         {
             if (!ownerByTopicId[row.TopicId].HasValue)
@@ -88,6 +112,30 @@ public static class TopicPermissionResolver
             }
 
             return permissions;
+        }
+
+        var deanDepartmentIds = await dbContext.UserDepartments
+            .AsNoTracking()
+            .Where(ud => ud.UserId == currentUserId && ud.RoleScope == UserDepartment.DeanRoleScope)
+            .Select(ud => ud.DepartmentId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        if (deanDepartmentIds.Count > 0)
+        {
+            var topicDepartmentRows = await dbContext.Topics
+                .AsNoTracking()
+                .Where(t => permissions.Keys.Contains(t.Id))
+                .Select(t => new { t.Id, DepartmentId = t.Subject.Course.DepartmentId })
+                .ToListAsync(ct);
+
+            foreach (var row in topicDepartmentRows)
+            {
+                if (deanDepartmentIds.Contains(row.DepartmentId))
+                {
+                    permissions[row.Id] = (true, true);
+                }
+            }
         }
 
         var ownerByTopicId = await ResolveOwnerIdsAsync(dbContext, permissions.Keys.ToList(), ct);

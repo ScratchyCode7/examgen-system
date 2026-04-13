@@ -30,6 +30,8 @@ public static class TestMappings
             test.CreatedAt,
             test.UpdatedAt,
             test.IsDraft,
+            test.IsExamLeftAligned,
+            test.IsQuestionSeparatorEnabled,
             test.SpecificationSnapshot,
             test.QuestionSignature,
             questions

@@ -26,6 +26,8 @@ public sealed class Test
     public string SetLabel { get; set; } = string.Empty;
     public string QuestionSignature { get; set; } = string.Empty;
     public string? SpecificationSnapshot { get; set; }
+    public bool IsExamLeftAligned { get; set; }
+    public bool IsQuestionSeparatorEnabled { get; set; }
     public bool IsDraft { get; set; }
     
     public bool IsPublished { get; set; }

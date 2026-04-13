@@ -40,7 +40,7 @@ public sealed class GetSubjectsEndpoint : IEndpoint
 
             var totalCount = await query.CountAsync(ct);
 
-            var currentUserId = SubjectPermissionResolver.GetCurrentUserId(httpContext.User);
+            var isAdmin = httpContext.User.HasClaim("isAdmin", "true");
 
             var subjectRows = await query
                 .OrderBy(s => s.CourseId)
@@ -49,21 +49,11 @@ public sealed class GetSubjectsEndpoint : IEndpoint
                 .Take(pagination.Take)
                 .ToListAsync(ct);
 
-            Dictionary<int, (bool CanEdit, bool CanDelete)> permissions = new();
-            if (currentUserId.HasValue)
-            {
-                permissions = await SubjectPermissionResolver.ResolvePermissionsForUserAsync(
-                    dbContext,
-                    currentUserId.Value,
-                    subjectRows.Select(s => s.Id).ToList(),
-                    ct);
-            }
-
             var subjects = subjectRows
                 .Select(s =>
                 {
-                    var canEdit = permissions.TryGetValue(s.Id, out var perms) && perms.CanEdit;
-                    var canDelete = permissions.TryGetValue(s.Id, out var perms2) && perms2.CanDelete;
+                    var canEdit = isAdmin;
+                    var canDelete = isAdmin;
                     return s.ToResponse(canEdit, canDelete);
                 })
                 .ToList();

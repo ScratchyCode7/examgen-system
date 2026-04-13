@@ -135,6 +135,16 @@ export const apiService = {
     return response.data;
   },
 
+  assignDeanStatus: async (userId, departmentId) => {
+    const response = await apiClient.put(`/api/users/${userId}/departments/${departmentId}/dean`);
+    return response.data;
+  },
+
+  removeDeanStatus: async (userId, departmentId) => {
+    const response = await apiClient.delete(`/api/users/${userId}/departments/${departmentId}/dean`);
+    return response.data;
+  },
+
   // Subjects
   getSubjects: async (params = {}) => {
     const queryParams = new URLSearchParams();
@@ -304,6 +314,9 @@ export const apiService = {
   searchQuestions: async (params = {}) => {
     const queryParams = new URLSearchParams();
     if (params.q) queryParams.append('q', params.q);
+    if (params.courseId) queryParams.append('courseId', params.courseId);
+    if (params.subjectId) queryParams.append('subjectId', params.subjectId);
+    if (params.topicId) queryParams.append('topicId', params.topicId);
     if (params.subject) queryParams.append('subject', params.subject);
     if (params.topic) queryParams.append('topic', params.topic);
     if (params.bloomLevel) queryParams.append('bloomLevel', params.bloomLevel);

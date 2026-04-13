@@ -214,9 +214,26 @@ public sealed class LuceneSearchService : ISearchService
             .ToDictionary(x => x.id, x => x.index);
         var scoreById = rankedIds.ToDictionary(x => x.QuestionId, x => x.Score);
 
-        var questions = await _dbContext.Questions
+        var questionsQuery = _dbContext.Questions
             .AsNoTracking()
-            .Where(q => ids.Contains(q.Id))
+            .Where(q => ids.Contains(q.Id));
+
+        if (filters.CourseId.HasValue)
+        {
+            questionsQuery = questionsQuery.Where(q => q.Topic.Subject.CourseId == filters.CourseId.Value);
+        }
+
+        if (filters.SubjectId.HasValue)
+        {
+            questionsQuery = questionsQuery.Where(q => q.Topic.SubjectId == filters.SubjectId.Value);
+        }
+
+        if (filters.TopicId.HasValue)
+        {
+            questionsQuery = questionsQuery.Where(q => q.TopicId == filters.TopicId.Value);
+        }
+
+        var questions = await questionsQuery
             .Include(q => q.Options)
             .Include(q => q.Topic)
                 .ThenInclude(t => t.Subject)
@@ -252,7 +269,7 @@ public sealed class LuceneSearchService : ISearchService
 
         return new SearchResponse(
             ordered,
-            topDocs.TotalHits,
+            ordered.Count,
             stopwatch.ElapsedMilliseconds,
             similarCount
         );

@@ -1,6 +1,7 @@
 using Databank.Abstract;
 using Databank.Database;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace Databank.Features.Tests.Delete;
 
@@ -23,7 +24,9 @@ public sealed class DeleteTestEndpoint : IEndpoint
             }
 
             var isAdmin = user.HasClaim("isAdmin", "true");
-            var userIdClaim = user.FindFirst("sub")?.Value ?? user.FindFirst("userId")?.Value;
+            var userIdClaim = user.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? user.FindFirst("sub")?.Value
+                ?? user.FindFirst("userId")?.Value;
             Guid? requesterId = null;
             if (Guid.TryParse(userIdClaim, out var parsedUserId))
             {

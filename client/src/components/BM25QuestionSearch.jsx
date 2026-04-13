@@ -12,6 +12,9 @@ const BM25QuestionSearch = ({
   onDeleteQuestion,
   onSearchStateChange,
   resultsMountId,
+  courseId,
+  subjectId,
+  topicId,
 }) => {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -50,6 +53,9 @@ const BM25QuestionSearch = ({
 
         const result = await apiService.searchQuestions({
           q: debouncedQuery,
+          courseId,
+          subjectId,
+          topicId,
         });
 
         if (!isDisposed) {
@@ -78,7 +84,7 @@ const BM25QuestionSearch = ({
     return () => {
       isDisposed = true;
     };
-  }, [debouncedQuery]);
+  }, [debouncedQuery, courseId, subjectId, topicId]);
 
   const totalPages = Math.max(1, Math.ceil(response.results.length / pageSize));
 

@@ -6,6 +6,8 @@ namespace Databank.Entities;
 /// </summary>
 public sealed class UserDepartment
 {
+    public const string DeanRoleScope = "Dean";
+
     public Guid UserId { get; set; }
     public int DepartmentId { get; set; }
     
@@ -21,4 +23,6 @@ public sealed class UserDepartment
     // Navigation
     public User User { get; set; } = null!;
     public Department Department { get; set; } = null!;
+
+    public bool IsDean => string.Equals(RoleScope, DeanRoleScope, StringComparison.Ordinal);
 }

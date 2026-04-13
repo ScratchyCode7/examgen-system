@@ -37,6 +37,7 @@ builder.Services.AddScoped<IUserSessionService, UserSessionService>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<ILoggingService, LoggingService>();
 builder.Services.AddScoped<IDepartmentAccessService, DepartmentAccessService>();
+builder.Services.AddScoped<IUserOwnershipTransferService, UserOwnershipTransferService>();
 builder.Services.AddScoped<IFileStorageService, FileStorageService>();
 builder.Services.AddScoped<ISearchService, LuceneSearchService>();
 builder.Services.AddHostedService<SearchIndexWarmupService>();

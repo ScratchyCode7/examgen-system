@@ -22,7 +22,9 @@ public sealed record SaveGeneratedExamRequest(
     string? SpecificationSnapshot,
     string? GenerationNotes,
     string? Description,
-    string? SetLabel
+    string? SetLabel,
+    bool IsExamLeftAligned = false,
+    bool IsQuestionSeparatorEnabled = false
 );
 
 public sealed record SaveGeneratedExamQuestionDto(
@@ -58,6 +60,8 @@ public sealed record TestResponse(
     DateTime CreatedAt,
     DateTime UpdatedAt,
     bool IsDraft,
+    bool IsExamLeftAligned,
+    bool IsQuestionSeparatorEnabled,
     string? SpecificationSnapshot,
     string QuestionSignature,
     List<QuestionResponse>? Questions = null

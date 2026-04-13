@@ -4,6 +4,9 @@ using Databank.Features.Options;
 namespace Databank.Features.Search;
 
 public sealed record SearchFilters(
+    int? CourseId,
+    int? SubjectId,
+    int? TopicId,
     string? Subject,
     string? Topic,
     string? BloomLevel,

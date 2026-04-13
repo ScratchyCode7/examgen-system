@@ -38,6 +38,12 @@ public sealed class TestConfiguration : IEntityTypeConfiguration<Test>
         builder.Property(x => x.GenerationNotes)
             .HasMaxLength(1000);
 
+        builder.Property(x => x.IsExamLeftAligned)
+            .HasDefaultValue(false);
+
+        builder.Property(x => x.IsQuestionSeparatorEnabled)
+            .HasDefaultValue(false);
+
         builder.Property(x => x.IsDraft)
             .HasDefaultValue(false);
 

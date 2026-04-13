@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Eye, EyeOff, Lock, ShieldOff, Pencil, Trash2 } from 'lucide-react';
+import { Eye, EyeOff, Lock, ShieldOff, Pencil, Crown } from 'lucide-react';
 import { apiService } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -16,8 +16,20 @@ const UserManagement = ({ searchQuery = '' }) => {
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
-  const [pendingDeleteUserId, setPendingDeleteUserId] = useState(null);
-  const [isDeletingUser, setIsDeletingUser] = useState(false);
+  const [pendingStatusChangeUser, setPendingStatusChangeUser] = useState(null);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [deanModal, setDeanModal] = useState({
+    isOpen: false,
+    user: null,
+    departments: []
+  });
+  const [isUpdatingDean, setIsUpdatingDean] = useState(false);
+  const [emailConflictModal, setEmailConflictModal] = useState({
+    isOpen: false,
+    conflictingUser: null,
+    ownershipSummary: null,
+    pendingUpdatePayload: null,
+  });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -116,10 +128,10 @@ const UserManagement = ({ searchQuery = '' }) => {
       setLoading(true);
       
       if (editingUser) {
-        // Update existing user
-        await apiService.updateUser(editingUser.userId, {
+        const updatePayload = {
           firstName: formData.firstName,
           lastName: formData.lastName,
+          username: formData.username,
           departmentIds: formData.departmentIds,
           email: formData.email,
           isAdmin: formData.isAdmin,
@@ -128,7 +140,10 @@ const UserManagement = ({ searchQuery = '' }) => {
             password: formData.password,
             adminPasswordVerification: formData.adminPasswordVerification
           })
-        });
+        };
+
+        // Update existing user
+        await apiService.updateUser(editingUser.userId, updatePayload);
         setSuccess('User updated successfully');
       } else {
         // Create new user
@@ -153,7 +168,30 @@ const UserManagement = ({ searchQuery = '' }) => {
       closeModal();
     } catch (err) {
       console.error('Failed to save user:', err);
-      setError(err.response?.data?.detail || err.response?.data || 'Failed to save user');
+      const conflictData = err.response?.data;
+      if (editingUser && err.response?.status === 409 && conflictData?.code === 'EMAIL_CONFLICT_TRANSFER_AVAILABLE') {
+        setEmailConflictModal({
+          isOpen: true,
+          conflictingUser: conflictData.conflictingUser,
+          ownershipSummary: conflictData.ownershipSummary,
+          pendingUpdatePayload: {
+            firstName: formData.firstName,
+            lastName: formData.lastName,
+            username: formData.username,
+            departmentIds: formData.departmentIds,
+            email: formData.email,
+            isAdmin: formData.isAdmin,
+            isActive: true,
+            ...(isPasswordChangeRequested && {
+              password: formData.password,
+              adminPasswordVerification: formData.adminPasswordVerification
+            })
+          },
+        });
+        return;
+      }
+
+      setError(conflictData?.message || conflictData?.detail || conflictData || 'Failed to save user');
     } finally {
       setLoading(false);
     }
@@ -186,8 +224,86 @@ const UserManagement = ({ searchQuery = '' }) => {
     }
   };
 
-  const handleDelete = (userId) => {
-    setPendingDeleteUserId(userId);
+  const handleStatusChangePrompt = (user) => {
+    setPendingStatusChangeUser(user);
+  };
+
+  const handleOpenDeanModal = async (user) => {
+    if (!user?.userId) return;
+
+    try {
+      setLoading(true);
+      const assignedDepartments = await apiService.getUserDepartments(user.userId);
+      const normalizedDepartments = Array.isArray(assignedDepartments) ? assignedDepartments : [];
+
+      if (normalizedDepartments.length === 0) {
+        setError('Cannot assign dean status because this user has no department assignment.');
+        return;
+      }
+
+      setDeanModal({
+        isOpen: true,
+        user,
+        departments: normalizedDepartments
+      });
+    } catch (err) {
+      console.error('Failed to load user dean departments:', err);
+      setError('Failed to load user department dean status');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const closeDeanModal = () => {
+    if (isUpdatingDean) return;
+    setDeanModal({ isOpen: false, user: null, departments: [] });
+  };
+
+  const handleAssignDean = async (departmentId) => {
+    if (!deanModal.user?.userId || !departmentId) return;
+
+    try {
+      setIsUpdatingDean(true);
+      await apiService.assignDeanStatus(deanModal.user.userId, departmentId);
+      setSuccess('Dean status assigned successfully.');
+
+      // Single dean per department is enforced server-side; reflect selected department as dean in this modal.
+      setDeanModal((prev) => ({
+        ...prev,
+        departments: prev.departments.map((dept) => ({
+          ...dept,
+          isDean: Number(dept.id) === Number(departmentId)
+        }))
+      }));
+    } catch (err) {
+      console.error('Failed to assign dean status:', err);
+      setError(err.response?.data?.detail || err.response?.data || 'Failed to assign dean status');
+    } finally {
+      setIsUpdatingDean(false);
+    }
+  };
+
+  const handleRemoveDean = async (departmentId) => {
+    if (!deanModal.user?.userId || !departmentId) return;
+
+    try {
+      setIsUpdatingDean(true);
+      await apiService.removeDeanStatus(deanModal.user.userId, departmentId);
+      setSuccess('Dean status removed successfully.');
+      setDeanModal((prev) => ({
+        ...prev,
+        departments: prev.departments.map((dept) => (
+          Number(dept.id) === Number(departmentId)
+            ? { ...dept, isDean: false }
+            : dept
+        ))
+      }));
+    } catch (err) {
+      console.error('Failed to remove dean status:', err);
+      setError(err.response?.data?.detail || err.response?.data || 'Failed to remove dean status');
+    } finally {
+      setIsUpdatingDean(false);
+    }
   };
 
   const handleToggleAccountLock = async (user) => {
@@ -209,6 +325,7 @@ const UserManagement = ({ searchQuery = '' }) => {
       await apiService.updateUser(user.userId, {
         firstName: user.firstName || '',
         lastName: user.lastName || '',
+        username: user.username || '',
         departmentIds,
         email: user.email || '',
         isAdmin: Boolean(user.isAdmin),
@@ -228,19 +345,52 @@ const UserManagement = ({ searchQuery = '' }) => {
     }
   };
 
-  const confirmDelete = async () => {
-    if (!pendingDeleteUserId) return;
+  const confirmStatusChange = async () => {
+    if (!pendingStatusChangeUser) return;
     try {
-      setIsDeletingUser(true);
-      await apiService.deleteUser(pendingDeleteUserId);
-      setSuccess('User deleted successfully');
-      await loadUsers();
-      setPendingDeleteUserId(null);
+      setIsUpdatingStatus(true);
+      await handleToggleAccountLock(pendingStatusChangeUser);
+      setPendingStatusChangeUser(null);
     } catch (err) {
-      console.error('Failed to delete user:', err);
-      setError('Failed to delete user');
+      console.error('Failed to update account status:', err);
+      setError('Failed to update account status');
     } finally {
-      setIsDeletingUser(false);
+      setIsUpdatingStatus(false);
+    }
+  };
+
+  const closeEmailConflictModal = () => {
+    if (loading) return;
+    setEmailConflictModal({
+      isOpen: false,
+      conflictingUser: null,
+      ownershipSummary: null,
+      pendingUpdatePayload: null,
+    });
+  };
+
+  const handleConfirmOwnershipTransfer = async () => {
+    if (!editingUser?.userId || !emailConflictModal.pendingUpdatePayload || !emailConflictModal.conflictingUser?.userId) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await apiService.updateUser(editingUser.userId, {
+        ...emailConflictModal.pendingUpdatePayload,
+        transferOwnershipFromUserId: emailConflictModal.conflictingUser.userId,
+        deactivateTransferredUser: true,
+      });
+
+      setSuccess('User updated and ownership transferred successfully.');
+      closeEmailConflictModal();
+      await loadUsers();
+      closeModal();
+    } catch (err) {
+      console.error('Failed to transfer ownership during update:', err);
+      setError(err.response?.data?.message || err.response?.data?.detail || 'Failed to transfer ownership.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -290,7 +440,7 @@ const UserManagement = ({ searchQuery = '' }) => {
   });
 
   return (
-    <div className="user-management">
+    <div className={`user-management ${isDarkMode ? 'dark' : ''}`}>
       <div className="user-management-header">
         <h2>User Management</h2>
         <button className="btn btn-primary" onClick={openNewUserModal}>
@@ -354,19 +504,6 @@ const UserManagement = ({ searchQuery = '' }) => {
                   </td>
                   <td>
                     <div className="user-row-actions">
-                      {!isCurrentAdminUser && (
-                        <button
-                          className={`btn btn-sm ${user.isActive ? 'btn-warning' : 'btn-success'}`}
-                          onClick={() => handleToggleAccountLock(user)}
-                          title={user.isActive ? 'Lock account' : 'Unlock account'}
-                          aria-label={user.isActive ? 'Lock account' : 'Unlock account'}
-                          disabled={loading}
-                        >
-                          {user.isActive
-                            ? <Lock size={16} strokeWidth={2} />
-                            : <ShieldOff size={16} strokeWidth={2} />}
-                        </button>
-                      )}
                       <button 
                         className="btn btn-sm btn-secondary" 
                         onClick={() => handleEdit(user)}
@@ -376,15 +513,30 @@ const UserManagement = ({ searchQuery = '' }) => {
                       >
                         <Pencil size={16} strokeWidth={2} />
                       </button>
-                      <button 
-                        className="btn btn-sm btn-danger" 
-                        onClick={() => handleDelete(user.userId)}
-                        title="Delete user"
-                        aria-label="Delete user"
-                        disabled={loading}
-                      >
-                        <Trash2 size={16} strokeWidth={2} />
-                      </button>
+                      {!user.isAdmin && (
+                        <button
+                          className="btn btn-sm btn-info"
+                          onClick={() => handleOpenDeanModal(user)}
+                          title="Manage dean access"
+                          aria-label="Manage dean access"
+                          disabled={loading}
+                        >
+                          <Crown size={16} strokeWidth={2} />
+                        </button>
+                      )}
+                      {!isCurrentAdminUser && (
+                        <button
+                          className={`btn btn-sm ${user.isActive ? 'btn-warning' : 'btn-success'}`}
+                          onClick={() => handleStatusChangePrompt(user)}
+                          title={user.isActive ? 'Deactivate account' : 'Reactivate account'}
+                          aria-label={user.isActive ? 'Deactivate account' : 'Reactivate account'}
+                          disabled={loading}
+                        >
+                          {user.isActive
+                            ? <Lock size={16} strokeWidth={2} />
+                            : <ShieldOff size={16} strokeWidth={2} />}
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -440,7 +592,6 @@ const UserManagement = ({ searchQuery = '' }) => {
                   name="username"
                   value={formData.username}
                   onChange={handleInputChange}
-                  disabled={editingUser}
                   required
                 />
               </div>
@@ -552,17 +703,111 @@ const UserManagement = ({ searchQuery = '' }) => {
         </div>
       )}
 
+      {deanModal.isOpen && (
+        <div className="modal-overlay" onClick={closeDeanModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Manage Dean Access</h3>
+              <button className="modal-close" onClick={closeDeanModal}>×</button>
+            </div>
+
+            <div className="user-form">
+              <p style={{ marginTop: 0, marginBottom: '1rem' }}>
+                Set dean authority for <strong>{deanModal.user?.firstName} {deanModal.user?.lastName}</strong>.
+              </p>
+
+              <div className="department-selector">
+                {deanModal.departments.map((dept) => (
+                  <div key={dept.id} className={`department-checkbox ${dept.isDean ? 'selected' : ''}`}>
+                    <span className="dept-info">
+                      <strong>{dept.name}</strong>
+                      <span className="dept-code">{dept.code}</span>
+                      {dept.isDean && <span className="role-badge admin">Dean</span>}
+                    </span>
+
+                    <div className="user-row-actions dean-action-cell">
+                      {!dept.isDean ? (
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-primary"
+                          onClick={() => handleAssignDean(dept.id)}
+                          disabled={isUpdatingDean}
+                          title="Set as dean"
+                          aria-label="Set as dean"
+                        >
+                          <Crown size={16} strokeWidth={2} />
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-warning"
+                          onClick={() => handleRemoveDean(dept.id)}
+                          disabled={isUpdatingDean}
+                          title="Remove dean"
+                          aria-label="Remove dean"
+                        >
+                          <ShieldOff size={16} strokeWidth={2} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={closeDeanModal}
+                  disabled={isUpdatingDean}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <ConfirmationModal
-        isOpen={pendingDeleteUserId !== null}
-        title="Confirm Delete"
-        message="Are you sure you want to delete this user?"
-        onCancel={() => setPendingDeleteUserId(null)}
-        onConfirm={confirmDelete}
+        isOpen={pendingStatusChangeUser !== null}
+        title={pendingStatusChangeUser?.isActive ? 'Confirm Deactivate' : 'Confirm Reactivate'}
+        message={pendingStatusChangeUser?.isActive
+          ? 'Deactivate this account? The user can no longer log in until reactivated.'
+          : 'Reactivate this account so the user can log in again?'}
+        onCancel={() => setPendingStatusChangeUser(null)}
+        onConfirm={confirmStatusChange}
         cancelText="Cancel"
-        confirmText={isDeletingUser ? 'Deleting...' : 'Delete'}
-        isLoading={isDeletingUser}
+        confirmText={isUpdatingStatus ? 'Updating...' : (pendingStatusChangeUser?.isActive ? 'Deactivate' : 'Reactivate')}
+        isLoading={isUpdatingStatus}
         isDarkMode={isDarkMode}
-        isDanger={true}
+        isDanger={Boolean(pendingStatusChangeUser?.isActive)}
+      />
+
+      <ConfirmationModal
+        isOpen={emailConflictModal.isOpen}
+        title="Email Already Used"
+        message={
+          <div>
+            <p>This email is already assigned to another account.</p>
+            <p style={{ marginTop: '0.5rem' }}>
+              <strong>Account:</strong> {emailConflictModal.conflictingUser?.fullName || '-'} ({emailConflictModal.conflictingUser?.username || '-'})
+            </p>
+            <p style={{ marginTop: '0.5rem' }}>
+              Transfer ownership before reusing this email?
+            </p>
+            <p style={{ marginTop: '0.5rem' }}>
+              Courses: {emailConflictModal.ownershipSummary?.courses || 0}, Subjects: {emailConflictModal.ownershipSummary?.subjects || 0}, Topics: {emailConflictModal.ownershipSummary?.topics || 0}, Questions: {emailConflictModal.ownershipSummary?.questions || 0}
+            </p>
+          </div>
+        }
+        onCancel={closeEmailConflictModal}
+        onConfirm={handleConfirmOwnershipTransfer}
+        cancelText="Cancel"
+        confirmText={loading ? 'Transferring...' : 'Transfer & Continue'}
+        isLoading={loading}
+        isDarkMode={isDarkMode}
+        isDanger={false}
       />
     </div>
   );

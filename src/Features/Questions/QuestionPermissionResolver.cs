@@ -1,4 +1,5 @@
 using Databank.Database;
+using Databank.Entities;
 using Databank.Features.Topics;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
@@ -7,6 +8,7 @@ namespace Databank.Features.Questions;
 
 public static class QuestionPermissionResolver
 {
+    public const string OwnershipTransferredAction = "OwnershipTransferred";
     public const string RequestAction = "EditRequestCreated";
     public const string ApproveEditOnlyAction = "EditRequestApproved";
     public const string ApproveEditDeleteAction = "EditRequestApprovedWithDelete";
@@ -69,6 +71,27 @@ public static class QuestionPermissionResolver
             .Select(a => new { QuestionId = a.EntityId!.Value, OwnerId = a.UserId!.Value })
             .ToListAsync(ct);
 
+        var transferFromLogs = await dbContext.ActivityLogs
+            .AsNoTracking()
+            .Where(a =>
+                a.EntityType == "Question" &&
+                a.EntityId.HasValue &&
+                missingOwnerQuestionIds.Contains(a.EntityId.Value) &&
+                a.UserId.HasValue &&
+                a.Action == OwnershipTransferredAction)
+            .OrderByDescending(a => a.CreatedAt)
+            .ThenByDescending(a => a.Id)
+            .Select(a => new { QuestionId = a.EntityId!.Value, OwnerId = a.UserId!.Value })
+            .ToListAsync(ct);
+
+        foreach (var owner in transferFromLogs)
+        {
+            if (!ownerByQuestionId.TryGetValue(owner.QuestionId, out var existing) || !existing.HasValue)
+            {
+                ownerByQuestionId[owner.QuestionId] = owner.OwnerId;
+            }
+        }
+
         foreach (var owner in ownerFromLogs)
         {
             if (!ownerByQuestionId.TryGetValue(owner.QuestionId, out var existing) || !existing.HasValue)
@@ -101,6 +124,30 @@ public static class QuestionPermissionResolver
             if (ownerId.HasValue && ownerId.Value == currentUserId)
             {
                 permissions[questionId] = (true, true);
+            }
+        }
+
+        var deanDepartmentIds = await dbContext.UserDepartments
+            .AsNoTracking()
+            .Where(ud => ud.UserId == currentUserId && ud.RoleScope == UserDepartment.DeanRoleScope)
+            .Select(ud => ud.DepartmentId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        if (deanDepartmentIds.Count > 0)
+        {
+            var questionDepartmentRows = await dbContext.Questions
+                .AsNoTracking()
+                .Where(q => permissions.Keys.Contains(q.Id))
+                .Select(q => new { q.Id, DepartmentId = q.Topic.Subject.Course.DepartmentId })
+                .ToListAsync(ct);
+
+            foreach (var row in questionDepartmentRows)
+            {
+                if (deanDepartmentIds.Contains(row.DepartmentId))
+                {
+                    permissions[row.Id] = (true, true);
+                }
             }
         }
 

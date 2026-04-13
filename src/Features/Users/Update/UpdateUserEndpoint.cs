@@ -3,6 +3,7 @@ using System.Security.Claims;
 using Databank.Abstract;
 using Databank.Database;
 using Databank.Entities;
+using Databank.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -12,12 +13,15 @@ namespace Databank.Features.Users.Update;
 public sealed record UpdateUserRequest(
     string FirstName,
     string LastName,
+    string Username,
     int[] DepartmentIds,
     string Email,
     bool? IsAdmin,
     bool? IsActive,
     string? Password,
-    string? AdminPasswordVerification
+    string? AdminPasswordVerification,
+    Guid? TransferOwnershipFromUserId,
+    bool? DeactivateTransferredUser
 );
 
 public sealed class UpdateUserEndpoint : IEndpoint
@@ -29,6 +33,7 @@ public sealed class UpdateUserEndpoint : IEndpoint
                 UpdateUserRequest request,
                 AppDbContext dbContext,
                 IPasswordHasher<User> passwordHasher,
+                IUserOwnershipTransferService ownershipTransferService,
                 HttpContext httpContext,
                 CancellationToken ct) =>
         {
@@ -41,18 +46,76 @@ public sealed class UpdateUserEndpoint : IEndpoint
                 return TypedResults.NotFound();
             }
 
+            var normalizedUsername = request.Username?.Trim();
             var normalizedEmail = request.Email?.Trim();
+
+            if (string.IsNullOrWhiteSpace(normalizedUsername))
+            {
+                return TypedResults.BadRequest("Username is required.");
+            }
+
             if (string.IsNullOrWhiteSpace(normalizedEmail))
             {
                 return TypedResults.BadRequest("Email is required.");
             }
 
-            var duplicateEmail = await dbContext.Users
-                .AnyAsync(u => u.UserId != userId && u.Email.ToLower() == normalizedEmail.ToLower(), ct);
+            var duplicateUsername = await dbContext.Users
+                .AnyAsync(u => u.UserId != userId && u.Username.ToLower() == normalizedUsername.ToLower(), ct);
 
-            if (duplicateEmail)
+            if (duplicateUsername)
             {
-                return TypedResults.Conflict($"Email '{normalizedEmail}' is already in use.");
+                return TypedResults.Conflict(new
+                {
+                    code = "USERNAME_CONFLICT",
+                    message = $"Username '{normalizedUsername}' is already in use."
+                });
+            }
+
+            var conflictingEmailUser = await dbContext.Users
+                .FirstOrDefaultAsync(u => u.UserId != userId && u.Email.ToLower() == normalizedEmail.ToLower(), ct);
+
+            if (conflictingEmailUser != null)
+            {
+                var isTransferRequest = request.TransferOwnershipFromUserId.HasValue
+                    && request.TransferOwnershipFromUserId.Value == conflictingEmailUser.UserId;
+
+                if (isTransferRequest)
+                {
+                    await ownershipTransferService.TransferOwnershipAsync(
+                        conflictingEmailUser.UserId,
+                        userId,
+                        request.DeactivateTransferredUser ?? true,
+                        ct);
+
+                    // Release the email so it can be reassigned to the target account.
+                    conflictingEmailUser.Email = $"archived+{conflictingEmailUser.UserId:N}@databank.local";
+                    conflictingEmailUser.UpdatedAt = DateTime.UtcNow;
+                }
+                else
+                {
+                    var summary = await ownershipTransferService.GetOwnershipSummaryAsync(conflictingEmailUser.UserId, ct);
+
+                    return TypedResults.Conflict(new
+                    {
+                        code = "EMAIL_CONFLICT_TRANSFER_AVAILABLE",
+                        message = $"Email '{normalizedEmail}' is already used by another account.",
+                        conflictingUser = new
+                        {
+                            userId = conflictingEmailUser.UserId,
+                            username = conflictingEmailUser.Username,
+                            email = conflictingEmailUser.Email,
+                            fullName = $"{conflictingEmailUser.FirstName} {conflictingEmailUser.LastName}".Trim(),
+                            isActive = conflictingEmailUser.IsActive
+                        },
+                        ownershipSummary = new
+                        {
+                            courses = summary.Courses,
+                            subjects = summary.Subjects,
+                            topics = summary.Topics,
+                            questions = summary.Questions
+                        }
+                    });
+                }
             }
 
             // Verify all departments exist
@@ -71,6 +134,7 @@ public sealed class UpdateUserEndpoint : IEndpoint
 
             user.FirstName = request.FirstName;
             user.LastName = request.LastName;
+            user.Username = normalizedUsername;
             user.Email = normalizedEmail;
             
             // Update department assignments

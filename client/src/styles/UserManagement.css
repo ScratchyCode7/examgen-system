@@ -169,6 +169,30 @@
   background: #5a6268;
 }
 
+.user-management.dark .modal-content .btn-secondary {
+  background: #fbbf24;
+  border: 1px solid #f59e0b;
+  color: #1f2937;
+}
+
+.user-management.dark .modal-content .btn-secondary:hover:not(:disabled) {
+  background: #f59e0b;
+  border-color: #d97706;
+  color: #111827;
+}
+
+.user-row-actions .btn-secondary {
+  background: var(--primary-color, #0d6efd);
+  border: 1px solid var(--primary-color, #0d6efd);
+  color: #ffffff;
+}
+
+.user-row-actions .btn-secondary:hover:not(:disabled) {
+  background: var(--primary-dark, #0b5ed7);
+  border-color: var(--primary-dark, #0b5ed7);
+  color: #ffffff;
+}
+
 .btn-danger {
   background: #dc3545;
   color: white;
@@ -196,6 +220,15 @@
   background: #146c43;
 }
 
+.btn-info {
+  background: #0ea5e9;
+  color: #ffffff;
+}
+
+.btn-info:hover:not(:disabled) {
+  background: #0284c7;
+}
+
 .btn-sm {
   padding: 0.35rem 0.75rem;
   font-size: 0.85rem;
@@ -219,6 +252,12 @@
   align-items: center;
   justify-content: center;
   padding: 0;
+}
+
+.dean-action-cell {
+  margin-left: auto;
+  width: auto;
+  justify-content: flex-end;
 }
 
 /* Modal */

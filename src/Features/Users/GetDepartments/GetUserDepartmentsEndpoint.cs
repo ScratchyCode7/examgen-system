@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Databank.Features.Users.GetDepartments;
 
-public sealed record UserDepartmentDto(int Id, string Name, string Code, string? Description);
+public sealed record UserDepartmentDto(int Id, string Name, string Code, string? Description, bool IsDean);
 
 public sealed class GetUserDepartmentsEndpoint : IEndpoint
 {
@@ -31,7 +31,8 @@ public sealed class GetUserDepartmentsEndpoint : IEndpoint
                     ud.Department.Id,
                     ud.Department.Name,
                     ud.Department.Code,
-                    ud.Department.Description
+                    ud.Department.Description,
+                    ud.IsDean
                 ))
                 .ToList();
 

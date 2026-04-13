@@ -34,6 +34,7 @@ public sealed class GetTestEndpoint : IEndpoint
                     .ThenInclude(tq => tq.Question)
                         .ThenInclude(q => q.QuestionImage)
                 .Include(t => t.Subject)
+                    .ThenInclude(s => s.Course)
                 .Include(t => t.CreatedByUser)
                 .FirstOrDefaultAsync(t => t.Id == id, ct);
 
@@ -42,7 +43,19 @@ public sealed class GetTestEndpoint : IEndpoint
 
             if (!isAdmin)
             {
-                if (!test.CreatedByUserId.HasValue || test.CreatedByUserId.Value != actingUserId)
+                var ownsTest = test.CreatedByUserId.HasValue && test.CreatedByUserId.Value == actingUserId;
+
+                var deanDepartmentIds = await dbContext.UserDepartments
+                    .AsNoTracking()
+                    .Where(ud => ud.UserId == actingUserId && ud.RoleScope == UserDepartment.DeanRoleScope)
+                    .Select(ud => ud.DepartmentId)
+                    .Distinct()
+                    .ToArrayAsync(ct);
+
+                var testDepartmentId = test.DepartmentId ?? test.Subject?.Course?.DepartmentId;
+                var isDeanForTestDepartment = testDepartmentId.HasValue && deanDepartmentIds.Contains(testDepartmentId.Value);
+
+                if (!ownsTest && !isDeanForTestDepartment)
                 {
                     return TypedResults.Forbid();
                 }

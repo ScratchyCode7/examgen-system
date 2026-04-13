@@ -208,7 +208,7 @@ const AdminPrintQueue = () => {
             <tbody>
               ${tableRows}
               <tr class="total-row">
-                <td colspan="2"><strong>TOTALS</strong></td>
+                <td colspan="2"><strong>TOTAL</strong></td>
                 <td><strong>${totals.low || 0}</strong></td>
                 <td><strong>All</strong></td>
                 <td><strong>${totals.middle || 0}</strong></td>

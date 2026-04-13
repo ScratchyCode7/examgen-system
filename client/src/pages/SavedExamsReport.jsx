@@ -124,10 +124,13 @@ const SavedExamsReport = () => {
   const [isDeletingExam, setIsDeletingExam] = useState(false);
   const [error, setError] = useState('');
 
-  const normalizedUserId = user?.userId ? String(user.userId).toLowerCase() : null;
+  const normalizedUserId = (user?.userId || user?.UserId)
+    ? String(user.userId || user.UserId).toLowerCase()
+    : null;
   const isExamOwner = React.useCallback((exam) => {
-    if (!exam?.createdByUserId || !normalizedUserId) return false;
-    return String(exam.createdByUserId).toLowerCase() === normalizedUserId;
+    const examOwnerId = exam?.createdByUserId || exam?.CreatedByUserId;
+    if (!examOwnerId || !normalizedUserId) return false;
+    return String(examOwnerId).toLowerCase() === normalizedUserId;
   }, [normalizedUserId]);
 
   const getOwnerDisplay = React.useCallback((exam) => {
@@ -527,6 +530,16 @@ const SavedExamsReport = () => {
     }
   }, [selectedExam]);
 
+  const isSelectedExamLeftAligned = React.useMemo(
+    () => Boolean(selectedExam?.isExamLeftAligned ?? selectedExam?.IsExamLeftAligned),
+    [selectedExam]
+  );
+
+  const isSelectedExamQuestionSeparatorEnabled = React.useMemo(
+    () => Boolean(selectedExam?.isQuestionSeparatorEnabled ?? selectedExam?.IsQuestionSeparatorEnabled),
+    [selectedExam]
+  );
+
   const printSpecification = () => {
     if (!parsedSpecification?.specs?.length) {
       throw new Error('This saved exam does not include a specification snapshot.');
@@ -712,8 +725,8 @@ const SavedExamsReport = () => {
         : '';
 
       return `
-        <div class="question-item">
-          <div class="question-text">${index + 1}.) ${question.content}</div>
+        <div class="question-item${isSelectedExamLeftAligned ? ' left-align-mode' : ''}${isSelectedExamQuestionSeparatorEnabled ? ' with-separator' : ''}">
+          <div class="question-text">${isSelectedExamQuestionSeparatorEnabled ? '<span class="answer-placement-line"></span> ' : ''}${index + 1}.) ${question.content}</div>
           ${imageHtml}
           <div class="choices">${choices}</div>
         </div>
@@ -748,14 +761,18 @@ const SavedExamsReport = () => {
             .questions-section { margin: 20px 0; }
             .question-item { margin-bottom: 15px; color: #000; }
             .question-text { font-weight: normal; margin-bottom: 5px; font-size: 14px; }
+            .question-text .answer-placement-line { display: inline-block; width: 72px; border-bottom: 1px solid #000; margin-right: 8px; transform: translateY(-2px); }
             .question-image-wrapper { margin: 10px 0; page-break-inside: avoid; }
             .question-image-wrapper.text-left { text-align: left; }
             .question-image-wrapper.text-center { text-align: center; }
             .question-image-wrapper.text-right { text-align: right; }
             .question-image-wrapper img { max-height: 400px; object-fit: contain; display: inline-block; }
             .choices { display: flex; flex-wrap: wrap; gap: 15px; margin-left: 20px; }
-            .choice-item { font-size: 14px; flex: 1 1 calc(25% - 15px); min-width: 120px; word-wrap: break-word; white-space: normal; }
-            .choice-letter { font-weight: normal; }
+            .choice-item { font-size: 14px; flex: 1 1 calc(25% - 15px); min-width: 120px; word-wrap: break-word; white-space: normal; display: flex; align-items: flex-start; gap: 8px; }
+            .choice-letter { font-weight: normal; display: inline-block; min-width: 22px; }
+            .question-item.left-align-mode .choices { display: block; margin-left: 0; }
+            .question-item.left-align-mode.with-separator .choices { margin-left: 77px; }
+            .question-item.left-align-mode .choice-item { display: flex; width: 100%; min-width: 0; margin-bottom: 6px; }
             @media print {
               body { margin: 0; padding: 10px; }
               .question-item { page-break-inside: avoid; }
@@ -1344,9 +1361,10 @@ const SavedExamsReport = () => {
                           const imageWidth = image?.widthPercentage || image?.WidthPercentage || 50;
                           const imageAlignment = (image?.alignment || image?.Alignment || 'center').toLowerCase();
                           return (
-                            <div key={question.id || index} className="exam-question-item">
-                              <div className="question-number-text">
-                                <strong>{index + 1}.) {question.content}</strong>
+                            <div key={question.id || index} className={`exam-question-item${isSelectedExamQuestionSeparatorEnabled ? ' with-separator' : ''}`}>
+                              <div className={`question-number-text${isSelectedExamQuestionSeparatorEnabled ? ' with-answer-placement' : ''}`}>
+                                {isSelectedExamQuestionSeparatorEnabled && <span className="answer-placement-line" aria-hidden="true"></span>}
+                                <span>{index + 1}.) {question.content}</span>
                               </div>
                               {imageUrl && (
                                 <div className="question-image-wrapper" style={{ textAlign: imageAlignment }}>
@@ -1358,7 +1376,7 @@ const SavedExamsReport = () => {
                                   />
                                 </div>
                               )}
-                              <div className="question-options">
+                              <div className={`question-options${isSelectedExamLeftAligned ? ' left-align-mode' : ''}${isSelectedExamQuestionSeparatorEnabled ? ' with-answer-placement' : ''}`}>
                                 {options.map((option, idx) => (
                                   <div key={option.id || option.Id || idx} className="option-line">
                                     <span className="option-letter">{String.fromCharCode(65 + idx)}.</span>

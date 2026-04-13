@@ -209,6 +209,8 @@ public sealed class SubmitPrintRequestEndpoint : IEndpoint
                 ExamType = string.IsNullOrWhiteSpace(examData.ExamType) ? "Custom" : examData.ExamType,
                 Semester = examData.Semester ?? string.Empty,
                 SchoolYear = examData.SchoolYear ?? string.Empty,
+                IsExamLeftAligned = examData.IsExamLeftAligned,
+                IsQuestionSeparatorEnabled = examData.IsQuestionSeparatorEnabled,
                 SetLabel = draftSetLabel,
                 QuestionSignature = signature,
                 SpecificationSnapshot = examData.SpecificationSnapshot,
@@ -233,6 +235,8 @@ public sealed class SubmitPrintRequestEndpoint : IEndpoint
             draftTest.ExamType = string.IsNullOrWhiteSpace(examData.ExamType) ? draftTest.ExamType : examData.ExamType;
             draftTest.Semester = examData.Semester ?? string.Empty;
             draftTest.SchoolYear = examData.SchoolYear ?? string.Empty;
+            draftTest.IsExamLeftAligned = examData.IsExamLeftAligned;
+            draftTest.IsQuestionSeparatorEnabled = examData.IsQuestionSeparatorEnabled;
             draftTest.QuestionSignature = signature;
             draftTest.SpecificationSnapshot = examData.SpecificationSnapshot;
             draftTest.GenerationNotes = examData.GenerationNotes;
@@ -333,6 +337,8 @@ public sealed class SubmitPrintRequestEndpoint : IEndpoint
                 durationMinutes = test.DurationMinutes,
                 totalQuestions = test.TotalQuestions,
                 totalPoints = test.TotalPoints,
+                isExamLeftAligned = test.IsExamLeftAligned,
+                isQuestionSeparatorEnabled = test.IsQuestionSeparatorEnabled,
                 specificationSnapshot = test.SpecificationSnapshot,
                 generationNotes = test.GenerationNotes
             },

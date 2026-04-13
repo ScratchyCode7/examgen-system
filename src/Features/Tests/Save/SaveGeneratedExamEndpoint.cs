@@ -192,6 +192,8 @@ public sealed class SaveGeneratedExamEndpoint : IEndpoint
             test.SpecificationSnapshot = request.SpecificationSnapshot;
             test.GenerationNotes = request.GenerationNotes;
             test.QuestionSignature = signature;
+            test.IsExamLeftAligned = request.IsExamLeftAligned;
+            test.IsQuestionSeparatorEnabled = request.IsQuestionSeparatorEnabled;
             test.IsDraft = false;
             test.IsPublished = false;
             test.AvailableFrom = DateTime.UtcNow;

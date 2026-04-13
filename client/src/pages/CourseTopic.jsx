@@ -538,14 +538,6 @@ const CourseTopic = () => {
     }
   };
 
-  const handleRequestSubjectAccess = async (item) => {
-    if (!item?.subjectId) return;
-
-    setSubjectEditRequestTarget(item);
-    setSubjectEditRequestMessage('');
-    setIsSubjectEditRequestModalOpen(true);
-  };
-
   const closeSubjectEditRequestModal = () => {
     if (isSubmittingSubjectEditRequest) return;
 
@@ -1343,7 +1335,7 @@ const CourseTopic = () => {
                     <div className="topics-list-section">
                       <div className="topics-list-header">
                         <h4>Topics for {item.courseTitle}</h4>
-                        {item.canEdit ? (
+                        {isAdmin && (
                           <div className="subject-row-actions topic-header-actions">
                             <button
                               className="topic-action-btn"
@@ -1364,15 +1356,6 @@ const CourseTopic = () => {
                               </button>
                             )}
                           </div>
-                        ) : (
-                          <button
-                            className="topic-action-btn request request-access-btn"
-                            onClick={() => handleRequestSubjectAccess(item)}
-                            title="Request course access"
-                            aria-label="Request course access"
-                          >
-                            Request Access
-                          </button>
                         )}
                       </div>
 

@@ -143,7 +143,7 @@ const getLevelKeyFromBloom = (value) => {
   return null;
 };
 
-const { Home, ClipboardList, BookOpen, Settings, LogOut, User, Users, Sun, Moon, Search, Printer, Save, Eye, Trash2, PlayCircle, CheckCircle, Check, X, AlertTriangle, FileText, HelpCircle, RefreshCw } = Icons;
+const { Home, ClipboardList, BookOpen, Settings, LogOut, User, Users, Sun, Moon, Search, Printer, Save, Eye, Trash2, PlayCircle, CheckCircle, Check, X, AlertTriangle, FileText, HelpCircle, RefreshCw, SeparatorHorizontal } = Icons;
 
 const TestGeneration = () => {
   const { user, logout, isAdmin } = useAuth();
@@ -603,6 +603,8 @@ const TestGeneration = () => {
   const [printRequestCopies, setPrintRequestCopies] = useState(1);
   const [printRequestNotes, setPrintRequestNotes] = useState('');
   const [printOption, setPrintOption] = useState('specification');
+  const [isExamLeftAligned, setIsExamLeftAligned] = useState(false);
+  const [isQuestionSeparatorEnabled, setIsQuestionSeparatorEnabled] = useState(false);
   const [savedExamSets, setSavedExamSets] = useState([]);
   const [isLoadingSavedSets, setIsLoadingSavedSets] = useState(false);
   const [lastSavedSignature, setLastSavedSignature] = useState('');
@@ -1685,6 +1687,8 @@ const TestGeneration = () => {
       schoolYear,
       durationMinutes: 60,
       totalPoints: ordered.length,
+      isExamLeftAligned,
+      isQuestionSeparatorEnabled,
       specificationSnapshot: generatedSpec ? JSON.stringify(generatedSpec) : null,
       generationNotes: generationWarnings?.join('\n') || null,
       questions,
@@ -1699,6 +1703,8 @@ const TestGeneration = () => {
     examType,
     semester,
     schoolYear,
+    isExamLeftAligned,
+    isQuestionSeparatorEnabled,
     generatedSpec,
     generationWarnings,
     isOptionMarkedCorrect,
@@ -2712,6 +2718,8 @@ const TestGeneration = () => {
       }
       
       if (exam.questions && exam.questions.length > 0) {
+        setIsExamLeftAligned(Boolean(exam.isExamLeftAligned ?? exam.IsExamLeftAligned));
+        setIsQuestionSeparatorEnabled(Boolean(exam.isQuestionSeparatorEnabled ?? exam.IsQuestionSeparatorEnabled));
         const normalizedQuestions = exam.questions
           .map((q, idx) => {
             const rawOrder = Number(q.displayOrder ?? q.DisplayOrder ?? idx);
@@ -2852,6 +2860,8 @@ const TestGeneration = () => {
 
   const handleClearGeneration = () => {
     resetGeneratedArtifacts();
+    setIsExamLeftAligned(false);
+    setIsQuestionSeparatorEnabled(false);
     setTopicRows(getInitialTopicRows());
     setTotalExamItems('');
     setTotalExamItemsInput('');
@@ -2979,6 +2989,43 @@ const TestGeneration = () => {
       setShowPrintRequestModal(true);
     }
   };
+
+  const getExamQuestionsForPrinting = React.useCallback(() => {
+    if (sampleExam?.questions && sampleExam.questions.length > 0) {
+      return sampleExam.questions;
+    }
+
+    if (!generatedSpec?.specs) {
+      return [];
+    }
+
+    const allQuestions = [];
+    generatedSpec.specs.forEach(spec => {
+      spec.cognitive.low.questions.forEach(q => {
+        allQuestions.push({
+          ...q,
+          topicName: spec.topicName,
+          level: 'Remembering'
+        });
+      });
+      spec.cognitive.middle.questions.forEach(q => {
+        allQuestions.push({
+          ...q,
+          topicName: spec.topicName,
+          level: 'Applying'
+        });
+      });
+      spec.cognitive.high.questions.forEach(q => {
+        allQuestions.push({
+          ...q,
+          topicName: spec.topicName,
+          level: 'Evaluating'
+        });
+      });
+    });
+
+    return allQuestions.sort((a, b) => a.placement - b.placement);
+  }, [sampleExam, generatedSpec]);
 
   // Handle print request submission (for non-admin users)
   const handleSubmitPrintRequest = async (notes, copies) => {
@@ -3109,7 +3156,9 @@ const TestGeneration = () => {
         specificationSnapshot: JSON.stringify(generatedSpec),
         generationNotes: generationWarnings?.join('\n') || undefined,
         description: `${examType} Exam - ${semester} ${schoolYear}`,
-        setLabel: trimmedSetLabel
+        setLabel: trimmedSetLabel,
+        isExamLeftAligned,
+        isQuestionSeparatorEnabled
       };
 
       const response = await apiService.saveGeneratedExam(payload);
@@ -3120,6 +3169,8 @@ const TestGeneration = () => {
       setError('');
       setLastSavedSignature(signature);
       setActiveExamMeta(response);
+      setIsExamLeftAligned(Boolean(response?.isExamLeftAligned ?? response?.IsExamLeftAligned));
+      setIsQuestionSeparatorEnabled(Boolean(response?.isQuestionSeparatorEnabled ?? response?.IsQuestionSeparatorEnabled));
       setSampleExam(prev => {
         if (!prev) return prev;
         return {
@@ -3856,7 +3907,7 @@ const TestGeneration = () => {
                     )}
                     {totalExamItems && topicRows.some(row => row.topic && row.hours) && (
                       <tr className="totals-row">
-                        <td><strong>TOTALS</strong></td>
+                        <td><strong>TOTAL</strong></td>
                         <td><strong>{calculateTotalHours()}</strong></td>
                         <td><strong>{generatedSpec ? generatedSpec.totals.low : calculateDistribution().low}</strong></td>
                         <td>All</td>
@@ -3905,6 +3956,22 @@ const TestGeneration = () => {
               disabled={!generatedSpec}
             >
               <Printer size={16} /> {user?.isAdmin ? 'Print Options' : 'Request Print'}
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={() => setIsExamLeftAligned(prev => !prev)}
+              disabled={!sampleExam}
+              title="Toggle left alignment for long choices in preview and printed exam"
+            >
+              <FileText size={16} /> {isExamLeftAligned ? 'Left Align: ON' : 'Left Align: OFF'}
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={() => setIsQuestionSeparatorEnabled(prev => !prev)}
+              disabled={!sampleExam}
+              title="Toggle answer placement blank before each question number in preview and printed exam"
+            >
+              <SeparatorHorizontal size={16} /> {isQuestionSeparatorEnabled ? 'Answer Placement: ON' : 'Answer Placement: OFF'}
             </button>
             {!(user?.isAdmin && activePrintRequest) && (
               <button 
@@ -3972,9 +4039,10 @@ const TestGeneration = () => {
                       const shouldRenderSeparateQuestionImage = Boolean(image) && !hasInlineImageTag(questionText);
                       // preview debug logs removed for production
                       return (
-                        <div key={idx} className="exam-question-item">
-                          <div className="question-number-text">
-                            <strong>{idx + 1}.) </strong>
+                        <div key={idx} className={`exam-question-item${isQuestionSeparatorEnabled ? ' with-separator' : ''}`}>
+                          <div className={`question-number-text${isQuestionSeparatorEnabled ? ' with-answer-placement' : ''}`}>
+                            {isQuestionSeparatorEnabled && <span className="answer-placement-line" aria-hidden="true"></span>}
+                            <span>{idx + 1}.) </span>
                             <span className="question-html" dangerouslySetInnerHTML={questionHtml} />
                           </div>
                           {getQuestionTopicId(q) && (
@@ -4014,7 +4082,7 @@ const TestGeneration = () => {
                               })()}
                             </div>
                           )}
-                          <div className="question-options">
+                          <div className={`question-options${isExamLeftAligned ? ' left-align-mode' : ''}${isQuestionSeparatorEnabled ? ' with-answer-placement' : ''}`}>
                             {options.map((option, optIdx) => {
                               const letter = String.fromCharCode(65 + optIdx);
                               const optionText = option.content || option.Content || option.optionText || option.text || option || '';
@@ -4315,7 +4383,6 @@ const TestGeneration = () => {
                 {!isLoadingReplacementCandidates && replacementCandidates.length > 0 && (
                   <>
                     <div className="question-edit-search-row">
-                      <Search size={16} className="question-edit-search-icon" />
                       <input
                         type="text"
                         className="question-edit-search-input"
@@ -4525,7 +4592,7 @@ const TestGeneration = () => {
                                   `;
                                 }).join('')}
                                 <tr class="total-row">
-                                  <td colspan="2"><strong>TOTALS</strong></td>
+                                  <td colspan="2"><strong>TOTAL</strong></td>
                                   <td><strong>${generatedSpec.totals.low}</strong></td>
                               <td><strong>All</strong></td>
                                   <td><strong>${generatedSpec.totals.middle}</strong></td>
@@ -4569,41 +4636,18 @@ const TestGeneration = () => {
                     setError('Please generate the table of specification first');
                     return;
                   }
-                  
-                  // Auto-generate sample exam if it doesn't exist
-                  let examToPrint = sampleExam;
-                  if (!examToPrint || !examToPrint.questions || examToPrint.questions.length === 0) {
-                    const allQuestions = [];
-                    generatedSpec.specs.forEach(spec => {
-                      spec.cognitive.low.questions.forEach(q => {
-                        allQuestions.push({
-                          ...q,
-                          topicName: spec.topicName,
-                          level: 'Remembering'
-                        });
-                      });
-                      spec.cognitive.middle.questions.forEach(q => {
-                        allQuestions.push({
-                          ...q,
-                          topicName: spec.topicName,
-                          level: 'Applying'
-                        });
-                      });
-                      spec.cognitive.high.questions.forEach(q => {
-                        allQuestions.push({
-                          ...q,
-                          topicName: spec.topicName,
-                          level: 'Evaluating'
-                        });
-                      });
-                    });
-                    allQuestions.sort((a, b) => a.placement - b.placement);
-                    examToPrint = {
-                      questions: allQuestions,
-                      date: new Date().toLocaleDateString(),
-                      totalQuestions: generatedSpec.totalItems
-                    };
+
+                  const printQuestions = getExamQuestionsForPrinting();
+                  if (!printQuestions.length) {
+                    setError('No exam questions available to print.');
+                    return;
                   }
+
+                  const examToPrint = {
+                    questions: printQuestions,
+                    date: new Date().toLocaleDateString(),
+                    totalQuestions: generatedSpec.totalItems
+                  };
                   
                   // Convert UPHSL logo to data URL
                   const img = new Image();
@@ -4617,6 +4661,8 @@ const TestGeneration = () => {
                     
                     // Convert all question images to base64
                     const questionsWithImages = examToPrint.questions.map(async (q, idx) => {
+                      const shouldLeftAlign = isExamLeftAligned;
+                      const shouldShowSeparator = isQuestionSeparatorEnabled;
                       const image = q.image || q.Image;
                       const imagePath = image?.imageData || image?.ImageData || image?.imagePath || image?.ImagePath;
                       if (imagePath) {
@@ -4627,7 +4673,9 @@ const TestGeneration = () => {
                             ...q,
                             imageDataUrl: imageDataUrl,
                             imageWidth: image.widthPercentage || image.WidthPercentage || 50,
-                            imageAlignment: (image.alignment || image.Alignment || 'center').toLowerCase()
+                            imageAlignment: (image.alignment || image.Alignment || 'center').toLowerCase(),
+                            forceLeftAlign: shouldLeftAlign,
+                            forceQuestionSeparator: shouldShowSeparator
                           };
                         } catch (error) {
                           console.error(`Failed to convert image for question ${idx + 1}:`, error);
@@ -4635,11 +4683,17 @@ const TestGeneration = () => {
                             ...q,
                             imageDataUrl: resolveQuestionImageUrl(imagePath),
                             imageWidth: image.widthPercentage || image.WidthPercentage || 50,
-                            imageAlignment: (image.alignment || image.Alignment || 'center').toLowerCase()
+                            imageAlignment: (image.alignment || image.Alignment || 'center').toLowerCase(),
+                            forceLeftAlign: shouldLeftAlign,
+                            forceQuestionSeparator: shouldShowSeparator
                           };
                         }
                       }
-                      return q;
+                      return {
+                        ...q,
+                        forceLeftAlign: shouldLeftAlign,
+                        forceQuestionSeparator: shouldShowSeparator
+                      };
                     });
                     
                     const processedQuestions = await Promise.all(questionsWithImages);
@@ -4680,15 +4734,19 @@ const TestGeneration = () => {
                             .questions-section { margin: 20px 0; }
                             .question-item { margin-bottom: 15px; color: #000; }
                             .question-text { font-weight: normal; margin-bottom: 5px; font-size: 14px; }
+                            .question-text .answer-placement-line { display: inline-block; width: 72px; border-bottom: 1px solid #000; margin-right: 8px; transform: translateY(-2px); }
                             .question-image-wrapper { margin: 10px 0; page-break-inside: avoid; }
                             .question-image-wrapper.text-left { text-align: left; }
                             .question-image-wrapper.text-center { text-align: center; }
                             .question-image-wrapper.text-right { text-align: right; }
                             .question-image-wrapper img { max-height: 400px; object-fit: contain; display: inline-block; }
                             .choices { display: flex; flex-wrap: wrap; gap: 15px; margin-left: 20px; }
-                            .choice-item { font-size: 14px; flex: 1 1 calc(25% - 15px); min-width: 120px; word-wrap: break-word; white-space: normal; }
+                            .choice-item { font-size: 14px; flex: 1 1 calc(25% - 15px); min-width: 120px; word-wrap: break-word; white-space: normal; display: flex; align-items: flex-start; gap: 8px; }
                             .choice-item img { max-width: 120px; max-height: 80px; width: auto; height: auto; display: block; margin-top: 6px; object-fit: contain; }
-                            .choice-letter { font-weight: normal; }
+                            .choice-letter { font-weight: normal; display: inline-block; min-width: 22px; }
+                            .question-item.left-align-mode .choices { display: block; margin-left: 0; }
+                            .question-item.left-align-mode.with-separator .choices { margin-left: 77px; }
+                            .question-item.left-align-mode .choice-item { display: flex; width: 100%; min-width: 0; margin-bottom: 6px; }
                             @media print {
                               body { margin: 0; padding: 10px; }
                               .question-item { page-break-inside: avoid; }
@@ -4757,7 +4815,9 @@ const TestGeneration = () => {
                                   return '<div class="choice-item"><span class="choice-letter">' + letter + '.</span> ' + normalizedOptionText + '</div>';
                                 }).join('');
                               }
-                              return '<div class="question-item"><div class="question-text">' + (idx + 1) + '.) ' + normalizedQuestionText + '</div>' + imageHTML + '<div class="choices">' + choicesHTML + '</div></div>';
+                              const questionClass = `question-item${q.forceLeftAlign ? ' left-align-mode' : ''}${q.forceQuestionSeparator ? ' with-separator' : ''}`;
+                              const answerPlacementPrefix = q.forceQuestionSeparator ? '<span class="answer-placement-line"></span> ' : '';
+                              return '<div class="' + questionClass + '"><div class="question-text">' + answerPlacementPrefix + (idx + 1) + '.) ' + normalizedQuestionText + '</div>' + imageHTML + '<div class="choices">' + choicesHTML + '</div></div>';
                             }).join('')}
                           </div>
                         </body>

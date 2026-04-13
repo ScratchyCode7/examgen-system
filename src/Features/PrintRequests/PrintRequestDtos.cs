@@ -38,6 +38,8 @@ public sealed record PrintRequestExamDraftDto(
     string SchoolYear,
     int DurationMinutes,
     int TotalPoints,
+    bool IsExamLeftAligned,
+    bool IsQuestionSeparatorEnabled,
     string? SpecificationSnapshot,
     string? GenerationNotes,
     List<PrintRequestExamQuestionDto> Questions

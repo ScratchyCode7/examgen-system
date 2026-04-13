@@ -42,6 +42,14 @@ public sealed class SubjectEditRequestEndpoint : IEndpoint
         HttpContext httpContext,
         CancellationToken ct)
     {
+        var isAdmin = httpContext.User.HasClaim("isAdmin", "true");
+        if (!isAdmin)
+        {
+            return TypedResults.Problem(
+                "Course access requests are disabled. Only administrators can modify encoded courses.",
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+
         var requesterId = SubjectPermissionResolver.GetCurrentUserId(httpContext.User);
         if (!requesterId.HasValue)
         {

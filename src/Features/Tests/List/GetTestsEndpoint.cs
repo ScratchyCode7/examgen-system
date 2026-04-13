@@ -40,7 +40,23 @@ public sealed class GetTestsEndpoint : IEndpoint
 
             if (!isAdmin)
             {
-                query = query.Where(t => t.CreatedByUserId == actingUserId);
+                var deanDepartmentIds = await dbContext.UserDepartments
+                    .AsNoTracking()
+                    .Where(ud => ud.UserId == actingUserId && ud.RoleScope == UserDepartment.DeanRoleScope)
+                    .Select(ud => ud.DepartmentId)
+                    .Distinct()
+                    .ToArrayAsync(ct);
+
+                if (deanDepartmentIds.Length > 0)
+                {
+                    query = query.Where(t =>
+                        t.CreatedByUserId == actingUserId ||
+                        (t.DepartmentId.HasValue && deanDepartmentIds.Contains(t.DepartmentId.Value)));
+                }
+                else
+                {
+                    query = query.Where(t => t.CreatedByUserId == actingUserId);
+                }
             }
 
             if (!includeDrafts)
