@@ -13,11 +13,8 @@ public static partial class TextInputSanitizer
     private static readonly Regex ExcessiveNewlineRegex = ExcessiveNewlineRegexFactory();
     private static readonly Regex ScriptOrStyleBlockRegex = ScriptOrStyleBlockRegexFactory();
     private static readonly Regex EventHandlerAttributeRegex = EventHandlerAttributeRegexFactory();
-    private static readonly Regex InlineStyleAttributeRegex = InlineStyleAttributeRegexFactory();
-    private static readonly Regex ClassAttributeRegex = ClassAttributeRegexFactory();
     private static readonly Regex IdAttributeRegex = IdAttributeRegexFactory();
     private static readonly Regex FontTagRegex = FontTagRegexFactory();
-    private static readonly Regex SpanTagRegex = SpanTagRegexFactory();
 
     public static string SanitizeRichTextHtml(string? value, bool trimEdges = true)
     {
@@ -34,11 +31,8 @@ public static partial class TextInputSanitizer
 
         sanitized = ScriptOrStyleBlockRegex.Replace(sanitized, string.Empty);
         sanitized = EventHandlerAttributeRegex.Replace(sanitized, string.Empty);
-        sanitized = InlineStyleAttributeRegex.Replace(sanitized, string.Empty);
-        sanitized = ClassAttributeRegex.Replace(sanitized, string.Empty);
         sanitized = IdAttributeRegex.Replace(sanitized, string.Empty);
         sanitized = FontTagRegex.Replace(sanitized, string.Empty);
-        sanitized = SpanTagRegex.Replace(sanitized, string.Empty);
 
         return trimEdges ? sanitized.Trim() : sanitized;
     }
@@ -87,18 +81,10 @@ public static partial class TextInputSanitizer
     [GeneratedRegex("\\son\\w+\\s*=\\s*(\"[^\"]*\"|'[^']*'|[^\\s>]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled)]
     private static partial Regex EventHandlerAttributeRegexFactory();
 
-    [GeneratedRegex("\\sstyle\\s*=\\s*(\"[^\"]*\"|'[^']*'|[^\\s>]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled)]
-    private static partial Regex InlineStyleAttributeRegexFactory();
-
-    [GeneratedRegex("\\sclass\\s*=\\s*(\"[^\"]*\"|'[^']*'|[^\\s>]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled)]
-    private static partial Regex ClassAttributeRegexFactory();
-
     [GeneratedRegex("\\sid\\s*=\\s*(\"[^\"]*\"|'[^']*'|[^\\s>]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled)]
     private static partial Regex IdAttributeRegexFactory();
 
     [GeneratedRegex("</?font[^>]*>", RegexOptions.IgnoreCase | RegexOptions.Compiled)]
     private static partial Regex FontTagRegexFactory();
 
-    [GeneratedRegex("</?span[^>]*>", RegexOptions.IgnoreCase | RegexOptions.Compiled)]
-    private static partial Regex SpanTagRegexFactory();
 }

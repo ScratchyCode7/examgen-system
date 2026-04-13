@@ -4705,11 +4705,13 @@ const TestGeneration = () => {
                     const time = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
                     const courseName = (selectedCourse && courses.find(c => c.id === parseInt(selectedCourse))?.name) || 'Program Name';
                     const filename = `${examType}_${semester}_${schoolYear}_${courseCode}_${date}_${time}`;
+                    const katexCssHref = 'https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css';
                     
                    let examHTML = `
                       <html>
                         <head>
                           <title>Exam Paper</title>
+                          <link rel="stylesheet" href="${katexCssHref}" />
                           <style>
                             @page {
                               size: Legal portrait;
