@@ -10,18 +10,15 @@ const apiClient = axios.create({
 });
 
 const DEPARTMENT_NAME_BY_CODE = {
-  BED: 'BASIC EDUCATION',
-  SOA: 'AVIATION',
-  CAS: 'ARTS & SCIENCES',
-  CBA: 'BUSINESS & ACCOUNTANCY',
-  CCS: 'COMPUTER STUDIES',
-  CRIM: 'CRIMINOLOGY',
-  EDUC: 'EDUCATION',
-  COEA: 'ENGINEERING & ARCHITECTURE',
-  CIHM: 'INTERNATIONAL HOSPITALITY MANAGEMENT',
-  CME: 'MARITIME',
-  LJD: 'LAW/JURIS DOCTOR',
-  GRAD: 'GRADUATE SCHOOL',
+  CCS: 'College of Computer Studies',
+  CAS: 'College of Arts and Sciences',
+  CBA: 'College of Business & Accountancy',
+  EDUC: 'College of Teacher Education',
+  COEA: 'College of Engineering, Architecture & Aviation',
+  CIHM: 'College of International Hospitality Management',
+  CME: 'College of Maritime Education',
+  LJD: 'Law/Juris Doctor',
+  SOA: 'School of Aviation',
 };
 
 const normalizeDepartmentRecord = (department) => {
