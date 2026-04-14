@@ -117,6 +117,7 @@ FRONTEND_URL=https://your-frontend.vercel.app
 # Environment
 ASPNETCORE_ENVIRONMENT=Production
 ASPNETCORE_URLS=http://0.0.0.0:10000
+DOTNET_HOSTBUILDER__RELOADCONFIGONCHANGE=false
 ```
 
 **Generate a secure JWT signing key:**

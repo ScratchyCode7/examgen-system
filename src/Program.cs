@@ -14,6 +14,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using SessionOptions = Databank.Options.SessionOptions;
 
+// Render and other Linux containers can have strict inotify limits.
+// Disable host config reload-on-change before creating the builder to avoid FileSystemWatcher startup crashes.
+if (!string.Equals(Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT"), "Development", StringComparison.OrdinalIgnoreCase))
+{
+    Environment.SetEnvironmentVariable("DOTNET_HOSTBUILDER__RELOADCONFIGONCHANGE", "false");
+}
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Disable file watching on configuration to prevent inotify limit issues on container platforms like Render

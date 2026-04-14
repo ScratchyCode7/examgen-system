@@ -45,6 +45,7 @@ This will:
    FRONTEND_URL=https://your-frontend.vercel.app
    ASPNETCORE_ENVIRONMENT=Production
    ASPNETCORE_URLS=http://0.0.0.0:10000
+   DOTNET_HOSTBUILDER__RELOADCONFIGONCHANGE=false
    ```
 5. Deploy and copy backend URL
 

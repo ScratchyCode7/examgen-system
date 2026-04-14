@@ -11,6 +11,8 @@ services:
     envVars:
       - key: ASPNETCORE_ENVIRONMENT
         value: Production
+      - key: DOTNET_HOSTBUILDER__RELOADCONFIGONCHANGE
+        value: false
       - key: ASPNETCORE_URLS
         value: http://0.0.0.0:10000
       - key: ConnectionStrings__PostgresConnection

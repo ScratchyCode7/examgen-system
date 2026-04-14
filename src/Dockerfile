@@ -25,6 +25,8 @@ EXPOSE 10000
 
 # Set environment variable for URLs
 ENV ASPNETCORE_URLS=http://0.0.0.0:10000
+# Disable host config file watchers in container environments (prevents inotify limit crashes)
+ENV DOTNET_HOSTBUILDER__RELOADCONFIGONCHANGE=false
 
 # Run the application
 ENTRYPOINT ["dotnet", "src.dll"]

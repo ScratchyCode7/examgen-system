@@ -22,14 +22,15 @@
 - **Region**: Oregon (US West)
 - **Build**: Multi-stage Dockerfile
 - **Port**: 10000
-- **Environment Variables** (7 total):
+- **Environment Variables** (8 total):
   1. `ASPNETCORE_ENVIRONMENT`: Production
   2. `ASPNETCORE_URLS`: http://+:10000
-  3. `ConnectionStrings__PostgresConnection`: Neon connection string
-  4. `FRONTEND_URL`: https://test-databank-system.vercel.app
-  5. `Jwt__Audience`: TestDatabankUsers
-  6. `Jwt__Issuer`: TestDatabank
-  7. `Jwt__SigningKey`: 128-char base64 key
+   3. `DOTNET_HOSTBUILDER__RELOADCONFIGONCHANGE`: false
+   4. `ConnectionStrings__PostgresConnection`: Neon connection string
+   5. `FRONTEND_URL`: https://test-databank-system.vercel.app
+   6. `Jwt__Audience`: TestDatabankUsers
+   7. `Jwt__Issuer`: TestDatabank
+   8. `Jwt__SigningKey`: 128-char base64 key
 
 ### Database - Neon
 - **Type**: PostgreSQL 17 (Serverless)
