@@ -1659,7 +1659,7 @@ const CourseTopic = () => {
         message={
           deleteConfirmation?.type === 'course'
             ? `Delete course entry "${deleteConfirmation?.courseTitle || ''}"? This action cannot be undone.`
-            : `Delete topic "${deleteConfirmation?.topicTitle || ''}"? This action cannot be undone.`
+            : `Delete topic "${deleteConfirmation?.topicTitle || ''}"? Deleting this topic will also delete all related test questions in this topic. This action cannot be undone.`
         }
         onCancel={closeDeleteConfirmation}
         onConfirm={confirmDelete}

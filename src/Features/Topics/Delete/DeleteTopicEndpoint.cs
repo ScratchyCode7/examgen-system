@@ -16,7 +16,6 @@ public sealed class DeleteTopicEndpoint : IEndpoint
                 CancellationToken ct) =>
         {
             var topic = await dbContext.Topics
-                .Include(t => t.Questions)
                 .FirstOrDefaultAsync(t => t.Id == id, ct);
 
             if (topic is null)
@@ -42,14 +41,6 @@ public sealed class DeleteTopicEndpoint : IEndpoint
                 return TypedResults.Problem(
                     "You do not have permission to delete this topic. Request delete permission from the owner.",
                     statusCode: StatusCodes.Status403Forbidden);
-            }
-
-            // Check if topic has any questions
-            if (topic.Questions.Any())
-            {
-                return TypedResults.BadRequest(
-                    "Cannot delete topic with associated questions. " +
-                    "Please remove or reassign the questions first.");
             }
 
             dbContext.Topics.Remove(topic);
