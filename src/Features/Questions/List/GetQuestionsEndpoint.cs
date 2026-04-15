@@ -28,6 +28,7 @@ public sealed class GetQuestionsEndpoint : IEndpoint
                 .AsNoTrackingWithIdentityResolution()
                 .AsSplitQuery()
                 .Include(q => q.Options)
+                .Include(q => q.CreatedByUser)
                 .Include(q => q.QuestionImage);
 
             if (topicId.HasValue)

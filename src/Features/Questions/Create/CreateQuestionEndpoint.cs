@@ -148,6 +148,7 @@ public sealed class CreateQuestionEndpoint : IEndpoint
             // Reload question with options for response
             var createdQuestion = await dbContext.Questions
                 .Include(q => q.Options)
+                .Include(q => q.CreatedByUser)
                 .FirstAsync(q => q.Id == question.Id, ct);
 
             // Log activity
@@ -155,7 +156,7 @@ public sealed class CreateQuestionEndpoint : IEndpoint
             await loggingService.LogActivityAsync(userId, "Questions", "Created", "Question", question.Id, 
                 $"Created question: {questionTextOnly.Substring(0, Math.Min(50, questionTextOnly.Length))}...");
 
-            return TypedResults.Created($"/api/questions/{question.Id}", createdQuestion.ToResponse());
+            return TypedResults.Created($"/api/questions/{question.Id}", createdQuestion.ToResponse(canEdit: true, canDelete: true));
         }).RequireAuthorization(); // Allow all authenticated users (teachers and admins)
     }
 

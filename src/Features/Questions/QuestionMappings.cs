@@ -7,6 +7,8 @@ public static class QuestionMappings
 {
     public static QuestionResponse ToResponse(this Question question, bool canEdit = false, bool canDelete = false)
     {
+        var createdByName = BuildCreatedByName(question);
+
         QuestionImageDto? imageDto = null;
         if (question.QuestionImage != null)
         {
@@ -31,8 +33,28 @@ public static class QuestionMappings
             question.Options?.Select(o => o.ToResponse()).ToList(),
             imageDto,
             canEdit,
-            canDelete
+            canDelete,
+            createdByName
         );
+    }
+
+    private static string? BuildCreatedByName(Question question)
+    {
+        var creator = question.CreatedByUser;
+        if (creator is null)
+        {
+            return null;
+        }
+
+        var first = creator.FirstName?.Trim();
+        var last = creator.LastName?.Trim();
+        var fullName = $"{first} {last}".Trim();
+        if (!string.IsNullOrWhiteSpace(fullName))
+        {
+            return fullName;
+        }
+
+        return string.IsNullOrWhiteSpace(creator.Username) ? null : creator.Username;
     }
 }
 

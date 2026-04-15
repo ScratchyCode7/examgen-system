@@ -3169,6 +3169,8 @@ const TestEncodingAndEditing = () => {
                                                                             <td>
                                                                                 <div>{highlightMatch(`${(q.content || '').replace(/<[^>]*>?/gm, '').substring(0, 70)}...`)}</div>
                                                                                 <small style={{color: '#666'}}>Answer: {correctLetter}</small>
+                                                                                <br />
+                                                                                <small style={{color: '#666'}}>Created by: {q.createdByName || 'Unknown'}</small>
                                                                             </td>
                                                                             <td className="actions-cell">
                                                                                     {q.canEdit && (
@@ -3415,6 +3417,8 @@ const TestEncodingAndEditing = () => {
                                                                                 <td>
                                                                                     <div>{highlightMatch(`${(q.content || '').replace(/<[^>]*>?/gm, '').substring(0, 70)}...`)}</div>
                                                                                     <small style={{color: '#666'}}>Answer: {correctLetter}</small>
+                                                                                    <br />
+                                                                                    <small style={{color: '#666'}}>Created by: {q.createdByName || 'Unknown'}</small>
                                                                                 </td>
                                                                                 <td className="actions-cell">
                                                                                     {q.canEdit && (

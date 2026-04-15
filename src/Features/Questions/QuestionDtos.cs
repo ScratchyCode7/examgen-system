@@ -33,6 +33,7 @@ public sealed record QuestionResponse(
     List<OptionResponse>? Options = null,
     QuestionImageDto? Image = null,
     bool CanEdit = false,
-    bool CanDelete = false
+    bool CanDelete = false,
+    string? CreatedByName = null
 );
 

@@ -25,6 +25,7 @@ public sealed class UpdateQuestionEndpoint : IEndpoint
         {
             var question = await dbContext.Questions
                 .Include(q => q.Options)
+                .Include(q => q.CreatedByUser)
                 .Include(q => q.QuestionImage)
                 .FirstOrDefaultAsync(q => q.Id == id, ct);
             if (question is null)
@@ -44,13 +45,15 @@ public sealed class UpdateQuestionEndpoint : IEndpoint
                 new[] { id },
                 ct);
 
-            var canEdit = permission.TryGetValue(id, out var perms) && perms.CanEdit;
+            var hasResolvedPermissions = permission.TryGetValue(id, out var perms);
+            var canEdit = hasResolvedPermissions && perms.CanEdit;
             if (!canEdit)
             {
                 return TypedResults.Problem(
                     "You do not have permission to edit this question. Request edit permission from the owner.",
                     statusCode: StatusCodes.Status403Forbidden);
             }
+            var canDelete = hasResolvedPermissions && perms.CanDelete;
 
             var topicExists = await dbContext.Topics.AnyAsync(t => t.Id == request.TopicId, ct);
             if (!topicExists)
@@ -181,7 +184,7 @@ public sealed class UpdateQuestionEndpoint : IEndpoint
             await loggingService.LogActivityAsync(requesterId.Value.ToString(), "Questions", "Updated", "Question", question.Id,
                 $"Updated question: {textOnlyContent.Substring(0, Math.Min(50, textOnlyContent.Length))}...");
 
-            return TypedResults.Ok(question.ToResponse());
+            return TypedResults.Ok(question.ToResponse(canEdit: canEdit, canDelete: canDelete));
         }).RequireAuthorization(); // Allow all authenticated users (teachers and admins)
     }
 
