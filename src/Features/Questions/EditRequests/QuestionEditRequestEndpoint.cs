@@ -532,7 +532,18 @@ public sealed class QuestionEditRequestEndpoint : IEndpoint
 
         if (latestResolution is null || latestResolution.Action != RevokeAction)
         {
-            return TypedResults.Conflict(new { message = "Only revoked requests can be dismissed." });
+            dbContext.ActivityLogs.Add(new ActivityLog
+            {
+                DepartmentId = requestLog.DepartmentId,
+                UserId = currentUserId.Value,
+                Category = "Questions",
+                Action = RevokeAction,
+                EntityType = ResolutionEntityType,
+                EntityId = (int)requestId,
+                Details = "Permission revoked because request card was closed.",
+                Severity = "Warning",
+                CreatedAt = DateTime.UtcNow
+            });
         }
 
         var alreadyDismissed = await dbContext.ActivityLogs.AnyAsync(a =>

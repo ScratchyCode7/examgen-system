@@ -526,6 +526,31 @@ public sealed class TopicEditRequestEndpoint : IEndpoint
             return TypedResults.Problem("Only the topic owner or requester can dismiss this card.", statusCode: StatusCodes.Status403Forbidden);
         }
 
+        var latestResolution = await dbContext.ActivityLogs
+            .Where(a =>
+                a.EntityType == ResolutionEntityType &&
+                a.EntityId == (int)requestId &&
+                (a.Action == ApproveAction || a.Action == ApproveDeleteAction || a.Action == RejectAction || a.Action == RevokeAction))
+            .OrderByDescending(a => a.CreatedAt)
+            .ThenByDescending(a => a.Id)
+            .FirstOrDefaultAsync(ct);
+
+        if (latestResolution is null || latestResolution.Action != RevokeAction)
+        {
+            dbContext.ActivityLogs.Add(new ActivityLog
+            {
+                DepartmentId = requestLog.DepartmentId,
+                UserId = currentUserId.Value,
+                Category = "Topics",
+                Action = RevokeAction,
+                EntityType = ResolutionEntityType,
+                EntityId = (int)requestId,
+                Details = "Permission revoked because request card was closed.",
+                Severity = "Warning",
+                CreatedAt = DateTime.UtcNow
+            });
+        }
+
         var alreadyDismissed = await dbContext.ActivityLogs.AnyAsync(a =>
             a.Action == DismissAction &&
             a.EntityType == ResolutionEntityType &&
