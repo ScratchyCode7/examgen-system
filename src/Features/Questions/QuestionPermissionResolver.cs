@@ -118,6 +118,19 @@ public static class QuestionPermissionResolver
             return permissions;
         }
 
+        var isAdmin = await dbContext.Users
+            .AsNoTracking()
+            .AnyAsync(u => u.UserId == currentUserId && u.IsAdmin, ct);
+        if (isAdmin)
+        {
+            foreach (var questionId in permissions.Keys.ToList())
+            {
+                permissions[questionId] = (true, true);
+            }
+
+            return permissions;
+        }
+
         var ownerByQuestionId = await ResolveOwnerIdsAsync(dbContext, permissions.Keys.ToList(), ct);
         foreach (var (questionId, ownerId) in ownerByQuestionId)
         {
@@ -171,20 +184,69 @@ public static class QuestionPermissionResolver
                     .Distinct()
                     .ToList();
 
-                var topicPermissions = await TopicPermissionResolver.ResolvePermissionsForUserAsync(
-                    dbContext,
-                    currentUserId,
-                    topicIds,
-                    ct);
+                var topicRequestRows = await dbContext.ActivityLogs
+                    .AsNoTracking()
+                    .Where(a =>
+                        a.Action == TopicPermissionResolver.RequestAction &&
+                        a.EntityType == TopicPermissionResolver.RequestEntityType &&
+                        a.EntityId.HasValue &&
+                        topicIds.Contains(a.EntityId.Value) &&
+                        a.UserId == currentUserId &&
+                        a.Id <= int.MaxValue)
+                    .Select(a => new { RequestId = (int)a.Id, TopicId = a.EntityId!.Value })
+                    .ToListAsync(ct);
+
+                var topicRequestById = topicRequestRows.ToDictionary(row => row.RequestId, row => row.TopicId);
+                var topicRequestIds = topicRequestRows
+                    .Select(row => row.RequestId)
+                    .Distinct()
+                    .ToList();
+
+                var topicResolutionRows = await dbContext.ActivityLogs
+                    .AsNoTracking()
+                    .Where(a =>
+                        a.EntityType == TopicPermissionResolver.ResolutionEntityType &&
+                        a.EntityId.HasValue &&
+                        topicRequestIds.Contains(a.EntityId.Value) &&
+                        (a.Action == TopicPermissionResolver.ApproveEditOnlyAction ||
+                         a.Action == TopicPermissionResolver.ApproveEditDeleteAction ||
+                         a.Action == TopicPermissionResolver.RevokeAction))
+                    .Select(a => new { RequestId = a.EntityId!.Value, a.Action, a.CreatedAt, a.Id })
+                    .ToListAsync(ct);
+
+                var topicPermissionByTopicId = topicResolutionRows
+                    .Where(row => topicRequestById.ContainsKey(row.RequestId))
+                    .Select(row => new
+                    {
+                        TopicId = topicRequestById[row.RequestId],
+                        row.Action,
+                        row.CreatedAt,
+                        row.Id
+                    })
+                    .GroupBy(row => row.TopicId)
+                    .ToDictionary(
+                        group => group.Key,
+                        group => group.OrderByDescending(row => row.CreatedAt).ThenByDescending(row => row.Id).First());
 
                 foreach (var row in questionToTopicRows)
                 {
-                    if (!topicPermissions.TryGetValue(row.TopicId, out var topicPerms) || !topicPerms.CanEdit)
+                    if (!topicPermissionByTopicId.TryGetValue(row.TopicId, out var topicResolution))
                     {
                         continue;
                     }
 
-                    permissions[row.Id] = topicPerms.CanDelete ? (true, true) : (true, false);
+                    if (topicResolution.Action == TopicPermissionResolver.ApproveEditDeleteAction)
+                    {
+                        permissions[row.Id] = (true, true);
+                    }
+                    else if (topicResolution.Action == TopicPermissionResolver.ApproveEditOnlyAction)
+                    {
+                        permissions[row.Id] = (true, false);
+                    }
+                    else if (topicResolution.Action == TopicPermissionResolver.RevokeAction)
+                    {
+                        permissions[row.Id] = (false, false);
+                    }
                 }
             }
         }
