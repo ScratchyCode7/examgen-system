@@ -149,6 +149,10 @@ public sealed class TopicEditRequestEndpoint : IEndpoint
             return TypedResults.BadRequest(new { message = "Scope must be one of: inbox, sent, all." });
         }
 
+        var isAdmin = await dbContext.Users
+            .AsNoTracking()
+            .AnyAsync(u => u.UserId == currentUserId.Value && u.IsAdmin, ct);
+
         var requestLogs = await dbContext.ActivityLogs
             .AsNoTracking()
             .Where(a => a.Category == "Topics" && a.Action == RequestAction && a.EntityType == RequestEntityType && a.EntityId.HasValue && a.UserId.HasValue)
@@ -165,22 +169,25 @@ public sealed class TopicEditRequestEndpoint : IEndpoint
         var ownerByTopic = await TopicPermissionResolver.ResolveOwnerIdsAsync(dbContext, topicIds, ct);
 
         IEnumerable<ActivityLog> scopedLogs = requestLogs;
-        if (normalizedScope == "sent")
+        if (!isAdmin)
         {
-            scopedLogs = requestLogs.Where(log => log.UserId == currentUserId.Value);
-        }
-        else if (normalizedScope == "inbox")
-        {
-            scopedLogs = requestLogs.Where(log =>
-                ownerByTopic.TryGetValue(log.EntityId!.Value, out var ownerId) &&
-                ownerId == currentUserId.Value &&
-                log.UserId != currentUserId.Value);
-        }
-        else
-        {
-            scopedLogs = requestLogs.Where(log =>
-                log.UserId == currentUserId.Value ||
-                (ownerByTopic.TryGetValue(log.EntityId!.Value, out var ownerId) && ownerId == currentUserId.Value));
+            if (normalizedScope == "sent")
+            {
+                scopedLogs = requestLogs.Where(log => log.UserId == currentUserId.Value);
+            }
+            else if (normalizedScope == "inbox")
+            {
+                scopedLogs = requestLogs.Where(log =>
+                    ownerByTopic.TryGetValue(log.EntityId!.Value, out var ownerId) &&
+                    ownerId == currentUserId.Value &&
+                    log.UserId != currentUserId.Value);
+            }
+            else
+            {
+                scopedLogs = requestLogs.Where(log =>
+                    log.UserId == currentUserId.Value ||
+                    (ownerByTopic.TryGetValue(log.EntityId!.Value, out var ownerId) && ownerId == currentUserId.Value));
+            }
         }
 
         var requestList = scopedLogs.ToList();
@@ -425,6 +432,10 @@ public sealed class TopicEditRequestEndpoint : IEndpoint
             return TypedResults.Problem("Unable to determine current user.", statusCode: StatusCodes.Status401Unauthorized);
         }
 
+        var isAdmin = await dbContext.Users
+            .AsNoTracking()
+            .AnyAsync(u => u.UserId == ownerUserId.Value && u.IsAdmin, ct);
+
         var requestLog = await dbContext.ActivityLogs
             .FirstOrDefaultAsync(a =>
                 a.Id == requestId &&
@@ -441,7 +452,7 @@ public sealed class TopicEditRequestEndpoint : IEndpoint
 
         var topicId = requestLog.EntityId!.Value;
         var topicOwnerId = await GetTopicOwnerIdAsync(dbContext, topicId, ct);
-        if (!topicOwnerId.HasValue || topicOwnerId.Value != ownerUserId.Value)
+        if (!isAdmin && (!topicOwnerId.HasValue || topicOwnerId.Value != ownerUserId.Value))
         {
             return TypedResults.Problem("Only the topic owner can revoke this permission.", statusCode: StatusCodes.Status403Forbidden);
         }
