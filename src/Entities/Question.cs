@@ -21,6 +21,7 @@ public sealed class Question
 
     // Navigation
     public Topic Topic { get; set; } = null!;
+    public User? CreatedByUser { get; set; }
     public ICollection<Option> Options { get; set; } = new List<Option>();
     public ICollection<TestQuestion> TestQuestions { get; set; } = new List<TestQuestion>();
     public QuestionImage? QuestionImage { get; set; }

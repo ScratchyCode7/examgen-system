@@ -3,7 +3,10 @@ using System.Security.Claims;
 using Databank.Abstract;
 using Databank.Database;
 using Databank.Entities;
+using Databank.Features.Questions;
 using Databank.Services;
+using Databank.Features.Subjects;
+using Databank.Features.Topics;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -45,6 +48,12 @@ public sealed class UpdateUserEndpoint : IEndpoint
             {
                 return TypedResults.NotFound();
             }
+
+            var actingUserIdValue = httpContext.User.FindFirstValue(JwtRegisteredClaimNames.Sub)
+                ?? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var actingUserId = Guid.TryParse(actingUserIdValue, out var parsedActingUserId)
+                ? parsedActingUserId
+                : (Guid?)null;
 
             var normalizedUsername = request.Username?.Trim();
             var normalizedEmail = request.Email?.Trim();
@@ -132,6 +141,18 @@ public sealed class UpdateUserEndpoint : IEndpoint
                 return TypedResults.BadRequest("One or more departments do not exist.");
             }
 
+            var currentDepartmentIds = user.UserDepartments
+                .Select(ud => ud.DepartmentId)
+                .ToHashSet();
+
+            var requestedDepartmentIds = request.DepartmentIds
+                .Distinct()
+                .ToHashSet();
+
+            var removedDepartmentIds = currentDepartmentIds
+                .Where(departmentId => !requestedDepartmentIds.Contains(departmentId))
+                .ToArray();
+
             user.FirstName = request.FirstName;
             user.LastName = request.LastName;
             user.Username = normalizedUsername;
@@ -139,7 +160,7 @@ public sealed class UpdateUserEndpoint : IEndpoint
             
             // Update department assignments
             user.UserDepartments.Clear();
-            user.UserDepartments = request.DepartmentIds
+            user.UserDepartments = requestedDepartmentIds
                 .Select(deptId => new UserDepartment
                 {
                     UserId = userId,
@@ -156,10 +177,7 @@ public sealed class UpdateUserEndpoint : IEndpoint
             {
                 if (!request.IsActive.Value)
                 {
-                    var actingUserIdValue = httpContext.User.FindFirstValue(JwtRegisteredClaimNames.Sub)
-                        ?? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
-
-                    if (Guid.TryParse(actingUserIdValue, out var actingUserId) && actingUserId == userId)
+                    if (actingUserId.HasValue && actingUserId.Value == userId)
                     {
                         return TypedResults.BadRequest("Admins cannot lock their own account.");
                     }
@@ -182,15 +200,13 @@ public sealed class UpdateUserEndpoint : IEndpoint
                     return TypedResults.BadRequest("Admin password verification is required before changing a user's password.");
                 }
 
-                var requesterIdValue = httpContext.User.FindFirstValue(JwtRegisteredClaimNames.Sub)
-                    ?? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
-                if (!Guid.TryParse(requesterIdValue, out var requesterId))
+                if (!actingUserId.HasValue)
                 {
                     return TypedResults.Unauthorized();
                 }
 
                 var requestingAdmin = await dbContext.Users
-                    .FirstOrDefaultAsync(u => u.UserId == requesterId, ct);
+                    .FirstOrDefaultAsync(u => u.UserId == actingUserId.Value, ct);
 
                 if (requestingAdmin is null)
                 {
@@ -212,6 +228,16 @@ public sealed class UpdateUserEndpoint : IEndpoint
                 user.Password = passwordHasher.HashPassword(user, request.Password!);
             }
 
+            if (removedDepartmentIds.Length > 0)
+            {
+                await ResetRemovedDepartmentAccessRequestsAsync(
+                    dbContext,
+                    userId,
+                    actingUserId,
+                    removedDepartmentIds,
+                    ct);
+            }
+
             user.UpdatedAt = DateTime.UtcNow;
 
             await dbContext.SaveChangesAsync(ct);
@@ -219,5 +245,188 @@ public sealed class UpdateUserEndpoint : IEndpoint
             return TypedResults.Ok(user.ToResponse());
         }).RequireAuthorization("AdminOnly");
     }
+
+    private static async Task ResetRemovedDepartmentAccessRequestsAsync(
+        AppDbContext dbContext,
+        Guid targetUserId,
+        Guid? actingUserId,
+        IReadOnlyCollection<int> removedDepartmentIds,
+        CancellationToken ct)
+    {
+        if (removedDepartmentIds.Count == 0)
+        {
+            return;
+        }
+
+        var revokeNote = "Access reset because the user was removed from this department. Request access again if needed.";
+
+        await RevokeScopedRequestsAsync(
+            dbContext,
+            actingUserId,
+            removedDepartmentIds,
+            "Subjects",
+            SubjectPermissionResolver.ResolutionEntityType,
+            SubjectPermissionResolver.ApproveEditOnlyAction,
+            SubjectPermissionResolver.ApproveEditDeleteAction,
+            SubjectPermissionResolver.RejectAction,
+            SubjectPermissionResolver.RevokeAction,
+            requestQuery: dbContext.ActivityLogs
+                .AsNoTracking()
+                .Where(a =>
+                    a.Category == "Subjects" &&
+                    a.Action == SubjectPermissionResolver.RequestAction &&
+                    a.EntityType == SubjectPermissionResolver.RequestEntityType &&
+                    a.UserId == targetUserId &&
+                    a.EntityId.HasValue &&
+                    a.Id <= int.MaxValue)
+                .Join(
+                    dbContext.Subjects.AsNoTracking(),
+                    log => log.EntityId!.Value,
+                    subject => subject.Id,
+                    (log, subject) => new DepartmentScopedRequest((int)log.Id, subject.Course.DepartmentId)),
+            revokeNote,
+            ct);
+
+        await RevokeScopedRequestsAsync(
+            dbContext,
+            actingUserId,
+            removedDepartmentIds,
+            "Topics",
+            TopicPermissionResolver.ResolutionEntityType,
+            TopicPermissionResolver.ApproveEditOnlyAction,
+            TopicPermissionResolver.ApproveEditDeleteAction,
+            TopicPermissionResolver.RejectAction,
+            TopicPermissionResolver.RevokeAction,
+            requestQuery: dbContext.ActivityLogs
+                .AsNoTracking()
+                .Where(a =>
+                    a.Category == "Topics" &&
+                    a.Action == TopicPermissionResolver.RequestAction &&
+                    a.EntityType == TopicPermissionResolver.RequestEntityType &&
+                    a.UserId == targetUserId &&
+                    a.EntityId.HasValue &&
+                    a.Id <= int.MaxValue)
+                .Join(
+                    dbContext.Topics.AsNoTracking(),
+                    log => log.EntityId!.Value,
+                    topic => topic.Id,
+                    (log, topic) => new DepartmentScopedRequest((int)log.Id, topic.Subject.Course.DepartmentId)),
+            revokeNote,
+            ct);
+
+        await RevokeScopedRequestsAsync(
+            dbContext,
+            actingUserId,
+            removedDepartmentIds,
+            "Questions",
+            QuestionPermissionResolver.ResolutionEntityType,
+            QuestionPermissionResolver.ApproveEditOnlyAction,
+            QuestionPermissionResolver.ApproveEditDeleteAction,
+            QuestionPermissionResolver.RejectAction,
+            QuestionPermissionResolver.RevokeAction,
+            requestQuery: dbContext.ActivityLogs
+                .AsNoTracking()
+                .Where(a =>
+                    a.Category == "Questions" &&
+                    a.Action == QuestionPermissionResolver.RequestAction &&
+                    a.EntityType == QuestionPermissionResolver.RequestEntityType &&
+                    a.UserId == targetUserId &&
+                    a.EntityId.HasValue &&
+                    a.Id <= int.MaxValue)
+                .Join(
+                    dbContext.Questions.AsNoTracking(),
+                    log => log.EntityId!.Value,
+                    question => question.Id,
+                    (log, question) => new DepartmentScopedRequest((int)log.Id, question.Topic.Subject.Course.DepartmentId)),
+            revokeNote,
+            ct);
+    }
+
+    private static async Task RevokeScopedRequestsAsync(
+        AppDbContext dbContext,
+        Guid? actingUserId,
+        IReadOnlyCollection<int> removedDepartmentIds,
+        string category,
+        string resolutionEntityType,
+        string approveEditOnlyAction,
+        string approveEditDeleteAction,
+        string rejectAction,
+        string revokeAction,
+        IQueryable<DepartmentScopedRequest> requestQuery,
+        string revokeNote,
+        CancellationToken ct)
+    {
+        var scopedRequests = await requestQuery
+            .Where(request => removedDepartmentIds.Contains(request.DepartmentId))
+            .ToListAsync(ct);
+
+        if (scopedRequests.Count == 0)
+        {
+            return;
+        }
+
+        var requestIds = scopedRequests
+            .Select(request => request.RequestId)
+            .Distinct()
+            .ToList();
+
+        var latestResolutionByRequestId = await dbContext.ActivityLogs
+            .AsNoTracking()
+            .Where(a =>
+                a.EntityType == resolutionEntityType &&
+                a.EntityId.HasValue &&
+                requestIds.Contains(a.EntityId.Value) &&
+                (a.Action == approveEditOnlyAction ||
+                 a.Action == approveEditDeleteAction ||
+                 a.Action == rejectAction ||
+                 a.Action == revokeAction))
+            .Select(a => new
+            {
+                RequestId = a.EntityId!.Value,
+                a.Action,
+                a.CreatedAt,
+                a.Id
+            })
+            .ToListAsync(ct);
+
+        var latestActionByRequestId = latestResolutionByRequestId
+            .GroupBy(item => item.RequestId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.OrderByDescending(item => item.CreatedAt).ThenByDescending(item => item.Id).First().Action);
+
+        var revokeLogs = scopedRequests
+            .Where(request =>
+            {
+                if (!latestActionByRequestId.TryGetValue(request.RequestId, out var latestAction))
+                {
+                    return true;
+                }
+
+                return latestAction == approveEditOnlyAction || latestAction == approveEditDeleteAction;
+            })
+            .Select(request => new ActivityLog
+            {
+                DepartmentId = request.DepartmentId,
+                UserId = actingUserId,
+                Category = category,
+                Action = revokeAction,
+                EntityType = resolutionEntityType,
+                EntityId = request.RequestId,
+                Details = revokeNote,
+                Severity = "Warning",
+                CreatedAt = DateTime.UtcNow
+            })
+            .ToList();
+
+        if (revokeLogs.Count == 0)
+        {
+            return;
+        }
+
+        dbContext.ActivityLogs.AddRange(revokeLogs);
+    }
+
+    private sealed record DepartmentScopedRequest(int RequestId, int DepartmentId);
 }
 
