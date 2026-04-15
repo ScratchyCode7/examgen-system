@@ -442,6 +442,11 @@ const htmlToPlainText = (value) => {
     return normalizePlainText(decoder.value);
 };
 
+const normalizeQuestionDuplicateKey = (value) => normalizePlainText(htmlToPlainText(value), { trimEdges: true })
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+
 const hasImageTag = (value) => /<img\s/i.test(value || '');
 
 // -----------------
@@ -2345,6 +2350,23 @@ const TestEncodingAndEditing = () => {
             return;
         }
 
+        const incomingDuplicateKey = normalizeQuestionDuplicateKey(questionHtml);
+        const duplicateQuestion = questions.find((q) => {
+            if (editingQuestion && q.id === editingQuestion.id) {
+                return false;
+            }
+
+            return normalizeQuestionDuplicateKey(q.content) === incomingDuplicateKey;
+        });
+
+        if (duplicateQuestion) {
+            showToast({
+                message: `Duplicate question detected in this topic (Question ID ${duplicateQuestion.id}).`,
+                type: 'error'
+            });
+            return;
+        }
+
         const wasEditing = !!editingQuestion;
         const correctIndex = correctAnswer.toUpperCase().charCodeAt(0) - 65; // A=0, B=1, C=2, D=3
 
@@ -2380,14 +2402,16 @@ const TestEncodingAndEditing = () => {
                 // Update existing question
                 console.log('✏️ Updating question ID:', editingQuestion.id);
                 savedQuestion = await apiService.updateQuestion(editingQuestion.id, questionData);
-                setQuestions(questions.map(q => q.id === editingQuestion.id ? savedQuestion : q));
+                setQuestions(questions.map(q => q.id === editingQuestion.id
+                    ? { ...savedQuestion, canEdit: true, canDelete: q.canDelete ?? savedQuestion.canDelete ?? true }
+                    : q));
                 showToast({ message: `Question ID ${editingQuestion.id} updated successfully.`, type: 'success' });
             } else {
                 // Create new question
                 console.log('➕ Creating new question...');
                 savedQuestion = await apiService.createQuestion(questionData);
                 
-                setQuestions([...questions, savedQuestion]);
+                setQuestions([...questions, { ...savedQuestion, canEdit: true, canDelete: true }]);
                 showToast({ message: 'Question added successfully.', type: 'success' });
             }
             
@@ -2413,6 +2437,11 @@ const TestEncodingAndEditing = () => {
             console.error('❌ Failed to save question:', err);
             console.error('📄 Error response:', err.response?.data);
             console.error('📄 Error status:', err.response?.status);
+
+            if (Number(err?.response?.status) === 409) {
+                showToast({ message: 'Duplicate question detected in this topic.', type: 'error' });
+                return;
+            }
             
             const errorData = err.response?.data;
             const errorMessage = errorData?.message 
