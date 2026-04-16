@@ -14,8 +14,11 @@ public sealed class GetQuestionsEndpoint : IEndpoint
         app.MapGet("/api/questions", async Task<IResult> (
                 int? topicId,
                 int? subjectId,
+            int? courseId,
+            int? departmentId,
                 string? search,
                 BloomLevel? bloomLevel,
+                string? bloomGroup,
                 int pageNumber = 1,
                 int pageSize = 10,
                 AppDbContext dbContext = null!,
@@ -41,6 +44,16 @@ public sealed class GetQuestionsEndpoint : IEndpoint
                 query = query.Where(q => q.Topic.SubjectId == subjectId.Value);
             }
 
+            if (courseId.HasValue)
+            {
+                query = query.Where(q => q.Topic.Subject.CourseId == courseId.Value);
+            }
+
+            if (departmentId.HasValue)
+            {
+                query = query.Where(q => q.Topic.Subject.Course.DepartmentId == departmentId.Value);
+            }
+
             if (!string.IsNullOrWhiteSpace(search))
             {
                 query = query.Where(q => q.Content.Contains(search));
@@ -49,6 +62,22 @@ public sealed class GetQuestionsEndpoint : IEndpoint
             if (bloomLevel.HasValue)
             {
                 query = query.Where(q => q.BloomLevel == bloomLevel.Value);
+            }
+            else if (!string.IsNullOrWhiteSpace(bloomGroup))
+            {
+                var normalizedGroup = bloomGroup.Trim();
+                if (string.Equals(normalizedGroup, "RememberUnderstand", StringComparison.OrdinalIgnoreCase))
+                {
+                    query = query.Where(q => q.BloomLevel == BloomLevel.Remember || q.BloomLevel == BloomLevel.Understand);
+                }
+                else if (string.Equals(normalizedGroup, "ApplyAnalyze", StringComparison.OrdinalIgnoreCase))
+                {
+                    query = query.Where(q => q.BloomLevel == BloomLevel.Apply || q.BloomLevel == BloomLevel.Analyze);
+                }
+                else if (string.Equals(normalizedGroup, "EvaluateCreate", StringComparison.OrdinalIgnoreCase))
+                {
+                    query = query.Where(q => q.BloomLevel == BloomLevel.Evaluate || q.BloomLevel == BloomLevel.Create);
+                }
             }
 
             query = query.Where(q => q.IsActive);

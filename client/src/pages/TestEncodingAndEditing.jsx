@@ -18,6 +18,7 @@ import DropdownNavItem from '../components/DropdownNavItem';
 import BM25QuestionSearch from '../components/BM25QuestionSearch';
 import LogoutModal from '../components/LogoutModal';
 import ConfirmationModal from '../components/ConfirmationModal';
+import TransferOwnershipModal from '../components/TransferOwnershipModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useToast } from '../contexts/ToastContext';
@@ -712,6 +713,7 @@ const TestEncodingAndEditing = () => {
     const [subject, setSubject] = useState("");
     const [topic, setTopic] = useState("");
     const [bloomLevel, setBloomLevel] = useState(""); 
+    const [editingBloomFilter, setEditingBloomFilter] = useState('');
 
     const getActiveDepartmentCode = useCallback(() => {
         if (departmentCode) return departmentCode;
@@ -755,6 +757,9 @@ const TestEncodingAndEditing = () => {
     // Questions from backend
     const [questions, setQuestions] = useState([]);
     const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
+    const HISTORY_PAGE_SIZE = 10;
+    const [historyPageNumber, setHistoryPageNumber] = useState(1);
+    const [historyTotalCount, setHistoryTotalCount] = useState(0);
     
     // States for question encoding fields
     const [questionText, setQuestionText] = useState(''); 
@@ -776,6 +781,22 @@ const TestEncodingAndEditing = () => {
     const [permissionDrafts, setPermissionDrafts] = useState({});
     const [isLoadingEditRequests, setIsLoadingEditRequests] = useState(false);
     const [isResolvingEditRequest, setIsResolvingEditRequest] = useState(false);
+    const [transferQuestionModal, setTransferQuestionModal] = useState({
+        isOpen: false,
+        question: null,
+        targetUserId: '',
+        isSubmitting: false,
+    });
+    const [transferUsers, setTransferUsers] = useState([]);
+    const [isLoadingTransferUsers, setIsLoadingTransferUsers] = useState(false);
+
+    const normalizeQuestionArray = useCallback((payload) => {
+        if (Array.isArray(payload)) return payload;
+        if (Array.isArray(payload?.items)) return payload.items;
+        if (Array.isArray(payload?.data)) return payload.data;
+        if (Array.isArray(payload?.Items)) return payload.Items;
+        return [];
+    }, []);
 
     useEffect(() => {
         const requestedTab = location.state?.activeTab;
@@ -804,6 +825,48 @@ const TestEncodingAndEditing = () => {
         };
         void loadDepartments();
     }, [user, isAdmin]);
+
+    const loadTransferUsers = useCallback(async () => {
+        if (!isAdmin) {
+            setTransferUsers([]);
+            return;
+        }
+
+        try {
+            setIsLoadingTransferUsers(true);
+            const result = await apiService.getUsers(1, 500);
+            const rawUsers = Array.isArray(result)
+                ? result
+                : (Array.isArray(result?.items) ? result.items : (Array.isArray(result?.data) ? result.data : []));
+
+            const normalizedUsers = rawUsers
+                .filter((item) => item && item.userId)
+                .filter((item) => item.isActive !== false)
+                .sort((a, b) => {
+                    const left = `${a.firstName || ''} ${a.lastName || ''}`.trim().toLowerCase();
+                    const right = `${b.firstName || ''} ${b.lastName || ''}`.trim().toLowerCase();
+                    return left.localeCompare(right);
+                });
+
+            setTransferUsers(normalizedUsers);
+        } catch (err) {
+            console.error('Failed to load users for transfer modal:', err);
+            setTransferUsers([]);
+            showToast({ message: 'Failed to load users for transfer.', type: 'error' });
+        } finally {
+            setIsLoadingTransferUsers(false);
+        }
+    }, [isAdmin, showToast]);
+
+    useEffect(() => {
+        if (!isAdmin) return;
+        void loadTransferUsers();
+    }, [isAdmin, loadTransferUsers]);
+
+    useEffect(() => {
+        if (activeTab !== 'Test Question Editing') return;
+        setHistoryPageNumber(1);
+    }, [activeTab, department, course, subject, topic, editingBloomFilter]);
 
     // Auto-select department based on URL parameter
     useEffect(() => {
@@ -883,27 +946,78 @@ const TestEncodingAndEditing = () => {
         void loadTopics();
     }, [subject]);
 
-    // Load questions when topic changes
+    // Load questions for active mode:
+    // - Encoding: requires a topic selection.
+    // - Editing: department-scoped by default, then narrowed by selected filters.
     useEffect(() => {
         const loadQuestions = async () => {
-            if (!topic) {
-                setQuestions([]);
+            if (activeTab !== 'Test Question Editing') {
+                if (!topic) {
+                    setQuestions([]);
+                    setHistoryTotalCount(0);
+                    return;
+                }
+
+                try {
+                    setIsLoadingQuestions(true);
+                    const data = await apiService.getQuestionsByTopic(topic);
+                    console.log('Loaded questions for topic', topic, ':', data);
+                    setQuestions(Array.isArray(data) ? data : []);
+                    setHistoryTotalCount(Array.isArray(data) ? data.length : 0);
+                } catch (err) {
+                    console.error('Failed to load questions:', err);
+                    setQuestions([]);
+                    setHistoryTotalCount(0);
+                } finally {
+                    setIsLoadingQuestions(false);
+                }
                 return;
             }
+
+            if (!department) {
+                setQuestions([]);
+                setHistoryTotalCount(0);
+                return;
+            }
+
             try {
                 setIsLoadingQuestions(true);
-                const data = await apiService.getQuestionsByTopic(topic);
-                console.log('Loaded questions for topic', topic, ':', data);
-                setQuestions(Array.isArray(data) ? data : []);
+
+                const queryParams = {
+                    pageNumber: historyPageNumber,
+                    pageSize: HISTORY_PAGE_SIZE,
+                };
+
+                if (topic) {
+                    queryParams.topicId = Number(topic);
+                } else if (subject) {
+                    queryParams.subjectId = Number(subject);
+                } else if (course) {
+                    queryParams.courseId = Number(course);
+                } else {
+                    queryParams.departmentId = Number(department);
+                }
+
+                if (editingBloomFilter) {
+                    queryParams.bloomGroup = editingBloomFilter;
+                }
+
+                const response = await apiService.getQuestions(queryParams);
+                const items = normalizeQuestionArray(response);
+                const totalCount = Number(response?.totalCount ?? response?.TotalCount ?? items.length);
+
+                setQuestions(items);
+                setHistoryTotalCount(Number.isFinite(totalCount) ? totalCount : items.length);
             } catch (err) {
-                console.error('Failed to load questions:', err);
+                console.error('Failed to load questions for editing filters:', err);
                 setQuestions([]);
+                setHistoryTotalCount(0);
             } finally {
                 setIsLoadingQuestions(false);
             }
         };
         void loadQuestions();
-    }, [topic]);
+    }, [activeTab, department, course, subject, topic, editingBloomFilter, historyPageNumber, normalizeQuestionArray]);
 
     // --- REFACTORED RESET FUNCTIONS ---
     const resetInputContent = useCallback(() => {
@@ -1999,6 +2113,69 @@ const TestEncodingAndEditing = () => {
         setIsDeleteModalOpen(true);
     };
 
+    const handleTransferQuestionOwnership = (question) => {
+        if (!isAdmin) {
+            showToast({ message: 'Only admins can transfer ownership.', type: 'error' });
+            return;
+        }
+
+        if (transferUsers.length === 0 && !isLoadingTransferUsers) {
+            void loadTransferUsers();
+        }
+
+        setTransferQuestionModal({
+            isOpen: true,
+            question,
+            targetUserId: '',
+            isSubmitting: false,
+        });
+    };
+
+    const closeTransferQuestionOwnershipModal = () => {
+        if (transferQuestionModal.isSubmitting) return;
+        setTransferQuestionModal({
+            isOpen: false,
+            question: null,
+            targetUserId: '',
+            isSubmitting: false,
+        });
+    };
+
+    const submitTransferQuestionOwnership = async () => {
+        const targetUserId = transferQuestionModal.targetUserId.trim();
+        if (!targetUserId) {
+            showToast({ message: 'Please select a user.', type: 'error' });
+            return;
+        }
+
+        if (!transferQuestionModal.question) {
+            return;
+        }
+
+        setTransferQuestionModal((prev) => ({ ...prev, isSubmitting: true }));
+
+        try {
+            await apiService.transferQuestionOwnership(
+                transferQuestionModal.question.id,
+                targetUserId,
+                `Ownership transferred by admin ${user?.userId || 'unknown'}`
+            );
+
+            if (topic) {
+                const refreshedQuestions = await apiService.getQuestionsByTopic(topic);
+                setQuestions(Array.isArray(refreshedQuestions) ? refreshedQuestions : []);
+            }
+
+            showToast({ message: `Question #${transferQuestionModal.question.id} ownership transferred.`, type: 'success' });
+            closeTransferQuestionOwnershipModal();
+        } catch (err) {
+            console.error('Failed to transfer question ownership:', err);
+            const message = err?.response?.data?.message || err?.response?.data || 'Failed to transfer question ownership.';
+            showToast({ message, type: 'error' });
+            setTransferQuestionModal((prev) => ({ ...prev, isSubmitting: false }));
+        }
+    };
+
     const openEditRequestModal = (question) => {
         if (!question?.id) return;
         setEditRequestTargetQuestion(question);
@@ -2466,9 +2643,25 @@ const TestEncodingAndEditing = () => {
         void loadEditRequests();
     }, [activeTab, loadEditRequests]);
     
-    // Filter questions - all questions are already filtered by topic from useEffect
+    // Questions are loaded based on the active tab/filter scope.
     const filteredQuestions = questions;
-    const isFilterComplete = topic; // Need topic selected
+    const isEncodingFilterComplete = Boolean(topic);
+    const isEditingFilterReady = Boolean(department);
+    const historyTotalPages = Math.max(1, Math.ceil(historyTotalCount / HISTORY_PAGE_SIZE));
+
+    const selectedDepartmentName = departments.find((d) => d.id === Number(department))?.name || 'Selected Department';
+    const selectedProgramName = courses.find((c) => c.id === Number(course))?.name || 'Selected Program';
+    const selectedCourseName = subjects.find((s) => s.id === Number(subject))?.name || 'Selected Course';
+    const selectedTopicName = topics.find((t) => t.id === Number(topic))?.title || 'Selected Topic';
+
+    const editingScopeLabel = topic
+        ? `Topic: ${selectedTopicName}`
+        : subject
+            ? `Course: ${selectedCourseName}`
+            : course
+                ? `Program: ${selectedProgramName}`
+                : `Department: ${selectedDepartmentName}`;
+    const editingBloomFilterLabel = BLOOM_LEVELS.find((bl) => bl.value === editingBloomFilter)?.label || '';
     const normalizedSearchText = searchText.trim().toLowerCase();
 
     const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -2576,6 +2769,22 @@ const TestEncodingAndEditing = () => {
                 isLoading={isDeletingQuestion}
                 isDarkMode={isDarkMode}
                 isDanger={true}
+            />
+
+            <TransferOwnershipModal
+                isOpen={transferQuestionModal.isOpen}
+                title="Transfer Question Ownership"
+                description={`Transfer ownership of Question #${transferQuestionModal.question?.id || ''} to another user.`}
+                entityLabel="question"
+                targetUserId={transferQuestionModal.targetUserId}
+                onTargetUserIdChange={(value) => setTransferQuestionModal((prev) => ({ ...prev, targetUserId: value }))}
+                users={transferUsers}
+                usersLoading={isLoadingTransferUsers}
+                onClose={closeTransferQuestionOwnershipModal}
+                onConfirm={submitTransferQuestionOwnership}
+                confirmText="Transfer Question"
+                isLoading={transferQuestionModal.isSubmitting}
+                isDarkMode={isDarkMode}
             />
 
             {isEditRequestModalOpen && (
@@ -2986,7 +3195,7 @@ const TestEncodingAndEditing = () => {
                             )}
 
                             {/* Data Summary - ONLY SHOW IF TOPIC IS SELECTED, and uses FILTERED data */}
-                            {isFilterComplete ? (
+                            {isEncodingFilterComplete ? (
                                 <div className="data-summary-block separate-blooms-view">
                                     <h3 className="data-summary-heading">Data Summary for **{topics.find(t => t.id === Number(topic))?.title || 'Selected Topic'}**</h3> 
                                     <div className="summary-details-grid three-col-blooms">
@@ -3137,7 +3346,7 @@ const TestEncodingAndEditing = () => {
                             </div>
                             
                             {/* ############ HISTORY SECTION ############ */}
-                            {isFilterComplete && sortedBloomLevels.length > 0 && (
+                            {isEncodingFilterComplete && sortedBloomLevels.length > 0 && (
                                 <div className="history-section">
                                     <hr className="section-separator" />
                                     <h3 className="editing-list-heading history-heading">
@@ -3173,6 +3382,14 @@ const TestEncodingAndEditing = () => {
                                                                                 <small style={{color: '#666'}}>Created by: {q.createdByName || 'Unknown'}</small>
                                                                             </td>
                                                                             <td className="actions-cell">
+                                                                                    {isAdmin && (
+                                                                                        <button
+                                                                                            className="action-request"
+                                                                                            title="Transfer Ownership"
+                                                                                            onClick={() => handleTransferQuestionOwnership(q)}>
+                                                                                            <Users size={16} />
+                                                                                        </button>
+                                                                                    )}
                                                                                     {q.canEdit && (
                                                                                         <button
                                                                                             className="action-edit"
@@ -3236,6 +3453,15 @@ const TestEncodingAndEditing = () => {
                                     <select id="topic" value={topic} onChange={e=>{setTopic(e.target.value); resetInputContent();}} disabled={!subject || isLoadingTopics}>
                                         <option value="" disabled>{isLoadingTopics ? "Loading..." : subject ? "Select Topic" : "Select Course first"}</option>
                                         {topics.map(t=><option key={t.id} value={t.id}>{t.title}</option>)}
+                                    </select>
+                                </div>
+                                <div className="input-group">
+                                    <label htmlFor="editingBloomLevel">Bloom Level</label>
+                                    <select id="editingBloomLevel" value={editingBloomFilter} onChange={(e) => setEditingBloomFilter(e.target.value)}>
+                                        <option value="">All Bloom Levels</option>
+                                        {BLOOM_LEVELS.map((bl) => (
+                                            <option key={bl.id} value={bl.value}>{bl.label}</option>
+                                        ))}
                                     </select>
                                 </div>
                             </div>
@@ -3374,90 +3600,112 @@ const TestEncodingAndEditing = () => {
                             
                             {isBm25SearchActive ? (
                                 null
-                            ) : isFilterComplete ? (
-                                // --- STAGE 2: Filter is complete, show the grouped list ---
+                            ) : isEditingFilterReady ? (
+                                // --- STAGE 2: Department selected, show paginated filtered list ---
                                 <>
                                     {/* Filter Display Box */}
                                     <h3 className="editing-list-heading filter-display-box">
-                                        Questions Encoded for: **{topics.find(t => t.id === Number(topic))?.title || 'Selected Topic'}**
+                                        Questions Encoded for: **{editingScopeLabel}**{editingBloomFilterLabel ? ` | Bloom: ${editingBloomFilterLabel}` : ''}
                                     </h3>
                                     
                                     {isLoadingQuestions ? (
                                         <div className="filter-prompt">
                                             <p>Loading questions...</p>
                                         </div>
-                                    ) : sortedBloomLevels.length === 0 ? (
+                                    ) : filteredQuestions.length === 0 ? (
                                         <div className="filter-prompt no-questions no-data">
-                                            <p>No questions found for the selected Topic.</p>
+                                            <p>No questions found for the selected filter scope.</p>
                                         </div>
                                     ) : (
-                                        // Loop through sorted Bloom levels (groups)
-                                        sortedBloomLevels.map(level => {
-                                            const levelLabel = BLOOM_LEVELS.find(bl => bl.value === level)?.label || level;
-                                            return (
-                                                <div key={level} className="question-group-section">
-                                                    {/* Bloom Level Display Box */}
-                                                    <h4 className="question-type-subheader type-display-box">{levelLabel} <span className="question-count">({groupedQuestions[level].length} questions)</span></h4>
-                                                    
-                                                    <div className="question-editing-list">
-                                                        <div className="history-table-container">
-                                                            <table className="history-table">
-                                                                <thead>
-                                                                    <tr><th>ID</th><th>Question</th><th>Actions</th></tr>
-                                                                </thead>
-                                                                <tbody>
-                                                                    {groupedQuestions[level].map((q, idx) => {
-                                                                        const correctOption = q.options?.find(opt => opt.isCorrect);
-                                                                        const correctIndex = q.options?.indexOf(correctOption);
-                                                                        const correctLetter = correctIndex !== undefined ? String.fromCharCode(65 + correctIndex) : '?';
-                                                                        
-                                                                        return (
-                                                                            <tr key={q.id}>
-                                                                                <td>{q.id}</td>
-                                                                                <td>
-                                                                                    <div>{highlightMatch(`${(q.content || '').replace(/<[^>]*>?/gm, '').substring(0, 70)}...`)}</div>
-                                                                                    <small style={{color: '#666'}}>Answer: {correctLetter}</small>
-                                                                                    <br />
-                                                                                    <small style={{color: '#666'}}>Created by: {q.createdByName || 'Unknown'}</small>
-                                                                                </td>
-                                                                                <td className="actions-cell">
-                                                                                    {q.canEdit && (
-                                                                                        <button
-                                                                                            className="action-edit"
-                                                                                            title="Edit"
-                                                                                            onClick={() => handleEditQuestion(q)}>
-                                                                                            <Edit2 size={16} />
-                                                                                        </button>
-                                                                                    )}
-                                                                                    {!q.canEdit && (
-                                                                                        <button
-                                                                                            className="action-request"
-                                                                                            title="Request Edit Permission"
-                                                                                            onClick={() => openEditRequestModal(q)}
-                                                                                        >
-                                                                                            <FileText size={16} />
-                                                                                        </button>
-                                                                                    )}
-                                                                                    {q.canDelete && (
-                                                                                        <button className="action-delete" title="Delete" onClick={() => handleDeleteQuestion(q.id)}><Trash2 size={16} /></button>
-                                                                                    )}
-                                                                                </td>
-                                                                            </tr>
-                                                                        );
-                                                                    })}
-                                                                </tbody>
-                                                            </table>
-                                                        </div>
-                                                    </div>
+                                        <div className="question-group-section">
+                                            <div className="question-editing-list">
+                                                <div className="history-table-container">
+                                                    <table className="history-table">
+                                                        <thead>
+                                                            <tr><th>ID</th><th>Question</th><th>Actions</th></tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {filteredQuestions.map((q) => {
+                                                                const correctOption = q.options?.find(opt => opt.isCorrect);
+                                                                const correctIndex = q.options?.indexOf(correctOption);
+                                                                const correctLetter = correctIndex !== undefined ? String.fromCharCode(65 + correctIndex) : '?';
+
+                                                                return (
+                                                                    <tr key={q.id}>
+                                                                        <td>{q.id}</td>
+                                                                        <td>
+                                                                            <div>{highlightMatch(`${(q.content || '').replace(/<[^>]*>?/gm, '').substring(0, 70)}...`)}</div>
+                                                                            <small style={{ color: '#666' }}>
+                                                                                Answer: {correctLetter} | Bloom: {q.bloomLevel || 'N/A'}
+                                                                            </small>
+                                                                            <br />
+                                                                            <small style={{ color: '#666' }}>Created by: {q.createdByName || 'Unknown'}</small>
+                                                                        </td>
+                                                                        <td className="actions-cell">
+                                                                            {isAdmin && (
+                                                                                <button
+                                                                                    className="action-request"
+                                                                                    title="Transfer Ownership"
+                                                                                    onClick={() => handleTransferQuestionOwnership(q)}
+                                                                                >
+                                                                                    <Users size={16} />
+                                                                                </button>
+                                                                            )}
+                                                                            {q.canEdit && (
+                                                                                <button
+                                                                                    className="action-edit"
+                                                                                    title="Edit"
+                                                                                    onClick={() => handleEditQuestion(q)}>
+                                                                                    <Edit2 size={16} />
+                                                                                </button>
+                                                                            )}
+                                                                            {!q.canEdit && (
+                                                                                <button
+                                                                                    className="action-request"
+                                                                                    title="Request Edit Permission"
+                                                                                    onClick={() => openEditRequestModal(q)}
+                                                                                >
+                                                                                    <FileText size={16} />
+                                                                                </button>
+                                                                            )}
+                                                                            {q.canDelete && (
+                                                                                <button className="action-delete" title="Delete" onClick={() => handleDeleteQuestion(q.id)}><Trash2 size={16} /></button>
+                                                                            )}
+                                                                        </td>
+                                                                    </tr>
+                                                                );
+                                                            })}
+                                                        </tbody>
+                                                    </table>
                                                 </div>
-                                            );
-                                        })
+
+                                                <div className="history-pagination-bar">
+                                                    <button
+                                                        type="button"
+                                                        className="history-pagination-btn"
+                                                        onClick={() => setHistoryPageNumber((prev) => Math.max(1, prev - 1))}
+                                                        disabled={historyPageNumber <= 1 || isLoadingQuestions}
+                                                    >
+                                                        ‹
+                                                    </button>
+                                                    <span className="history-pagination-info">Page {historyPageNumber} of {historyTotalPages}</span>
+                                                    <button
+                                                        type="button"
+                                                        className="history-pagination-btn"
+                                                        onClick={() => setHistoryPageNumber((prev) => Math.min(historyTotalPages, prev + 1))}
+                                                        disabled={historyPageNumber >= historyTotalPages || isLoadingQuestions}
+                                                    >
+                                                        ›
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
                                     )}
                                 </>
                             ) : (
                                 // --- STAGE 1: Filter is incomplete, show a prompt ---
                                 <div className="filter-prompt">
-                                    <p>Please select all filters (Department, Program, Course, Topic) above to view and edit questions.</p>
+                                    <p>Please select a Department above to load questions. Program, Course, and Topic fields are optional filters.</p>
                                 </div>
                             )}
                         </div>

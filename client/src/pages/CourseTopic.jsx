@@ -9,6 +9,7 @@ import NavItem from '../components/NavItem';
 import DropdownNavItem from '../components/DropdownNavItem';
 import LogoutModal from '../components/LogoutModal';
 import ConfirmationModal from '../components/ConfirmationModal';
+import TransferOwnershipModal from '../components/TransferOwnershipModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useToast } from '../contexts/ToastContext';
@@ -85,6 +86,16 @@ const CourseTopic = () => {
   const [topicRequestsLoading, setTopicRequestsLoading] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState(null);
   const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false);
+  const [transferTopicModal, setTransferTopicModal] = useState({
+    isOpen: false,
+    subjectId: null,
+    topic: null,
+    targetUserId: '',
+    transferQuestions: false,
+    isSubmitting: false,
+  });
+  const [transferUsers, setTransferUsers] = useState([]);
+  const [isLoadingTransferUsers, setIsLoadingTransferUsers] = useState(false);
 
   // Program Creation states (for admins)
   const [showProgramForm, setShowProgramForm] = useState(false);
@@ -278,6 +289,43 @@ const CourseTopic = () => {
 
     void loadCourses();
   }, [departmentCode, departments]);
+
+  const loadTransferUsers = useCallback(async () => {
+    if (!isAdmin) {
+      setTransferUsers([]);
+      return;
+    }
+
+    try {
+      setIsLoadingTransferUsers(true);
+      const result = await apiService.getUsers(1, 500);
+      const rawUsers = Array.isArray(result)
+        ? result
+        : (Array.isArray(result?.items) ? result.items : (Array.isArray(result?.data) ? result.data : []));
+
+      const normalizedUsers = rawUsers
+        .filter((item) => item && item.userId)
+        .filter((item) => item.isActive !== false)
+        .sort((a, b) => {
+          const left = `${a.firstName || ''} ${a.lastName || ''}`.trim().toLowerCase();
+          const right = `${b.firstName || ''} ${b.lastName || ''}`.trim().toLowerCase();
+          return left.localeCompare(right);
+        });
+
+      setTransferUsers(normalizedUsers);
+    } catch (err) {
+      console.error('Failed to load users for transfer modal:', err);
+      setTransferUsers([]);
+      showToast({ message: 'Failed to load users for transfer.', type: 'error' });
+    } finally {
+      setIsLoadingTransferUsers(false);
+    }
+  }, [isAdmin, showToast]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    void loadTransferUsers();
+  }, [isAdmin, loadTransferUsers]);
 
   const refreshAccessRequests = useCallback(async (scope = topicRequestScope) => {
     try {
@@ -815,6 +863,77 @@ const CourseTopic = () => {
     });
   };
 
+  const openTransferTopicOwnershipModal = (subjectId, topic) => {
+    if (!isAdmin) {
+      showToast({ message: 'Only admins can transfer ownership.', type: 'error' });
+      return;
+    }
+
+    if (transferUsers.length === 0 && !isLoadingTransferUsers) {
+      void loadTransferUsers();
+    }
+
+    setTransferTopicModal({
+      isOpen: true,
+      subjectId,
+      topic,
+      targetUserId: '',
+      transferQuestions: false,
+      isSubmitting: false,
+    });
+  };
+
+  const closeTransferTopicOwnershipModal = () => {
+    if (transferTopicModal.isSubmitting) return;
+    setTransferTopicModal({
+      isOpen: false,
+      subjectId: null,
+      topic: null,
+      targetUserId: '',
+      transferQuestions: false,
+      isSubmitting: false,
+    });
+  };
+
+  const submitTransferTopicOwnership = async () => {
+    const targetUserId = transferTopicModal.targetUserId.trim();
+    if (!targetUserId) {
+      showToast({ message: 'Please select a user.', type: 'error' });
+      return;
+    }
+
+    if (!transferTopicModal.topic || !transferTopicModal.subjectId) {
+      return;
+    }
+
+    setTransferTopicModal((prev) => ({ ...prev, isSubmitting: true }));
+
+    try {
+      const result = await apiService.transferTopicOwnership(
+        transferTopicModal.topic.id,
+        targetUserId,
+        transferTopicModal.transferQuestions,
+        `Ownership transferred by admin ${user?.userId || 'unknown'}`
+      );
+
+      await refreshSubjectTopics(transferTopicModal.subjectId);
+
+      const questionsTransferred = Number(result?.questionsTransferred || 0);
+      showToast({
+        message: transferTopicModal.transferQuestions
+          ? `Topic ownership transferred. ${questionsTransferred} question(s) also transferred.`
+          : 'Topic ownership transferred successfully.',
+        type: 'success',
+      });
+      closeTransferTopicOwnershipModal();
+    } catch (err) {
+      console.error('Failed to transfer topic ownership:', err);
+      const message = err.response?.data?.message || err.response?.data || 'Failed to transfer topic ownership.';
+      showToast({ message, type: 'error' });
+      setTransferTopicModal((prev) => ({ ...prev, isSubmitting: false }));
+    }
+  };
+
   const handleSubmitTopicForm = async () => {
     if (editingTopic) {
       await handleUpdateTopic();
@@ -1309,7 +1428,21 @@ const CourseTopic = () => {
             {filteredHistory.map((item, index) => (
               <React.Fragment key={item.subjectId}>
                 {/* Subject Row with Manage Topics button */}
-                <div className={`history-row subject-row ${expandedSubjectsMap[item.subjectId] ? 'selected-subject-row' : ''}`} data-subject-id={item.subjectId}>
+                <div
+                  className={`history-row subject-row ${expandedSubjectsMap[item.subjectId] ? 'selected-subject-row' : ''}`}
+                  data-subject-id={item.subjectId}
+                  onClick={() => toggleSubjectExpansion(item.subjectId)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      toggleSubjectExpansion(item.subjectId);
+                    }
+                  }}
+                  aria-expanded={Boolean(expandedSubjectsMap[item.subjectId])}
+                  aria-label={`${expandedSubjectsMap[item.subjectId] ? 'Collapse' : 'Expand'} topics for ${item.courseTitle}`}
+                >
                   <span className="history-cell index">{index + 1}</span>
                   <span className="history-cell course-id">{item.courseCode}</span>
                   <span className="history-cell course-title"><strong>{item.courseTitle}</strong></span>
@@ -1318,7 +1451,10 @@ const CourseTopic = () => {
                     <div className="subject-row-actions">
                       <button 
                         className={`expand-btn ${expandedSubjectsMap[item.subjectId] ? 'expanded' : ''}`}
-                        onClick={() => toggleSubjectExpansion(item.subjectId)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          toggleSubjectExpansion(item.subjectId);
+                        }}
                         title={expandedSubjectsMap[item.subjectId] ? 'Collapse topics' : 'Manage topics'}
                         aria-label={expandedSubjectsMap[item.subjectId] ? 'Collapse topics' : 'Expand topics'}
                       >
@@ -1438,6 +1574,16 @@ const CourseTopic = () => {
                               <span className="history-cell course-title">• {topic.title}</span>
                               <span className="history-cell hours hours-cell">{topic.allocatedHours}</span>
                               <span className="history-cell actions topic-row-actions">
+                                {isAdmin && (
+                                  <button
+                                    className="topic-action-btn"
+                                    onClick={() => openTransferTopicOwnershipModal(item.subjectId, topic)}
+                                    title="Transfer topic ownership"
+                                    aria-label="Transfer topic ownership"
+                                  >
+                                    <Users size={14} />
+                                  </button>
+                                )}
                                 {topic.canEdit ? (
                                   <button
                                     className="topic-action-btn"
@@ -1517,11 +1663,31 @@ const CourseTopic = () => {
               <div className="topic-request-list">
                 {topicEditRequests.map((request) => {
                   const isOwnerOfRequest = String(request.ownerUserId || '').toLowerCase() === String(user?.userId || '').toLowerCase();
+                  const requesterName = request.requesterName || 'Unknown user';
+                  const requesterInitials = requesterName
+                    .split(' ')
+                    .filter(Boolean)
+                    .slice(0, 2)
+                    .map((part) => part.charAt(0).toUpperCase())
+                    .join('') || 'U';
+                  const requestedTargetLabel = `${request.requestType} #${request.entityId}`;
+                  const requestedAtLabel = request.requestedAt
+                    ? new Date(request.requestedAt).toLocaleString()
+                    : null;
+                  const normalizedStatus = String(request.status || '').toLowerCase();
 
                   return (
-                  <div key={`${request.requestType}-${request.requestId}`} className="topic-request-item">
+                  <div key={`${request.requestType}-${request.requestId}`} className={`topic-request-item request-status-${normalizedStatus}`}>
                     <div className="topic-request-main">
-                      <strong>{request.requesterName}</strong> requested access to {request.requestType.toLowerCase()} #{request.entityId}
+                      <div className="topic-request-identity">
+                        <span className="requester-avatar" aria-hidden="true">{requesterInitials}</span>
+                        <div className="topic-request-title-group">
+                          <p className="topic-request-title">
+                            <strong>{requesterName}</strong> requested access to <span>{requestedTargetLabel}</span>
+                          </p>
+                          {requestedAtLabel ? <span className="topic-request-time">{requestedAtLabel}</span> : null}
+                        </div>
+                      </div>
                       <div className="topic-request-main-actions">
                         <span className={`status-badge status-${request.status.toLowerCase()}`}>{request.status}</span>
                         <button
@@ -1539,24 +1705,25 @@ const CourseTopic = () => {
                       <strong>Message:</strong> {getRequestMessageText(request)}
                     </p>
                     <div className="topic-request-meta">
-                      <span>Type: {request.requestType}</span>
-                      <span>Permission: {request.permissionLevel}</span>
+                      <span className="request-meta-pill">Type: {request.requestType}</span>
+                      <span className="request-meta-pill">Permission: {request.permissionLevel}</span>
+                      {request.isMine ? <span className="request-meta-pill mine">Your Request</span> : null}
                     </div>
                     <div className="topic-request-actions">
-                      {isOwnerOfRequest && request.status !== 'Revoked' && (
-                        <button type="button" className="danger" onClick={() => handleRevokeTopicRequest(request)}>
+                      {isOwnerOfRequest && Boolean(request.canRevoke) && (
+                        <button type="button" className="danger action-revoke" onClick={() => handleRevokeTopicRequest(request)}>
                           <ShieldOff size={14} className="btn-icon" /> Revoke Access
                         </button>
                       )}
                       {request.status === 'Pending' && !request.isMine && (
                         <>
-                          <button type="button" onClick={() => handleResolveTopicRequest(request, true, false)}>
+                          <button type="button" className="action-approve" onClick={() => handleResolveTopicRequest(request, true, false)}>
                             <Check size={14} className="btn-icon" /> Approve Edit
                           </button>
-                          <button type="button" onClick={() => handleResolveTopicRequest(request, true, true)}>
+                          <button type="button" className="action-approve" onClick={() => handleResolveTopicRequest(request, true, true)}>
                             <Check size={14} className="btn-icon" /> Approve Edit+Delete
                           </button>
-                          <button type="button" className="danger" onClick={() => handleResolveTopicRequest(request, false, false)}>
+                          <button type="button" className="danger action-reject" onClick={() => handleResolveTopicRequest(request, false, false)}>
                             <X size={14} className="btn-icon" /> Reject
                           </button>
                         </>
@@ -1668,6 +1835,25 @@ const CourseTopic = () => {
         isLoading={isDeleteSubmitting}
         isDarkMode={isDarkMode}
         isDanger
+      />
+
+      <TransferOwnershipModal
+        isOpen={transferTopicModal.isOpen}
+        title="Transfer Topic Ownership"
+        description={`Transfer ownership of topic "${transferTopicModal.topic?.title || ''}" to another user.`}
+        entityLabel="questions"
+        targetUserId={transferTopicModal.targetUserId}
+        onTargetUserIdChange={(value) => setTransferTopicModal((prev) => ({ ...prev, targetUserId: value }))}
+        users={transferUsers}
+        usersLoading={isLoadingTransferUsers}
+        onClose={closeTransferTopicOwnershipModal}
+        onConfirm={submitTransferTopicOwnership}
+        confirmText="Transfer Topic"
+        isLoading={transferTopicModal.isSubmitting}
+        isDarkMode={isDarkMode}
+        showTransferChildrenOption
+        transferChildren={transferTopicModal.transferQuestions}
+        onTransferChildrenChange={(checked) => setTransferTopicModal((prev) => ({ ...prev, transferQuestions: checked }))}
       />
     </div>
   );

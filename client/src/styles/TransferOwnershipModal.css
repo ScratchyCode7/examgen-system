@@ -1,0 +1,87 @@
+.transfer-ownership-modal {
+  text-align: left;
+}
+
+.transfer-ownership-field {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.transfer-ownership-field label {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.transfer-ownership-modal.dark .transfer-ownership-field label,
+.dashboard.dark .transfer-ownership-modal .transfer-ownership-field label {
+  color: #e5e7eb;
+}
+
+.transfer-ownership-field input {
+  width: 100%;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  background: #f8fafc;
+  color: #111827;
+}
+
+.transfer-ownership-field select {
+  width: 100%;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  background: #f8fafc;
+  color: #111827;
+}
+
+.transfer-ownership-field input:focus {
+  outline: none;
+  border-color: #1c4da1;
+  box-shadow: 0 0 0 3px rgba(28, 77, 161, 0.15);
+}
+
+.transfer-ownership-field select:focus {
+  outline: none;
+  border-color: #1c4da1;
+  box-shadow: 0 0 0 3px rgba(28, 77, 161, 0.15);
+}
+
+.transfer-ownership-modal.dark .transfer-ownership-field input,
+.dashboard.dark .transfer-ownership-modal .transfer-ownership-field input {
+  background: #0f172a;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+.transfer-ownership-modal.dark .transfer-ownership-field select,
+.dashboard.dark .transfer-ownership-modal .transfer-ownership-field select {
+  background: #0f172a;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+.transfer-ownership-checkbox {
+  margin-top: 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #334155;
+  font-size: 0.92rem;
+}
+
+.transfer-ownership-modal.dark .transfer-ownership-checkbox,
+.dashboard.dark .transfer-ownership-modal .transfer-ownership-checkbox {
+  color: #cbd5e1;
+}
+
+.transfer-ownership-checkbox input {
+  width: 16px;
+  height: 16px;
+  accent-color: #1c4da1;
+}

@@ -221,7 +221,11 @@ export const apiService = {
     if (params.pageNumber) queryParams.append('pageNumber', params.pageNumber);
     if (params.pageSize) queryParams.append('pageSize', params.pageSize);
     if (params.testId) queryParams.append('testId', params.testId);
+    if (params.topicId) queryParams.append('topicId', params.topicId);
     if (params.subjectId) queryParams.append('subjectId', params.subjectId);
+    if (params.courseId) queryParams.append('courseId', params.courseId);
+    if (params.departmentId) queryParams.append('departmentId', params.departmentId);
+    if (params.bloomGroup) queryParams.append('bloomGroup', params.bloomGroup);
     if (params.search) queryParams.append('search', params.search);
     if (params.difficulty) queryParams.append('difficulty', params.difficulty);
     if (params.category) queryParams.append('category', params.category);
@@ -280,6 +284,14 @@ export const apiService = {
 
   dismissQuestionEditRequest: async (requestId) => {
     const response = await apiClient.post(`/api/questions/edit-requests/${requestId}/dismiss`);
+    return response.data;
+  },
+
+  transferQuestionOwnership: async (questionId, targetUserId, note = '') => {
+    const response = await apiClient.post(`/api/questions/${questionId}/transfer-ownership`, {
+      targetUserId,
+      note,
+    });
     return response.data;
   },
 
@@ -494,6 +506,15 @@ export const apiService = {
 
   dismissTopicEditRequest: async (requestId) => {
     const response = await apiClient.post(`/api/topics/edit-requests/${requestId}/dismiss`);
+    return response.data;
+  },
+
+  transferTopicOwnership: async (topicId, targetUserId, transferQuestions = false, note = '') => {
+    const response = await apiClient.post(`/api/topics/${topicId}/transfer-ownership`, {
+      targetUserId,
+      transferQuestions,
+      note,
+    });
     return response.data;
   },
 

@@ -32,6 +32,12 @@ public sealed record UpdateTopicRequest(
     bool? IsActive
 );
 
+public sealed record TransferTopicOwnershipRequest(
+    Guid TargetUserId,
+    bool TransferQuestions = false,
+    string? Note = null
+);
+
 public static class TopicMappings
 {
     public static TopicResponse ToResponse(this Topic topic, bool canEdit = false, bool canDelete = false)

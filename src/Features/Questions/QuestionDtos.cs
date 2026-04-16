@@ -13,6 +13,11 @@ public sealed record QuestionRequest(
     List<OptionRequest>? Options = null
 );
 
+public sealed record TransferQuestionOwnershipRequest(
+    Guid TargetUserId,
+    string? Note = null
+);
+
 public sealed record QuestionImageDto(
     int Id,
     string ImagePath,

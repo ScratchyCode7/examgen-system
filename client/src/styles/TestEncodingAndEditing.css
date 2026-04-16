@@ -1188,7 +1188,7 @@
 
 /* 🚀 NEW: Two-column filter specifically for the Editing View (Subject & Topic) */
 .selection-fields.two-col-filter {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 20px;
 }
 
@@ -2235,6 +2235,49 @@
     background-color: var(--background-hover);
 }
 
+.history-pagination-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin: 8px auto 0;
+    width: max-content;
+}
+
+.history-pagination-info {
+    text-align: center;
+    font-weight: 700;
+    color: #334155;
+    min-width: 140px;
+}
+
+.history-pagination-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #1c4da1;
+    font-size: 1.25rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.history-pagination-btn:hover:not(:disabled) {
+    background: #1c4da1;
+    border-color: #1c4da1;
+    color: #ffffff;
+}
+
+.history-pagination-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
 /* ======================================= */
 /* ========== DARK MODE ADJUSTMENTS ====== */
 /* ======================================= */
@@ -2253,6 +2296,22 @@
 }
 .dark .question-editing-list .actions-cell button:hover {
     background-color: var(--dark-background-hover);
+}
+
+.dark .history-pagination-info {
+    color: #cbd5e1;
+}
+
+.dark .history-pagination-btn {
+    background: #0f172a;
+    border-color: #334155;
+    color: #93c5fd;
+}
+
+.dark .history-pagination-btn:hover:not(:disabled) {
+    background: #1d4ed8;
+    border-color: #1d4ed8;
+    color: #ffffff;
 }
 
 /* Force zero gap between bloom heading and table header */
