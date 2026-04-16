@@ -3,7 +3,7 @@
 // - Replaced mock data with real API calls
 // - Implemented save/update/delete functionality with backend
 // - Uses Bloom's taxonomy levels from backend
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
@@ -778,6 +778,8 @@ const TestEncodingAndEditing = () => {
     const [isSubmittingEditRequest, setIsSubmittingEditRequest] = useState(false);
     const [inboxEditRequests, setInboxEditRequests] = useState([]);
     const [sentEditRequests, setSentEditRequests] = useState([]);
+    const [inboxRequestPageNumber, setInboxRequestPageNumber] = useState(1);
+    const [sentRequestPageNumber, setSentRequestPageNumber] = useState(1);
     const [permissionDrafts, setPermissionDrafts] = useState({});
     const [isLoadingEditRequests, setIsLoadingEditRequests] = useState(false);
     const [isResolvingEditRequest, setIsResolvingEditRequest] = useState(false);
@@ -787,6 +789,7 @@ const TestEncodingAndEditing = () => {
         targetUserId: '',
         isSubmitting: false,
     });
+    const EDIT_REQUESTS_PAGE_SIZE = 5;
     const [transferUsers, setTransferUsers] = useState([]);
     const [isLoadingTransferUsers, setIsLoadingTransferUsers] = useState(false);
 
@@ -2642,6 +2645,62 @@ const TestEncodingAndEditing = () => {
         if (activeTab !== 'Test Question Editing') return;
         void loadEditRequests();
     }, [activeTab, loadEditRequests]);
+
+    const getRequestPriority = useCallback((request) => {
+        const status = String(request?.status || '').toLowerCase();
+        const hasAccess = request?.canRevoke
+            || request?.permissionLevel === 'EditOnly'
+            || request?.permissionLevel === 'EditDelete'
+            || status === 'approved';
+
+        if (hasAccess) return 0;
+        if (status === 'pending') return 1;
+        if (status === 'rejected') return 2;
+        if (status === 'revoked') return 3;
+        return 4;
+    }, []);
+
+    const sortRequestsByPriority = useCallback((requests) => {
+        return [...requests].sort((left, right) => {
+            const priorityDiff = getRequestPriority(left) - getRequestPriority(right);
+            if (priorityDiff !== 0) return priorityDiff;
+
+            const leftTime = new Date(left?.requestedAt || 0).getTime();
+            const rightTime = new Date(right?.requestedAt || 0).getTime();
+            return rightTime - leftTime;
+        });
+    }, [getRequestPriority]);
+
+    const sortedInboxEditRequests = useMemo(
+        () => sortRequestsByPriority(inboxEditRequests),
+        [inboxEditRequests, sortRequestsByPriority]
+    );
+
+    const sortedSentEditRequests = useMemo(
+        () => sortRequestsByPriority(sentEditRequests),
+        [sentEditRequests, sortRequestsByPriority]
+    );
+
+    const inboxRequestTotalPages = Math.max(1, Math.ceil(sortedInboxEditRequests.length / EDIT_REQUESTS_PAGE_SIZE));
+    const sentRequestTotalPages = Math.max(1, Math.ceil(sortedSentEditRequests.length / EDIT_REQUESTS_PAGE_SIZE));
+
+    const pagedInboxEditRequests = useMemo(() => {
+        const startIndex = (inboxRequestPageNumber - 1) * EDIT_REQUESTS_PAGE_SIZE;
+        return sortedInboxEditRequests.slice(startIndex, startIndex + EDIT_REQUESTS_PAGE_SIZE);
+    }, [sortedInboxEditRequests, inboxRequestPageNumber, EDIT_REQUESTS_PAGE_SIZE]);
+
+    const pagedSentEditRequests = useMemo(() => {
+        const startIndex = (sentRequestPageNumber - 1) * EDIT_REQUESTS_PAGE_SIZE;
+        return sortedSentEditRequests.slice(startIndex, startIndex + EDIT_REQUESTS_PAGE_SIZE);
+    }, [sortedSentEditRequests, sentRequestPageNumber, EDIT_REQUESTS_PAGE_SIZE]);
+
+    useEffect(() => {
+        setInboxRequestPageNumber(1);
+    }, [sortedInboxEditRequests.length]);
+
+    useEffect(() => {
+        setSentRequestPageNumber(1);
+    }, [sortedSentEditRequests.length]);
     
     // Questions are loaded based on the active tab/filter scope.
     const filteredQuestions = questions;
@@ -3483,16 +3542,34 @@ const TestEncodingAndEditing = () => {
                                 <div className="edit-requests-grid">
                                     <div className="edit-request-column">
                                         <h4>Requests To You</h4>
-                                        {!inboxEditRequests.length ? (
+                                        {!sortedInboxEditRequests.length ? (
                                             <p className="edit-request-empty">No pending requests.</p>
                                         ) : (
-                                            inboxEditRequests.map((request) => {
+                                            <>
+                                            {pagedInboxEditRequests.map((request) => {
                                                 const draft = getPermissionDraft(request);
+                                                const requesterName = request.requesterName || 'Unknown user';
+                                                const requesterInitials = requesterName
+                                                    .split(' ')
+                                                    .filter(Boolean)
+                                                    .slice(0, 2)
+                                                    .map((part) => part.charAt(0).toUpperCase())
+                                                    .join('') || 'U';
+                                                const requestedAtLabel = request.requestedAt
+                                                    ? new Date(request.requestedAt).toLocaleString()
+                                                    : null;
+                                                const normalizedStatus = String(request.status || '').toLowerCase();
 
                                                 return (
-                                                    <div key={`inbox-${request.requestId}`} className="edit-request-card compact">
+                                                    <div key={`inbox-${request.requestId}`} className={`edit-request-card compact request-status-${normalizedStatus}`}>
                                                         <div className="request-card-header">
-                                                            <p className="request-card-title">Question #{request.questionId}</p>
+                                                            <div className="topic-request-identity">
+                                                                <span className="requester-avatar" aria-hidden="true">{requesterInitials}</span>
+                                                                <div className="topic-request-title-group">
+                                                                    <p className="request-card-title"><strong>{requesterName}</strong> requested access to <span>Question #{request.questionId}</span></p>
+                                                                    {requestedAtLabel ? <span className="topic-request-time">{requestedAtLabel}</span> : null}
+                                                                </div>
+                                                            </div>
                                                             <div className="request-card-header-actions">
                                                                 <span className={`request-status-badge status-${String(request.status || '').toLowerCase()}`}>{request.status}</span>
                                                                 <button
@@ -3507,45 +3584,47 @@ const TestEncodingAndEditing = () => {
                                                                 </button>
                                                             </div>
                                                         </div>
-                                                        <div className="request-card-meta-row">
-                                                            <p><strong>From:</strong> {request.requesterName}</p>
-                                                            <p><strong>Requested:</strong> {new Date(request.requestedAt).toLocaleDateString()}</p>
+                                                        {request.message && <p className="edit-request-message"><strong>Message:</strong> {request.message}</p>}
+                                                        <div className="topic-request-meta">
+                                                            <span className="request-meta-pill">Type: Question</span>
+                                                            <span className="request-meta-pill">Permission: {request.permissionLevel || 'None'}</span>
                                                         </div>
-                                                        {request.message && <p className="edit-request-message">{request.message}</p>}
                                                         <div className="request-card-controls">
-                                                            <div className="permission-checkboxes">
-                                                                <label>
-                                                                    <input
-                                                                        type="checkbox"
-                                                                        checked={draft.canEdit}
-                                                                        onChange={(event) => updatePermissionDraft(request, 'canEdit', event.target.checked)}
-                                                                        disabled={isResolvingEditRequest}
-                                                                    />
-                                                                    Edit
-                                                                </label>
-                                                                <label>
-                                                                    <input
-                                                                        type="checkbox"
-                                                                        checked={draft.canDelete}
-                                                                        onChange={(event) => updatePermissionDraft(request, 'canDelete', event.target.checked)}
-                                                                        disabled={isResolvingEditRequest || !draft.canEdit}
-                                                                    />
-                                                                    Delete
-                                                                </label>
-                                                            </div>
-                                                            <div className="edit-request-actions">
+                                                            {!isAdmin && (
+                                                                <div className="permission-checkboxes">
+                                                                    <label>
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={draft.canEdit}
+                                                                            onChange={(event) => updatePermissionDraft(request, 'canEdit', event.target.checked)}
+                                                                            disabled={isResolvingEditRequest}
+                                                                        />
+                                                                        Edit
+                                                                    </label>
+                                                                    <label>
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={draft.canDelete}
+                                                                            onChange={(event) => updatePermissionDraft(request, 'canDelete', event.target.checked)}
+                                                                            disabled={isResolvingEditRequest || !draft.canEdit}
+                                                                        />
+                                                                        Delete
+                                                                    </label>
+                                                                </div>
+                                                            )}
+                                                            <div className="topic-request-actions edit-request-actions">
                                                                 <button
                                                                     type="button"
-                                                                    className="revoke-request-btn"
+                                                                    className="danger action-revoke"
                                                                     onClick={() => deleteRequestForOwner(request)}
                                                                     disabled={isResolvingEditRequest}
                                                                 >
-                                                                    Delete Request
+                                                                    {isAdmin ? 'Revoke Access' : 'Delete Request'}
                                                                 </button>
-                                                                {request.status === 'Pending' && (
+                                                                {request.status === 'Pending' && !isAdmin && (
                                                                     <button
                                                                         type="button"
-                                                                        className="reject-request-btn"
+                                                                        className="danger action-reject"
                                                                         onClick={() => resolveEditRequest(request.requestId, false)}
                                                                         disabled={isResolvingEditRequest}
                                                                     >
@@ -3556,19 +3635,61 @@ const TestEncodingAndEditing = () => {
                                                         </div>
                                                     </div>
                                                 );
-                                            })
+                                            })}
+                                            {sortedInboxEditRequests.length > EDIT_REQUESTS_PAGE_SIZE ? (
+                                                <div className="history-pagination-bar">
+                                                    <button
+                                                        type="button"
+                                                        className="history-pagination-btn"
+                                                        onClick={() => setInboxRequestPageNumber((prev) => Math.max(1, prev - 1))}
+                                                        disabled={inboxRequestPageNumber <= 1 || isResolvingEditRequest}
+                                                    >
+                                                        ‹
+                                                    </button>
+                                                    <span className="history-pagination-info">Page {inboxRequestPageNumber} of {inboxRequestTotalPages}</span>
+                                                    <button
+                                                        type="button"
+                                                        className="history-pagination-btn"
+                                                        onClick={() => setInboxRequestPageNumber((prev) => Math.min(inboxRequestTotalPages, prev + 1))}
+                                                        disabled={inboxRequestPageNumber >= inboxRequestTotalPages || isResolvingEditRequest}
+                                                    >
+                                                        ›
+                                                    </button>
+                                                </div>
+                                            ) : null}
+                                            </>
                                         )}
                                     </div>
 
                                     <div className="edit-request-column">
                                         <h4>Your Requests</h4>
-                                        {!sentEditRequests.length ? (
+                                        {!sortedSentEditRequests.length ? (
                                             <p className="edit-request-empty">No requests sent yet.</p>
                                         ) : (
-                                            sentEditRequests.map((request) => (
-                                                <div key={`sent-${request.requestId}`} className="edit-request-card compact">
+                                            <>
+                                            {pagedSentEditRequests.map((request) => {
+                                                const ownerName = request.ownerName || 'Unknown user';
+                                                const ownerInitials = ownerName
+                                                    .split(' ')
+                                                    .filter(Boolean)
+                                                    .slice(0, 2)
+                                                    .map((part) => part.charAt(0).toUpperCase())
+                                                    .join('') || 'U';
+                                                const requestedAtLabel = request.requestedAt
+                                                    ? new Date(request.requestedAt).toLocaleString()
+                                                    : null;
+                                                const normalizedStatus = String(request.status || '').toLowerCase();
+
+                                                return (
+                                                <div key={`sent-${request.requestId}`} className={`edit-request-card compact request-status-${normalizedStatus}`}>
                                                     <div className="request-card-header">
-                                                        <p className="request-card-title">Question #{request.questionId}</p>
+                                                        <div className="topic-request-identity">
+                                                            <span className="requester-avatar" aria-hidden="true">{ownerInitials}</span>
+                                                            <div className="topic-request-title-group">
+                                                                <p className="request-card-title"><strong>You</strong> requested access to <span>Question #{request.questionId}</span></p>
+                                                                {requestedAtLabel ? <span className="topic-request-time">{requestedAtLabel}</span> : null}
+                                                            </div>
+                                                        </div>
                                                         <div className="request-card-header-actions">
                                                             <span className={`request-status-badge status-${String(request.status || '').toLowerCase()}`}>{request.status}</span>
                                                             <button
@@ -3583,16 +3704,38 @@ const TestEncodingAndEditing = () => {
                                                             </button>
                                                         </div>
                                                     </div>
-                                                    <div className="request-card-meta-row">
-                                                        <p><strong>Owner:</strong> {request.ownerName}</p>
-                                                        <p><strong>Requested:</strong> {new Date(request.requestedAt).toLocaleDateString()}</p>
+                                                    <div className="topic-request-meta">
+                                                        <span className="request-meta-pill">Owner: {ownerName}</span>
+                                                        {request.permissionLevel === 'EditDelete' && <span className="request-meta-pill">Permission: Edit + Delete</span>}
+                                                        {request.permissionLevel === 'EditOnly' && <span className="request-meta-pill">Permission: Edit Only</span>}
+                                                        {request.status === 'Revoked' && <span className="request-meta-pill">Permission: Revoked by owner</span>}
                                                     </div>
-                                                    {request.permissionLevel === 'EditDelete' && <p><strong>Permission:</strong> Edit + Delete</p>}
-                                                    {request.permissionLevel === 'EditOnly' && <p><strong>Permission:</strong> Edit Only</p>}
-                                                    {request.status === 'Revoked' && <p><strong>Permission:</strong> Revoked by owner</p>}
-                                                    {request.message && <p className="edit-request-message">{request.message}</p>}
+                                                    {request.message && <p className="edit-request-message"><strong>Message:</strong> {request.message}</p>}
                                                 </div>
-                                            ))
+                                                );
+                                            })}
+                                            {sortedSentEditRequests.length > EDIT_REQUESTS_PAGE_SIZE ? (
+                                                <div className="history-pagination-bar">
+                                                    <button
+                                                        type="button"
+                                                        className="history-pagination-btn"
+                                                        onClick={() => setSentRequestPageNumber((prev) => Math.max(1, prev - 1))}
+                                                        disabled={sentRequestPageNumber <= 1 || isResolvingEditRequest}
+                                                    >
+                                                        ‹
+                                                    </button>
+                                                    <span className="history-pagination-info">Page {sentRequestPageNumber} of {sentRequestTotalPages}</span>
+                                                    <button
+                                                        type="button"
+                                                        className="history-pagination-btn"
+                                                        onClick={() => setSentRequestPageNumber((prev) => Math.min(sentRequestTotalPages, prev + 1))}
+                                                        disabled={sentRequestPageNumber >= sentRequestTotalPages || isResolvingEditRequest}
+                                                    >
+                                                        ›
+                                                    </button>
+                                                </div>
+                                            ) : null}
+                                            </>
                                         )}
                                     </div>
                                 </div>

@@ -632,6 +632,10 @@
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
+.topic-input-group input::placeholder {
+  color: #b8c4d4;
+}
+
 .topic-input-group input:focus {
   outline: none;
   border-color: #1C4DA1;
@@ -721,6 +725,10 @@
   background-color: #0b1220;
   border-color: #253047;
   color: #f8fafc;
+}
+
+.dashboard.dark .topic-input-group input::placeholder {
+  color: #7c91ad;
 }
 
 .dashboard.dark .topic-input-group input:focus {
@@ -862,6 +870,129 @@
   align-items: center;
   justify-content: space-between;
   margin-bottom: 12px;
+}
+
+.topic-requests-subtitle {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.topic-request-toolbar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.topic-admin-manage-btn {
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 9px;
+  padding: 6px 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  transition: all 0.2s ease;
+}
+
+.topic-admin-manage-btn:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+
+.topic-request-admin-dashboard {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.topic-request-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.topic-request-summary-card {
+  border: 1px solid #dbe7f5;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.topic-request-summary-card .summary-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+  font-weight: 700;
+}
+
+.topic-request-summary-card strong {
+  font-size: 22px;
+  color: #1e293b;
+  line-height: 1;
+}
+
+.topic-request-summary-card.pending {
+  border-color: #fcd38d;
+  background: #fffbeb;
+}
+
+.topic-request-summary-card.actionable {
+  border-color: #fbbf24;
+  background: #fef3c7;
+}
+
+.topic-request-summary-card.approved {
+  border-color: #86efac;
+  background: #ecfdf3;
+}
+
+.topic-request-filter-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.topic-request-filter-group {
+  border: 1px solid #d8e4f1;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.topic-request-filter-group span {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #64748b;
+  margin: 0 4px;
+}
+
+.topic-request-filter-group button {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  border-radius: 999px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-weight: 600;
+  color: #334155;
+}
+
+.topic-request-filter-group button.active {
+  border-color: #1c4da1;
+  background: #1c4da1;
+  color: #ffffff;
 }
 
 .topic-request-scope {
@@ -1078,6 +1209,49 @@
   background: #fff7ed;
 }
 
+.topic-requests-panel .history-pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 10px auto 0;
+  width: max-content;
+}
+
+.topic-requests-panel .history-pagination-info {
+  text-align: center;
+  font-weight: 700;
+  color: #334155;
+  min-width: 140px;
+}
+
+.topic-requests-panel .history-pagination-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #1c4da1;
+  font-size: 1.25rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.topic-requests-panel .history-pagination-btn:hover:not(:disabled) {
+  background: #1c4da1;
+  border-color: #1c4da1;
+  color: #ffffff;
+}
+
+.topic-requests-panel .history-pagination-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .status-badge {
   border-radius: 999px;
   padding: 2px 8px;
@@ -1125,6 +1299,70 @@
 .dashboard.dark .topic-requests-panel {
   background: #101926;
   border-color: #334155;
+}
+
+.dashboard.dark .topic-requests-subtitle {
+  color: #94a3b8;
+}
+
+.dashboard.dark .topic-admin-manage-btn {
+  border-color: #365b8e;
+  background: #10243f;
+  color: #bfdbfe;
+}
+
+.dashboard.dark .topic-admin-manage-btn:hover {
+  background: #163056;
+  border-color: #4b78c0;
+}
+
+.dashboard.dark .topic-request-summary-card {
+  border-color: #334155;
+  background: #0f172a;
+}
+
+.dashboard.dark .topic-request-summary-card .summary-label {
+  color: #94a3b8;
+}
+
+.dashboard.dark .topic-request-summary-card strong {
+  color: #e2e8f0;
+}
+
+.dashboard.dark .topic-request-summary-card.pending {
+  border-color: #9a3412;
+  background: #3f2b17;
+}
+
+.dashboard.dark .topic-request-summary-card.actionable {
+  border-color: #f59e0b;
+  background: #422d10;
+}
+
+.dashboard.dark .topic-request-summary-card.approved {
+  border-color: #15803d;
+  background: #0f2f24;
+}
+
+.dashboard.dark .topic-request-filter-group {
+  border-color: #334155;
+  background: #0f172a;
+}
+
+.dashboard.dark .topic-request-filter-group span {
+  color: #94a3b8;
+}
+
+.dashboard.dark .topic-request-filter-group button {
+  border-color: #334155;
+  background: #14202b;
+  color: #cbd5e1;
+}
+
+.dashboard.dark .topic-request-filter-group button.active {
+  border-color: #facc15;
+  background: #facc15;
+  color: #1c4da1;
 }
 
 .dashboard.dark .topic-request-message,
@@ -1182,6 +1420,22 @@
 
 .dashboard.dark .topic-request-actions .action-revoke {
   background: rgba(245, 158, 11, 0.2);
+}
+
+.dashboard.dark .topic-requests-panel .history-pagination-info {
+  color: #cbd5e1;
+}
+
+.dashboard.dark .topic-requests-panel .history-pagination-btn {
+  background: #0f172a;
+  border-color: #334155;
+  color: #93c5fd;
+}
+
+.dashboard.dark .topic-requests-panel .history-pagination-btn:hover:not(:disabled) {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #ffffff;
 }
 
 .dashboard.dark .topic-request-scope button.active {
@@ -1295,6 +1549,29 @@
 
   .topic-request-main-actions {
     justify-content: space-between;
+  }
+
+  .topic-requests-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .topic-request-toolbar-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .topic-admin-manage-btn {
+    justify-content: center;
+  }
+
+  .topic-request-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .topic-request-filter-group {
+    width: 100%;
   }
 
   .history-row {

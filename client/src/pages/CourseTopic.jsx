@@ -84,6 +84,9 @@ const CourseTopic = () => {
   const [topicRequestScope, setTopicRequestScope] = useState('inbox');
   const [topicEditRequests, setTopicEditRequests] = useState([]);
   const [topicRequestsLoading, setTopicRequestsLoading] = useState(false);
+  const [topicRequestPageNumber, setTopicRequestPageNumber] = useState(1);
+  const [adminRequestStatusFilter, setAdminRequestStatusFilter] = useState('all');
+  const [adminRequestTypeFilter, setAdminRequestTypeFilter] = useState('all');
   const [deleteConfirmation, setDeleteConfirmation] = useState(null);
   const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false);
   const [transferTopicModal, setTransferTopicModal] = useState({
@@ -103,6 +106,7 @@ const CourseTopic = () => {
   const [isCreatingProgram, setIsCreatingProgram] = useState(false);
 
   const availableDataEntryItems = isAdmin ? ['Program - Topic'] : dataEntryItems;
+  const TOPIC_REQUESTS_PAGE_SIZE = 5;
 
   const isDataEntryActive = availableDataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
   const isReportsActive = reportItems.includes(activeTab) || activeTab === 'Reports';
@@ -127,6 +131,93 @@ const CourseTopic = () => {
       return searchableText.includes(normalizedSearchText);
     });
   }, [history, subjectTopicsMap, normalizedSearchText]);
+
+  const toErrorMessage = useCallback((error, fallbackMessage) => {
+    const payload = error?.response?.data;
+
+    if (typeof payload === 'string' && payload.trim()) {
+      return payload;
+    }
+
+    if (payload && typeof payload === 'object') {
+      const fromPayload = payload.message || payload.detail || payload.title;
+      if (typeof fromPayload === 'string' && fromPayload.trim()) {
+        return fromPayload;
+      }
+    }
+
+    if (typeof error?.message === 'string' && error.message.trim()) {
+      return error.message;
+    }
+
+    return fallbackMessage;
+  }, []);
+
+  const sortedTopicRequests = useMemo(() => {
+    const getPriority = (request) => {
+      const status = String(request?.status || '').toLowerCase();
+      if (request?.canRevoke || status === 'approved') return 0;
+      if (status === 'pending') return 1;
+      if (status === 'rejected') return 2;
+      if (status === 'revoked') return 3;
+      return 4;
+    };
+
+    return [...topicEditRequests].sort((left, right) => {
+      const priorityDiff = getPriority(left) - getPriority(right);
+      if (priorityDiff !== 0) return priorityDiff;
+
+      const leftTime = new Date(left?.requestedAt || 0).getTime();
+      const rightTime = new Date(right?.requestedAt || 0).getTime();
+      return rightTime - leftTime;
+    });
+  }, [topicEditRequests]);
+
+  const adminRequestSummary = useMemo(() => {
+    return sortedTopicRequests.reduce(
+      (summary, request) => {
+        const normalizedStatus = String(request?.status || '').toLowerCase();
+        summary.total += 1;
+
+        if (normalizedStatus === 'pending') summary.pending += 1;
+        if (normalizedStatus === 'approved') summary.approved += 1;
+        if (normalizedStatus === 'rejected') summary.rejected += 1;
+        if (normalizedStatus === 'revoked') summary.revoked += 1;
+        if (request?.canRevoke) summary.actionable += 1;
+
+        return summary;
+      },
+      {
+        total: 0,
+        pending: 0,
+        approved: 0,
+        rejected: 0,
+        revoked: 0,
+        actionable: 0,
+      }
+    );
+  }, [sortedTopicRequests]);
+
+  const displayedTopicRequests = useMemo(() => {
+    if (!isAdmin) return sortedTopicRequests;
+
+    return sortedTopicRequests.filter((request) => {
+      const normalizedStatus = String(request?.status || '').toLowerCase();
+      const normalizedType = String(request?.requestType || '').toLowerCase();
+
+      const matchesStatus = adminRequestStatusFilter === 'all' || normalizedStatus === adminRequestStatusFilter;
+      const matchesType = adminRequestTypeFilter === 'all' || normalizedType === adminRequestTypeFilter;
+
+      return matchesStatus && matchesType;
+    });
+  }, [sortedTopicRequests, isAdmin, adminRequestStatusFilter, adminRequestTypeFilter]);
+
+  const topicRequestTotalPages = Math.max(1, Math.ceil(displayedTopicRequests.length / TOPIC_REQUESTS_PAGE_SIZE));
+
+  const pagedTopicRequests = useMemo(() => {
+    const startIndex = (topicRequestPageNumber - 1) * TOPIC_REQUESTS_PAGE_SIZE;
+    return displayedTopicRequests.slice(startIndex, startIndex + TOPIC_REQUESTS_PAGE_SIZE);
+  }, [displayedTopicRequests, topicRequestPageNumber, TOPIC_REQUESTS_PAGE_SIZE]);
 
   const resolveDepartmentCode = () => {
     if (departmentCode) return departmentCode;
@@ -364,6 +455,21 @@ const CourseTopic = () => {
     void refreshAccessRequests(topicRequestScope);
   }, [refreshAccessRequests, topicRequestScope]);
 
+  useEffect(() => {
+    setTopicRequestPageNumber(1);
+  }, [topicRequestScope]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    setTopicRequestPageNumber(1);
+  }, [isAdmin, adminRequestStatusFilter, adminRequestTypeFilter]);
+
+  useEffect(() => {
+    if (topicRequestPageNumber > topicRequestTotalPages) {
+      setTopicRequestPageNumber(topicRequestTotalPages);
+    }
+  }, [topicRequestPageNumber, topicRequestTotalPages]);
+
   const handleUserAction = (action) => {
     setIsUserMenuOpen(false);
     if (action === 'Logout') {
@@ -488,10 +594,7 @@ const CourseTopic = () => {
         setCourseHours("");
       } catch (err) {
         console.error('Failed to save program topic:', err);
-        const message =
-          err.response?.data?.message ||
-          err.response?.data ||
-          'Failed to save program topic. Please verify your department access and try again.';
+        const message = toErrorMessage(err, 'Failed to save program topic. Please verify your department access and try again.');
         showToast({ message, type: 'error' });
       } finally {
         setIsLoading(false);
@@ -578,7 +681,7 @@ const CourseTopic = () => {
       const fallbackMessage = deleteConfirmation.type === 'course'
         ? 'Failed to delete course entry.'
         : 'Failed to delete topic.';
-      const message = err.response?.data?.message || err.response?.data || fallbackMessage;
+      const message = toErrorMessage(err, fallbackMessage);
       showToast({ message, type: 'error' });
     } finally {
       setIsDeleteSubmitting(false);
@@ -605,7 +708,7 @@ const CourseTopic = () => {
       closeSubjectEditRequestModal();
     } catch (err) {
       console.error('Failed to request course access:', err);
-      const errorMessage = err.response?.data?.message || err.response?.data || 'Failed to submit request.';
+      const errorMessage = toErrorMessage(err, 'Failed to submit request.');
       showToast({ message: errorMessage, type: 'error' });
     } finally {
       setIsSubmittingSubjectEditRequest(false);
@@ -638,7 +741,7 @@ const CourseTopic = () => {
       closeTopicEditRequestModal();
     } catch (err) {
       console.error('Failed to request topic access:', err);
-      const errorMessage = err.response?.data?.message || err.response?.data || 'Failed to submit request.';
+      const errorMessage = toErrorMessage(err, 'Failed to submit request.');
       showToast({ message: errorMessage, type: 'error' });
     } finally {
       setIsSubmittingTopicEditRequest(false);
@@ -762,10 +865,7 @@ const CourseTopic = () => {
       setTopicFormData({ title: '', allocatedHours: '' });
     } catch (err) {
       console.error('Failed to create topic:', err);
-      const message =
-        err.response?.data?.message ||
-        err.response?.data ||
-        'Failed to create topic.';
+      const message = toErrorMessage(err, 'Failed to create topic.');
       showToast({ message, type: 'error' });
     } finally {
       setTopicCreating(false);
@@ -833,7 +933,7 @@ const CourseTopic = () => {
       showToast({ message: 'Topic updated successfully.', type: 'success' });
     } catch (err) {
       console.error('Failed to update topic:', err);
-      const message = err.response?.data?.message || err.response?.data || 'Failed to update topic.';
+      const message = toErrorMessage(err, 'Failed to update topic.');
       showToast({ message, type: 'error' });
     } finally {
       setTopicCreating(false);
@@ -928,7 +1028,7 @@ const CourseTopic = () => {
       closeTransferTopicOwnershipModal();
     } catch (err) {
       console.error('Failed to transfer topic ownership:', err);
-      const message = err.response?.data?.message || err.response?.data || 'Failed to transfer topic ownership.';
+      const message = toErrorMessage(err, 'Failed to transfer topic ownership.');
       showToast({ message, type: 'error' });
       setTransferTopicModal((prev) => ({ ...prev, isSubmitting: false }));
     }
@@ -986,7 +1086,7 @@ const CourseTopic = () => {
       });
     } catch (err) {
       console.error('Failed to resolve topic request:', err);
-      const message = err.response?.data?.message || err.response?.data || 'Failed to resolve request.';
+      const message = toErrorMessage(err, 'Failed to resolve request.');
       showToast({ message, type: 'error' });
     }
   };
@@ -1003,7 +1103,7 @@ const CourseTopic = () => {
       showToast({ message: 'Permission revoked.', type: 'success' });
     } catch (err) {
       console.error('Failed to revoke topic permission:', err);
-      const message = err.response?.data?.message || err.response?.data || 'Failed to revoke permission.';
+      const message = toErrorMessage(err, 'Failed to revoke permission.');
       showToast({ message, type: 'error' });
     }
   };
@@ -1019,7 +1119,7 @@ const CourseTopic = () => {
       await refreshAccessRequests();
     } catch (err) {
       console.error('Failed to dismiss topic request:', err);
-      const message = err.response?.data?.message || err.response?.data || 'Failed to dismiss request.';
+      const message = toErrorMessage(err, 'Failed to dismiss request.');
       showToast({ message, type: 'error' });
     }
   };
@@ -1065,10 +1165,7 @@ const CourseTopic = () => {
         });
       } catch (err) {
         console.error('Failed to create program:', err);
-        const message =
-          err.response?.data?.message ||
-          err.response?.data ||
-          'Failed to create program.';
+        const message = toErrorMessage(err, 'Failed to create program.');
         showToast({ message, type: 'error' });
       } finally {
         setIsCreatingProgram(false);
@@ -1527,7 +1624,7 @@ const CourseTopic = () => {
                                   value={topicFormData.allocatedHours}
                                   onChange={(e) => setTopicFormData({...topicFormData, allocatedHours: e.target.value})}
                                   onWheel={preventNumberInputWheel}
-                                  placeholder="3"
+                                  placeholder="0"
                                 />
                                 <span className="input-hint">Total contact time reserved for this lesson.</span>
                               </div>
@@ -1629,39 +1726,139 @@ const CourseTopic = () => {
 
           <div className="topic-requests-panel">
             <div className="topic-requests-header">
-              <h4>Course & Topic Access Requests</h4>
-              <div className="topic-request-scope">
-                <button
-                  type="button"
-                  className={topicRequestScope === 'inbox' ? 'active' : ''}
-                  onClick={() => setTopicRequestScope('inbox')}
-                >
-                  Inbox
-                </button>
-                <button
-                  type="button"
-                  className={topicRequestScope === 'sent' ? 'active' : ''}
-                  onClick={() => setTopicRequestScope('sent')}
-                >
-                  Sent
-                </button>
-                <button
-                  type="button"
-                  className={topicRequestScope === 'all' ? 'active' : ''}
-                  onClick={() => setTopicRequestScope('all')}
-                >
-                  All
-                </button>
+              <div>
+                <h4>Course & Topic Access Requests</h4>
+                {isAdmin ? (
+                  <p className="topic-requests-subtitle">
+                    Admin queue for monitoring requests and revoking access across programs.
+                  </p>
+                ) : null}
+              </div>
+              <div className="topic-request-toolbar-actions">
+                {isAdmin ? (
+                  <button
+                    type="button"
+                    className="topic-admin-manage-btn"
+                    onClick={() => navigate('/admin', { state: { openUsers: true } })}
+                  >
+                    <Users size={14} className="btn-icon" /> Manage Users
+                  </button>
+                ) : null}
+                <div className="topic-request-scope">
+                  <button
+                    type="button"
+                    className={topicRequestScope === 'inbox' ? 'active' : ''}
+                    onClick={() => setTopicRequestScope('inbox')}
+                  >
+                    Inbox
+                  </button>
+                  <button
+                    type="button"
+                    className={topicRequestScope === 'sent' ? 'active' : ''}
+                    onClick={() => setTopicRequestScope('sent')}
+                  >
+                    Sent
+                  </button>
+                  <button
+                    type="button"
+                    className={topicRequestScope === 'all' ? 'active' : ''}
+                    onClick={() => setTopicRequestScope('all')}
+                  >
+                    All
+                  </button>
+                </div>
               </div>
             </div>
 
+            {isAdmin ? (
+              <div className="topic-request-admin-dashboard">
+                <div className="topic-request-summary-grid">
+                  <div className="topic-request-summary-card">
+                    <span className="summary-label">Total</span>
+                    <strong>{adminRequestSummary.total}</strong>
+                  </div>
+                  <div className="topic-request-summary-card pending">
+                    <span className="summary-label">Pending</span>
+                    <strong>{adminRequestSummary.pending}</strong>
+                  </div>
+                  <div className="topic-request-summary-card actionable">
+                    <span className="summary-label">Revokable</span>
+                    <strong>{adminRequestSummary.actionable}</strong>
+                  </div>
+                  <div className="topic-request-summary-card approved">
+                    <span className="summary-label">Approved</span>
+                    <strong>{adminRequestSummary.approved}</strong>
+                  </div>
+                </div>
+
+                <div className="topic-request-filter-row">
+                  <div className="topic-request-filter-group">
+                    <span>Status</span>
+                    <button
+                      type="button"
+                      className={adminRequestStatusFilter === 'all' ? 'active' : ''}
+                      onClick={() => setAdminRequestStatusFilter('all')}
+                    >
+                      All
+                    </button>
+                    <button
+                      type="button"
+                      className={adminRequestStatusFilter === 'pending' ? 'active' : ''}
+                      onClick={() => setAdminRequestStatusFilter('pending')}
+                    >
+                      Pending
+                    </button>
+                    <button
+                      type="button"
+                      className={adminRequestStatusFilter === 'approved' ? 'active' : ''}
+                      onClick={() => setAdminRequestStatusFilter('approved')}
+                    >
+                      Approved
+                    </button>
+                    <button
+                      type="button"
+                      className={adminRequestStatusFilter === 'rejected' ? 'active' : ''}
+                      onClick={() => setAdminRequestStatusFilter('rejected')}
+                    >
+                      Rejected
+                    </button>
+                  </div>
+                  <div className="topic-request-filter-group">
+                    <span>Type</span>
+                    <button
+                      type="button"
+                      className={adminRequestTypeFilter === 'all' ? 'active' : ''}
+                      onClick={() => setAdminRequestTypeFilter('all')}
+                    >
+                      All
+                    </button>
+                    <button
+                      type="button"
+                      className={adminRequestTypeFilter === 'course' ? 'active' : ''}
+                      onClick={() => setAdminRequestTypeFilter('course')}
+                    >
+                      Course
+                    </button>
+                    <button
+                      type="button"
+                      className={adminRequestTypeFilter === 'topic' ? 'active' : ''}
+                      onClick={() => setAdminRequestTypeFilter('topic')}
+                    >
+                      Topic
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
             {topicRequestsLoading ? (
               <p>Loading access requests...</p>
-            ) : topicEditRequests.length === 0 ? (
-              <p>No access requests found.</p>
+            ) : displayedTopicRequests.length === 0 ? (
+              <p>{isAdmin ? 'No requests match your current filters.' : 'No access requests found.'}</p>
             ) : (
+              <>
               <div className="topic-request-list">
-                {topicEditRequests.map((request) => {
+                {pagedTopicRequests.map((request) => {
                   const isOwnerOfRequest = String(request.ownerUserId || '').toLowerCase() === String(user?.userId || '').toLowerCase();
                   const requesterName = request.requesterName || 'Unknown user';
                   const requesterInitials = requesterName
@@ -1710,12 +1907,12 @@ const CourseTopic = () => {
                       {request.isMine ? <span className="request-meta-pill mine">Your Request</span> : null}
                     </div>
                     <div className="topic-request-actions">
-                      {isOwnerOfRequest && Boolean(request.canRevoke) && (
+                      {((isAdmin && Boolean(request.canRevoke)) || (!isAdmin && isOwnerOfRequest && Boolean(request.canRevoke))) && (
                         <button type="button" className="danger action-revoke" onClick={() => handleRevokeTopicRequest(request)}>
                           <ShieldOff size={14} className="btn-icon" /> Revoke Access
                         </button>
                       )}
-                      {request.status === 'Pending' && !request.isMine && (
+                      {request.status === 'Pending' && !request.isMine && !isAdmin && (
                         <>
                           <button type="button" className="action-approve" onClick={() => handleResolveTopicRequest(request, true, false)}>
                             <Check size={14} className="btn-icon" /> Approve Edit
@@ -1733,6 +1930,28 @@ const CourseTopic = () => {
                   );
                 })}
               </div>
+              {displayedTopicRequests.length > TOPIC_REQUESTS_PAGE_SIZE ? (
+                <div className="history-pagination-bar">
+                  <button
+                    type="button"
+                    className="history-pagination-btn"
+                    onClick={() => setTopicRequestPageNumber((prev) => Math.max(1, prev - 1))}
+                    disabled={topicRequestPageNumber <= 1 || topicRequestsLoading}
+                  >
+                    ‹
+                  </button>
+                  <span className="history-pagination-info">Page {topicRequestPageNumber} of {topicRequestTotalPages}</span>
+                  <button
+                    type="button"
+                    className="history-pagination-btn"
+                    onClick={() => setTopicRequestPageNumber((prev) => Math.min(topicRequestTotalPages, prev + 1))}
+                    disabled={topicRequestPageNumber >= topicRequestTotalPages || topicRequestsLoading}
+                  >
+                    ›
+                  </button>
+                </div>
+              ) : null}
+              </>
             )}
           </div>
         </div>

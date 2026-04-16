@@ -149,8 +149,12 @@ public sealed class UpdateUserEndpoint : IEndpoint
                 .Distinct()
                 .ToHashSet();
 
-            var removedDepartmentIds = currentDepartmentIds
-                .Where(departmentId => !requestedDepartmentIds.Contains(departmentId))
+            var assignmentsToRemove = user.UserDepartments
+                .Where(assignment => !requestedDepartmentIds.Contains(assignment.DepartmentId))
+                .ToArray();
+
+            var removedDepartmentIds = assignmentsToRemove
+                .Select(assignment => assignment.DepartmentId)
                 .ToArray();
 
             user.FirstName = request.FirstName;
@@ -158,15 +162,35 @@ public sealed class UpdateUserEndpoint : IEndpoint
             user.Username = normalizedUsername;
             user.Email = normalizedEmail;
             
-            // Update department assignments
-            user.UserDepartments.Clear();
-            user.UserDepartments = requestedDepartmentIds
-                .Select(deptId => new UserDepartment
-                {
-                    UserId = userId,
-                    DepartmentId = deptId
-                })
+            // Update department assignments without clearing/re-adding all rows.
+            // This avoids duplicate tracked keys and preserves per-department role scope.
+            if (assignmentsToRemove.Length > 0)
+            {
+                dbContext.UserDepartments.RemoveRange(assignmentsToRemove);
+            }
+
+            var departmentsToAdd = requestedDepartmentIds
+                .Where(departmentId => !currentDepartmentIds.Contains(departmentId))
+                .ToArray();
+
+            var retainedAssignments = user.UserDepartments
+                .Where(assignment => !removedDepartmentIds.Contains(assignment.DepartmentId))
                 .ToList();
+
+            if (departmentsToAdd.Length > 0)
+            {
+                var newAssignments = departmentsToAdd
+                    .Select(deptId => new UserDepartment
+                    {
+                        UserId = userId,
+                        DepartmentId = deptId
+                    })
+                    .ToList();
+
+                retainedAssignments.AddRange(newAssignments);
+            }
+
+            user.UserDepartments = retainedAssignments;
 
             if (request.IsAdmin.HasValue)
             {
@@ -263,7 +287,6 @@ public sealed class UpdateUserEndpoint : IEndpoint
         await RevokeScopedRequestsAsync(
             dbContext,
             actingUserId,
-            removedDepartmentIds,
             "Subjects",
             SubjectPermissionResolver.ResolutionEntityType,
             SubjectPermissionResolver.ApproveEditOnlyAction,
@@ -283,14 +306,19 @@ public sealed class UpdateUserEndpoint : IEndpoint
                     dbContext.Subjects.AsNoTracking(),
                     log => log.EntityId!.Value,
                     subject => subject.Id,
-                    (log, subject) => new DepartmentScopedRequest((int)log.Id, subject.Course.DepartmentId)),
+                    (log, subject) => new
+                    {
+                        RequestId = (int)log.Id,
+                        DepartmentId = subject.Course.DepartmentId
+                    })
+                .Where(request => removedDepartmentIds.Contains(request.DepartmentId))
+                .Select(request => new DepartmentScopedRequest(request.RequestId, request.DepartmentId)),
             revokeNote,
             ct);
 
         await RevokeScopedRequestsAsync(
             dbContext,
             actingUserId,
-            removedDepartmentIds,
             "Topics",
             TopicPermissionResolver.ResolutionEntityType,
             TopicPermissionResolver.ApproveEditOnlyAction,
@@ -310,14 +338,19 @@ public sealed class UpdateUserEndpoint : IEndpoint
                     dbContext.Topics.AsNoTracking(),
                     log => log.EntityId!.Value,
                     topic => topic.Id,
-                    (log, topic) => new DepartmentScopedRequest((int)log.Id, topic.Subject.Course.DepartmentId)),
+                    (log, topic) => new
+                    {
+                        RequestId = (int)log.Id,
+                        DepartmentId = topic.Subject.Course.DepartmentId
+                    })
+                .Where(request => removedDepartmentIds.Contains(request.DepartmentId))
+                .Select(request => new DepartmentScopedRequest(request.RequestId, request.DepartmentId)),
             revokeNote,
             ct);
 
         await RevokeScopedRequestsAsync(
             dbContext,
             actingUserId,
-            removedDepartmentIds,
             "Questions",
             QuestionPermissionResolver.ResolutionEntityType,
             QuestionPermissionResolver.ApproveEditOnlyAction,
@@ -337,7 +370,13 @@ public sealed class UpdateUserEndpoint : IEndpoint
                     dbContext.Questions.AsNoTracking(),
                     log => log.EntityId!.Value,
                     question => question.Id,
-                    (log, question) => new DepartmentScopedRequest((int)log.Id, question.Topic.Subject.Course.DepartmentId)),
+                    (log, question) => new
+                    {
+                        RequestId = (int)log.Id,
+                        DepartmentId = question.Topic.Subject.Course.DepartmentId
+                    })
+                .Where(request => removedDepartmentIds.Contains(request.DepartmentId))
+                .Select(request => new DepartmentScopedRequest(request.RequestId, request.DepartmentId)),
             revokeNote,
             ct);
     }
@@ -345,7 +384,6 @@ public sealed class UpdateUserEndpoint : IEndpoint
     private static async Task RevokeScopedRequestsAsync(
         AppDbContext dbContext,
         Guid? actingUserId,
-        IReadOnlyCollection<int> removedDepartmentIds,
         string category,
         string resolutionEntityType,
         string approveEditOnlyAction,
@@ -356,9 +394,7 @@ public sealed class UpdateUserEndpoint : IEndpoint
         string revokeNote,
         CancellationToken ct)
     {
-        var scopedRequests = await requestQuery
-            .Where(request => removedDepartmentIds.Contains(request.DepartmentId))
-            .ToListAsync(ct);
+        var scopedRequests = await requestQuery.ToListAsync(ct);
 
         if (scopedRequests.Count == 0)
         {
