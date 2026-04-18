@@ -82,6 +82,7 @@ const SavedExamsReport = () => {
   const [activeTab, setActiveTab] = useState('Saved Exam Sets');
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [searchText, setSearchText] = useState('');
   const hasLoggedReportPageViewRef = useRef(false);
   const userMenuRef = useRef(null);
@@ -998,7 +999,20 @@ const SavedExamsReport = () => {
             </button>
           </div>
 
-          <div className="nav-center">
+          <button
+            type="button"
+            className="navbar-menu-toggle"
+            onClick={() => setIsMobileNavOpen((prev) => !prev)}
+            aria-label={isMobileNavOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            aria-expanded={isMobileNavOpen}
+            aria-controls="primary-navigation"
+          >
+            <span className="navbar-menu-toggle-bar" />
+            <span className="navbar-menu-toggle-bar" />
+            <span className="navbar-menu-toggle-bar" />
+          </button>
+
+          <div id="primary-navigation" className={`nav-center ${isMobileNavOpen ? 'mobile-open' : ''}`}>
             <NavItem icon={Home} label="Home" isActive={activeTab === 'Home'} onClick={() => { setActiveTab('Home'); navigate('/'); }} />
             {user?.isAdmin && (
               <NavItem

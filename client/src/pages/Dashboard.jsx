@@ -22,6 +22,7 @@ const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('Home');
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [programView, setProgramView] = useState('grid');
   const [searchText, setSearchText] = useState('');
   const [departments, setDepartments] = useState([]);
@@ -126,7 +127,20 @@ const Dashboard = () => {
             </button>
           </div>
 
-          <div className="nav-center">
+          <button
+            type="button"
+            className="navbar-menu-toggle"
+            onClick={() => setIsMobileNavOpen((prev) => !prev)}
+            aria-label={isMobileNavOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            aria-expanded={isMobileNavOpen}
+            aria-controls="primary-navigation"
+          >
+            <span className="navbar-menu-toggle-bar" />
+            <span className="navbar-menu-toggle-bar" />
+            <span className="navbar-menu-toggle-bar" />
+          </button>
+
+          <div id="primary-navigation" className={`nav-center ${isMobileNavOpen ? 'mobile-open' : ''}`}>
             <NavItem icon={Home} label="Home" isActive={activeTab === 'Home'} onClick={() => { setActiveTab('Home'); navigate('/'); }} />
             <DropdownNavItem
               icon={ClipboardList}

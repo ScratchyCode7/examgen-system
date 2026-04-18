@@ -288,9 +288,9 @@
 }
 
 .history-row.subject-row.selected-subject-row {
-  background-color: #ffe8a3;
-  border-left: 4px solid #FFC63E;
-  box-shadow: inset 0 0 0 1px rgba(255, 198, 62, 0.45);
+  border: 2px solid #FFC63E;
+  background: #FFF9E6;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
 }
 
 .history-row.topic-row {
@@ -767,9 +767,9 @@
 }
 
 .dashboard.dark .history-row.subject-row.selected-subject-row {
-  background-color: #2f4f73;
-  border-left-color: #FFC63E;
-  box-shadow: inset 0 0 0 1px rgba(255, 198, 62, 0.5);
+  border: 2px solid #FFC63E;
+  background: #1C2B45;
+  box-shadow: 0 8px 24px rgba(255, 198, 62, 0.3);
 }
 
 .dashboard.dark .topic-form-section h4 {

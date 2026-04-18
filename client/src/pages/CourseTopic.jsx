@@ -34,6 +34,7 @@ const CourseTopic = () => {
   const [activeTab, setActiveTab] = useState('Program - Topic');
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [searchText, setSearchText] = useState('');
   const userMenuRef = useRef(null);
   const departmentGridRef = useRef(null);
@@ -797,6 +798,17 @@ const CourseTopic = () => {
       setSelectedSubjectForTopic(subjectId);
       setEditingTopic(null);
       setTopicFormData({ title: '', allocatedHours: '' });
+
+      // Scroll the subject-topics-container to center of screen after expanding
+      requestAnimationFrame(() => {
+        const subjectRow = document.querySelector(`[data-subject-id="${subjectId}"]`);
+        if (subjectRow) {
+          const nextSibling = subjectRow.nextElementSibling;
+          if (nextSibling && nextSibling.classList.contains('subject-topics-container')) {
+            nextSibling.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }
+      });
     }
   };
 
@@ -1189,7 +1201,20 @@ const CourseTopic = () => {
             </button>
           </div>
 
-          <div className="nav-center">
+          <button
+            type="button"
+            className="navbar-menu-toggle"
+            onClick={() => setIsMobileNavOpen((prev) => !prev)}
+            aria-label={isMobileNavOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            aria-expanded={isMobileNavOpen}
+            aria-controls="primary-navigation"
+          >
+            <span className="navbar-menu-toggle-bar" />
+            <span className="navbar-menu-toggle-bar" />
+            <span className="navbar-menu-toggle-bar" />
+          </button>
+
+          <div id="primary-navigation" className={`nav-center ${isMobileNavOpen ? 'mobile-open' : ''}`}>
             <NavItem icon={Home} label="Home" isActive={activeTab === 'Home'} onClick={() => { setActiveTab('Home'); navigate(isAdmin ? '/admin' : '/'); }} />
             {isAdmin && (
               <NavItem
@@ -1887,15 +1912,17 @@ const CourseTopic = () => {
                       </div>
                       <div className="topic-request-main-actions">
                         <span className={`status-badge status-${request.status.toLowerCase()}`}>{request.status}</span>
-                        <button
-                          type="button"
-                          className="request-card-close-btn"
-                          onClick={() => handleDismissTopicRequest(request)}
-                          title="Close card"
-                          aria-label="Close card"
-                        >
-                          ×
-                        </button>
+                        {normalizedStatus === 'revoked' && (
+                          <button
+                            type="button"
+                            className="request-card-close-btn"
+                            onClick={() => handleDismissTopicRequest(request)}
+                            title="Close card"
+                            aria-label="Close card"
+                          >
+                            ×
+                          </button>
+                        )}
                       </div>
                     </div>
                     <p className="topic-request-message">

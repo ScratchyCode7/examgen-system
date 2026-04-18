@@ -692,6 +692,7 @@ const TestEncodingAndEditing = () => {
     const [activeTab, setActiveTab] = useState('Test Question Encoding');
     const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
     const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+    const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [pendingDeleteQuestionId, setPendingDeleteQuestionId] = useState(null);
     const [isDeletingQuestion, setIsDeletingQuestion] = useState(false);
@@ -3076,7 +3077,19 @@ const TestEncodingAndEditing = () => {
                             <span className="logo-text">TEST DATABANK</span>
                         </button>
                     </div>
-                    <div className="nav-center">
+                    <button
+                        type="button"
+                        className="navbar-menu-toggle"
+                        onClick={() => setIsMobileNavOpen((prev) => !prev)}
+                        aria-label={isMobileNavOpen ? 'Close navigation menu' : 'Open navigation menu'}
+                        aria-expanded={isMobileNavOpen}
+                        aria-controls="primary-navigation"
+                    >
+                        <span className="navbar-menu-toggle-bar" />
+                        <span className="navbar-menu-toggle-bar" />
+                        <span className="navbar-menu-toggle-bar" />
+                    </button>
+                    <div id="primary-navigation" className={`nav-center ${isMobileNavOpen ? 'mobile-open' : ''}`}>
                         <NavItem icon={Home} label="Home" isActive={activeTab==='Home'} onClick={()=>handleSetActiveTab('Home')} />
                         {user?.isAdmin && (
                             <NavItem
@@ -3429,14 +3442,19 @@ const TestEncodingAndEditing = () => {
                                                                 {groupedQuestions[level].map((q, idx) => {
                                                                     const correctOption = q.options?.find(opt => opt.isCorrect);
                                                                     const correctIndex = q.options?.indexOf(correctOption);
-                                                                    const correctLetter = correctIndex !== undefined ? String.fromCharCode(65 + correctIndex) : '?';
+                                                                    const hasValidCorrectIndex = Number.isInteger(correctIndex) && correctIndex >= 0;
+                                                                    const correctLetter = hasValidCorrectIndex ? String.fromCharCode(65 + correctIndex) : '?';
+                                                                    const correctValueRaw = correctOption?.content || correctOption?.Content || correctOption?.optionText || correctOption?.text || '';
+                                                                    const correctValue = String(correctValueRaw).replace(/<[^>]*>?/gm, '').trim();
+                                                                    const answerValuePreview = correctValue.length > 80 ? `${correctValue.substring(0, 80)}...` : correctValue;
+                                                                    const answerDisplay = answerValuePreview ? `${correctLetter} (${answerValuePreview})` : correctLetter;
                                                                     
                                                                     return (
                                                                         <tr key={q.id}>
                                                                             <td>{idx + 1}</td>
                                                                             <td>
                                                                                 <div>{highlightMatch(`${(q.content || '').replace(/<[^>]*>?/gm, '').substring(0, 70)}...`)}</div>
-                                                                                <small style={{color: '#666'}}>Answer: {correctLetter}</small>
+                                                                                <small style={{color: '#666'}}>Answer: {answerDisplay}</small>
                                                                                 <br />
                                                                                 <small style={{color: '#666'}}>Created by: {q.createdByName || 'Unknown'}</small>
                                                                             </td>
@@ -3771,7 +3789,12 @@ const TestEncodingAndEditing = () => {
                                                             {filteredQuestions.map((q) => {
                                                                 const correctOption = q.options?.find(opt => opt.isCorrect);
                                                                 const correctIndex = q.options?.indexOf(correctOption);
-                                                                const correctLetter = correctIndex !== undefined ? String.fromCharCode(65 + correctIndex) : '?';
+                                                                const hasValidCorrectIndex = Number.isInteger(correctIndex) && correctIndex >= 0;
+                                                                const correctLetter = hasValidCorrectIndex ? String.fromCharCode(65 + correctIndex) : '?';
+                                                                const correctValueRaw = correctOption?.content || correctOption?.Content || correctOption?.optionText || correctOption?.text || '';
+                                                                const correctValue = String(correctValueRaw).replace(/<[^>]*>?/gm, '').trim();
+                                                                const answerValuePreview = correctValue.length > 80 ? `${correctValue.substring(0, 80)}...` : correctValue;
+                                                                const answerDisplay = answerValuePreview ? `${correctLetter} (${answerValuePreview})` : correctLetter;
 
                                                                 return (
                                                                     <tr key={q.id}>
@@ -3779,7 +3802,7 @@ const TestEncodingAndEditing = () => {
                                                                         <td>
                                                                             <div>{highlightMatch(`${(q.content || '').replace(/<[^>]*>?/gm, '').substring(0, 70)}...`)}</div>
                                                                             <small style={{ color: '#666' }}>
-                                                                                Answer: {correctLetter} | Bloom: {q.bloomLevel || 'N/A'}
+                                                                                Answer: {answerDisplay} | Bloom: {q.bloomLevel || 'N/A'}
                                                                             </small>
                                                                             <br />
                                                                             <small style={{ color: '#666' }}>Created by: {q.createdByName || 'Unknown'}</small>

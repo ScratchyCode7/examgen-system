@@ -24,6 +24,7 @@ const ActivityLogs = () => {
   const [activeTab, setActiveTab] = useState('Activity Logs');
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const userMenuRef = useRef(null);
 
   const displayName = getUserDisplayName(user, 'Admin User');
@@ -217,7 +218,20 @@ const ActivityLogs = () => {
             </button>
           </div>
 
-          <div className="nav-center">
+          <button
+            type="button"
+            className="navbar-menu-toggle"
+            onClick={() => setIsMobileNavOpen((prev) => !prev)}
+            aria-label={isMobileNavOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            aria-expanded={isMobileNavOpen}
+            aria-controls="primary-navigation"
+          >
+            <span className="navbar-menu-toggle-bar" />
+            <span className="navbar-menu-toggle-bar" />
+            <span className="navbar-menu-toggle-bar" />
+          </button>
+
+          <div id="primary-navigation" className={`nav-center ${isMobileNavOpen ? 'mobile-open' : ''}`}>
             <NavItem 
               icon={Home} 
               label="Home" 

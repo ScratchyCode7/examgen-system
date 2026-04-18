@@ -52,7 +52,7 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.HasIndex(x => x.Email)
             .IsUnique();
 
-        builder.Property(x => x.DepartmentId)
+        builder.Property(x => x.DepartmentId)   
             .IsRequired(false);  // Made nullable for transition to UserDepartments
 
         builder.Property(x => x.IsAdmin)
