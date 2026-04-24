@@ -237,6 +237,12 @@
   margin-top: 30px;
 }
 
+.history-table-note {
+  margin: 18px 0 -18px;
+  font-size: 11px;
+  color: #6b7280;
+}
+
 .history-row {
   display: grid;
   grid-template-columns: 56px minmax(120px, 1fr) minmax(280px, 2.4fr) 130px 170px;
@@ -749,6 +755,10 @@
 
 .dashboard.dark .topics-list-section h4 {
   color: #FFC63E;
+}
+
+.dashboard.dark .history-table-note {
+  color: #94a3b8;
 }
 
 .dashboard.dark .no-topics-msg {

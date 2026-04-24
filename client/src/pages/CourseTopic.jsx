@@ -1534,6 +1534,7 @@ const CourseTopic = () => {
           </div>
 
           {/* History Table - Subject and Topic */}
+          <p className="history-table-note">To add topics, click an encoded course row below.</p>
           <div className="history-table" ref={historyTableRef}>
             <div className="history-row header">
               <span className="history-cell index">#</span>
