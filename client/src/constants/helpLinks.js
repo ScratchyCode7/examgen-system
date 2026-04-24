@@ -1,1 +1,1 @@
-export const HELP_CENTER_URL = 'https://drive.google.com/drive/folders/YOUR_HELP_CENTER_ID_HERE';
+export const HELP_CENTER_URL = 'https://drive.google.com/file/d/1UFkEjRHXY0HteWcFLkgAxnnIku7YnwN7/view';
