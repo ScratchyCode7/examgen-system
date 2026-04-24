@@ -72,6 +72,17 @@ const Dashboard = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth > 992) {
+        setIsMobileNavOpen(false);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const handleUserAction = (action) => {
     setIsUserMenuOpen(false);
     if (action === 'Logout') {
@@ -121,24 +132,23 @@ const Dashboard = () => {
       <div className="main-container">
         <nav className={`navbar ${isDarkMode ? 'dark' : ''}`}>
           <div className="nav-left">
+            <button
+              className={`navbar-menu-toggle ${isMobileNavOpen ? 'open' : ''}`}
+              aria-label="Toggle navigation menu"
+              aria-expanded={isMobileNavOpen}
+              aria-controls="primary-navigation"
+              onClick={() => setIsMobileNavOpen((prev) => !prev)}
+            >
+              <span />
+              <span />
+              <span />
+            </button>
+
             <button onClick={() => { setActiveTab('Home'); navigate('/'); }} className="logo-btn">
               <img src={TDBLogo} alt="TDB Logo" className="logo" />
               <span className="logo-text">TEST DATABANK</span>
             </button>
           </div>
-
-          <button
-            type="button"
-            className="navbar-menu-toggle"
-            onClick={() => setIsMobileNavOpen((prev) => !prev)}
-            aria-label={isMobileNavOpen ? 'Close navigation menu' : 'Open navigation menu'}
-            aria-expanded={isMobileNavOpen}
-            aria-controls="primary-navigation"
-          >
-            <span className="navbar-menu-toggle-bar" />
-            <span className="navbar-menu-toggle-bar" />
-            <span className="navbar-menu-toggle-bar" />
-          </button>
 
           <div id="primary-navigation" className={`nav-center ${isMobileNavOpen ? 'mobile-open' : ''}`}>
             <NavItem icon={Home} label="Home" isActive={activeTab === 'Home'} onClick={() => { setActiveTab('Home'); navigate('/'); }} />

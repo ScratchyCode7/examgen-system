@@ -1088,6 +1088,17 @@ const TestEncodingAndEditing = () => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [isMathPickerOpen]);
 
+    useEffect(() => {
+        const handleResize = () => {
+            if (window.innerWidth > 992) {
+                setIsMobileNavOpen(false);
+            }
+        };
+
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
     // Handle department change - update URL
     const handleDepartmentChange = (deptId) => {
         const dept = departments.find(d => d.id === Number(deptId));
@@ -3067,6 +3078,18 @@ const TestEncodingAndEditing = () => {
                 <nav className={`navbar ${isDarkMode?'dark':''}`}>
                     <div className="nav-left">
                         <button
+                            className={`navbar-menu-toggle ${isMobileNavOpen ? 'open' : ''}`}
+                            aria-label="Toggle navigation menu"
+                            aria-expanded={isMobileNavOpen}
+                            aria-controls="primary-navigation"
+                            onClick={() => setIsMobileNavOpen((prev) => !prev)}
+                        >
+                            <span />
+                            <span />
+                            <span />
+                        </button>
+
+                        <button
                             onClick={() => {
                                 setActiveTab('Home');
                                 navigate('/');
@@ -3077,18 +3100,6 @@ const TestEncodingAndEditing = () => {
                             <span className="logo-text">TEST DATABANK</span>
                         </button>
                     </div>
-                    <button
-                        type="button"
-                        className="navbar-menu-toggle"
-                        onClick={() => setIsMobileNavOpen((prev) => !prev)}
-                        aria-label={isMobileNavOpen ? 'Close navigation menu' : 'Open navigation menu'}
-                        aria-expanded={isMobileNavOpen}
-                        aria-controls="primary-navigation"
-                    >
-                        <span className="navbar-menu-toggle-bar" />
-                        <span className="navbar-menu-toggle-bar" />
-                        <span className="navbar-menu-toggle-bar" />
-                    </button>
                     <div id="primary-navigation" className={`nav-center ${isMobileNavOpen ? 'mobile-open' : ''}`}>
                         <NavItem icon={Home} label="Home" isActive={activeTab==='Home'} onClick={()=>handleSetActiveTab('Home')} />
                         {user?.isAdmin && (
