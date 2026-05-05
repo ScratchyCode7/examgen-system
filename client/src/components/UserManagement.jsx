@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Eye, EyeOff, Lock, ShieldOff, Pencil, Crown } from 'lucide-react';
 import { apiService } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
@@ -105,7 +105,7 @@ const UserManagement = ({ searchQuery = '' }) => {
     }
   };
 
-  const getCoursesForDepartments = (departmentIds) => {
+  const getCoursesForDepartments = useCallback((departmentIds) => {
     if (!Array.isArray(departmentIds) || departmentIds.length === 0) return [];
     const courses = [];
     departmentIds.forEach((deptId) => {
@@ -113,7 +113,7 @@ const UserManagement = ({ searchQuery = '' }) => {
       courses.push(...list);
     });
     return courses;
-  };
+  }, [coursesByDepartment]);
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
