@@ -1163,6 +1163,53 @@ const CourseTopic = () => {
     }
   };
 
+  const applyEnrollmentSubjects = useCallback(async (subjectIds, preselectedTopicIds = null) => {
+    const normalizedSubjectIds = Array.from(new Set(subjectIds.map((id) => Number(id)).filter(Number.isFinite)));
+
+    if (normalizedSubjectIds.length === 0) {
+      setSelectedEnrollmentTopics([]);
+      setSelectedEnrollmentTopicIds([]);
+      return;
+    }
+
+    try {
+      setIsLoadingEnrollmentTopics(true);
+      const topicLists = await Promise.all(
+        normalizedSubjectIds.map((subjectId) => apiService.getTopics(subjectId))
+      );
+
+      const mergedTopics = [];
+      const seenTopicIds = new Set();
+      for (const list of topicLists) {
+        const topicArray = Array.isArray(list) ? list : [];
+        for (const topic of topicArray) {
+          const topicId = Number(topic?.id);
+          if (!Number.isFinite(topicId) || seenTopicIds.has(topicId)) continue;
+          seenTopicIds.add(topicId);
+          mergedTopics.push(topic);
+        }
+      }
+
+      setSelectedEnrollmentTopics(mergedTopics);
+      if (Array.isArray(preselectedTopicIds)) {
+        const allowedTopicIds = new Set(mergedTopics.map((topic) => Number(topic.id)));
+        setSelectedEnrollmentTopicIds(
+          preselectedTopicIds
+            .map((id) => Number(id))
+            .filter((id) => allowedTopicIds.has(id))
+        );
+      } else {
+        setSelectedEnrollmentTopicIds(mergedTopics.map((topic) => Number(topic.id)));
+      }
+    } catch (err) {
+      console.error('Failed to load topics for selected subjects:', err);
+      setSelectedEnrollmentTopics([]);
+      setSelectedEnrollmentTopicIds([]);
+    } finally {
+      setIsLoadingEnrollmentTopics(false);
+    }
+  }, []);
+
   const loadSelectedCourseAccessForEnrollment = useCallback(async (userId, courseId, departmentId, subjectId = null) => {
     if (!userId || !departmentId) {
       setSelectedEnrollmentDepartmentHasAccess(false);
@@ -1233,53 +1280,6 @@ const CourseTopic = () => {
       setExistingEnrollmentTopicIds([]);
     }
   }, [applyEnrollmentSubjects, history, loadEnrollmentAccessForUser]);
-
-  const applyEnrollmentSubjects = useCallback(async (subjectIds, preselectedTopicIds = null) => {
-    const normalizedSubjectIds = Array.from(new Set(subjectIds.map((id) => Number(id)).filter(Number.isFinite)));
-
-    if (normalizedSubjectIds.length === 0) {
-      setSelectedEnrollmentTopics([]);
-      setSelectedEnrollmentTopicIds([]);
-      return;
-    }
-
-    try {
-      setIsLoadingEnrollmentTopics(true);
-      const topicLists = await Promise.all(
-        normalizedSubjectIds.map((subjectId) => apiService.getTopics(subjectId))
-      );
-
-      const mergedTopics = [];
-      const seenTopicIds = new Set();
-      for (const list of topicLists) {
-        const topicArray = Array.isArray(list) ? list : [];
-        for (const topic of topicArray) {
-          const topicId = Number(topic?.id);
-          if (!Number.isFinite(topicId) || seenTopicIds.has(topicId)) continue;
-          seenTopicIds.add(topicId);
-          mergedTopics.push(topic);
-        }
-      }
-
-      setSelectedEnrollmentTopics(mergedTopics);
-      if (Array.isArray(preselectedTopicIds)) {
-        const allowedTopicIds = new Set(mergedTopics.map((topic) => Number(topic.id)));
-        setSelectedEnrollmentTopicIds(
-          preselectedTopicIds
-            .map((id) => Number(id))
-            .filter((id) => allowedTopicIds.has(id))
-        );
-      } else {
-        setSelectedEnrollmentTopicIds(mergedTopics.map((topic) => Number(topic.id)));
-      }
-    } catch (err) {
-      console.error('Failed to load topics for selected subjects:', err);
-      setSelectedEnrollmentTopics([]);
-      setSelectedEnrollmentTopicIds([]);
-    } finally {
-      setIsLoadingEnrollmentTopics(false);
-    }
-  }, []);
 
   useEffect(() => {
     if (!selectedUserForEnrollment?.userId || !selectedEnrollmentDepartment?.id) {
