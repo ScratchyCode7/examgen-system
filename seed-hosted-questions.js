@@ -7,7 +7,8 @@
  *   node seed-hosted-questions.js \
  *     --baseUrl "https://your-hosted-api.example.com" \
  *     --adminToken "<JWT>" \
- *     --courseCode "BSCS" \
+ *     --courseCode "CS201" \
+ *     --departmentCode "CCS" \
  *     --subjectName "Social and Professional Ethics" \
  *     --lessonQuery "Lesson 1" \
  *     --totalQuestions 300
@@ -20,13 +21,18 @@
 const DEFAULTS = {
   baseUrl: process.env.BASE_URL || "http://localhost:5012",
   adminToken: process.env.ADMIN_TOKEN || "",
-  courseCode: process.env.COURSE_CODE || "BSCS",
+  courseCode: process.env.COURSE_CODE || "CS201",
+  departmentCode: process.env.DEPARTMENT_CODE || "CCS",
   subjectName: process.env.SUBJECT_NAME || "Social and Professional Ethics",
   lessonQuery: process.env.LESSON_QUERY || "Lesson 1",
   totalQuestions: Number(process.env.TOTAL_QUESTIONS || 300),
+  topicsToUse: Number(process.env.TOPICS_TO_USE || 0),
+  perTopicQuestions: Number(process.env.PER_TOPIC_QUESTIONS || 0),
   concurrency: Number(process.env.CONCURRENCY || 3),
   courseId: process.env.COURSE_ID ? Number(process.env.COURSE_ID) : undefined,
 };
+
+const ALLOWED_DEPARTMENT_CODES = new Set(["CCS", "CAS"]);
 
 function parseArgs(argv) {
   const args = { ...DEFAULTS };
@@ -44,9 +50,19 @@ function parseArgs(argv) {
   }
 
   args.totalQuestions = Number(args.totalQuestions);
+  args.topicsToUse = Number(args.topicsToUse);
+  args.perTopicQuestions = Number(args.perTopicQuestions);
   args.concurrency = Number(args.concurrency);
   args.courseId = args.courseId !== undefined ? Number(args.courseId) : undefined;
   return args;
+}
+
+function extractArray(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.items)) return payload.items;
+  if (Array.isArray(payload?.Items)) return payload.Items;
+  if (Array.isArray(payload?.data)) return payload.data;
+  return [];
 }
 
 function normalizeBaseUrl(baseUrl) {
@@ -109,18 +125,33 @@ function bloomEnumForBucket(bucket) {
   return pick(["Evaluate", "Create"]);
 }
 
-const ETHICS_THEMES = [
-  "privacy and data protection",
-  "intellectual property and software licensing",
-  "professional accountability in computing",
-  "ethical decision-making in system design",
-  "responsible use of artificial intelligence",
-  "cybersecurity duty of care",
-  "digital divide and social responsibility",
-  "academic integrity in computing practice",
-  "code of ethics for IT professionals",
-  "risk communication to stakeholders",
+const GENERIC_THEMES = [
+  "algorithm efficiency",
+  "data modeling",
+  "software design principles",
+  "debugging and testing",
+  "secure coding practices",
+  "system reliability",
+  "performance optimization",
+  "requirements analysis",
+  "collaborative development workflows",
+  "user-centered design",
 ];
+
+function buildThemesFromTopic(topicTitle) {
+  const title = String(topicTitle || "").trim();
+  if (!title) return GENERIC_THEMES;
+
+  const lower = title.toLowerCase();
+  const words = lower
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length >= 4)
+    .slice(0, 4);
+
+  const topicDerived = words.map((w) => `${w} concepts`);
+  return [...topicDerived, ...GENERIC_THEMES];
+}
 
 const LOW_STEMS = [
   "Which statement best defines",
@@ -195,7 +226,7 @@ function generateQuestionPayload({
 }) {
   const bucket = groupedBloomBucket(globalQuestionIndex, totalQuestions);
   const bloomLevel = bloomEnumForBucket(bucket);
-  const theme = pick(ETHICS_THEMES);
+  const theme = pick(buildThemesFromTopic(topic.title));
   const uniqueTag = `${topic.id}-${topicQuestionIndex + 1}-${globalQuestionIndex + 1}`;
 
   const content = buildQuestionContent({
@@ -239,9 +270,45 @@ function computeDistribution(topics, totalQuestions) {
   return topics.map((t) => byTopicId.get(t.id));
 }
 
-async function getCourseId(args) {
+async function getDepartmentIdByCode(args, departmentCode) {
+  const response = await apiRequest({
+    baseUrl: args.baseUrl,
+    token: args.adminToken,
+    method: "GET",
+    path: "/api/departments?pageSize=200",
+  });
+
+  const items = extractArray(response);
+  const match = items.find((d) =>
+    String(d.code || "").toUpperCase() === String(departmentCode || "").toUpperCase()
+  );
+
+  if (!match?.id) {
+    throw new Error(`Department '${departmentCode}' not found.`);
+  }
+
+  return Number(match.id);
+}
+
+async function getCourse(args) {
   if (Number.isFinite(args.courseId) && args.courseId > 0) {
-    return args.courseId;
+    const direct = await apiRequest({
+      baseUrl: args.baseUrl,
+      token: args.adminToken,
+      method: "GET",
+      path: `/api/courses/${args.courseId}`,
+    });
+
+    if (!direct?.id) {
+      throw new Error(`Course with id '${args.courseId}' not found.`);
+    }
+
+    return {
+      id: Number(direct.id),
+      code: String(direct.code || args.courseCode || "").toUpperCase(),
+      departmentId: Number(direct.departmentId),
+      name: direct.name || "",
+    };
   }
 
   const response = await apiRequest({
@@ -251,7 +318,7 @@ async function getCourseId(args) {
     path: `/api/courses?search=${encodeURIComponent(args.courseCode)}&pageSize=200`,
   });
 
-  const items = Array.isArray(response?.items) ? response.items : [];
+  const items = extractArray(response);
   const match = items.find((c) =>
     String(c.code || "").toUpperCase() === String(args.courseCode || "").toUpperCase()
   ) || items[0];
@@ -260,7 +327,12 @@ async function getCourseId(args) {
     throw new Error(`No course found for code/search '${args.courseCode}'. Pass --courseId explicitly.`);
   }
 
-  return Number(match.id);
+  return {
+    id: Number(match.id),
+    code: String(match.code || "").toUpperCase(),
+    departmentId: Number(match.departmentId),
+    name: match.name || "",
+  };
 }
 
 async function getTopicExistingCount(args, topicId) {
@@ -299,6 +371,10 @@ async function runWithConcurrency(items, limit, worker) {
 
 async function main() {
   const args = parseArgs(process.argv);
+  const normalizedCourseCode = String(args.courseCode || "").trim().toUpperCase();
+  const normalizedDepartmentCode = String(args.departmentCode || "").trim().toUpperCase();
+  const hasExactTopicPlan = Number.isFinite(args.topicsToUse) && args.topicsToUse > 0
+    && Number.isFinite(args.perTopicQuestions) && args.perTopicQuestions > 0;
 
   if (!args.adminToken || args.adminToken.length < 20) {
     throw new Error("Missing/invalid --adminToken (or ADMIN_TOKEN env).");
@@ -306,16 +382,36 @@ async function main() {
   if (!Number.isFinite(args.totalQuestions) || args.totalQuestions <= 0) {
     throw new Error("--totalQuestions must be a positive number.");
   }
+  if (!ALLOWED_DEPARTMENT_CODES.has(normalizedDepartmentCode)) {
+    throw new Error("Only CCS and CAS are allowed for seeding. Set --departmentCode to CCS or CAS.");
+  }
 
   console.log("\n=== Hosted Bulk Question Seeder ===");
   console.log(`Base URL: ${args.baseUrl}`);
-  console.log(`Course code: ${args.courseCode}`);
+  console.log(`Department code: ${normalizedDepartmentCode}`);
+  console.log(`Course code: ${normalizedCourseCode}`);
   console.log(`Subject target: ${args.subjectName}`);
   console.log(`Lesson filter: ${args.lessonQuery}`);
-  console.log(`Target insert: ${args.totalQuestions}`);
+  if (hasExactTopicPlan) {
+    console.log(`Exact plan: ${args.topicsToUse} topics x ${args.perTopicQuestions} questions each`);
+  }
+  console.log(`Requested insert: ${args.totalQuestions}`);
 
-  const courseId = await getCourseId(args);
-  console.log(`Resolved courseId: ${courseId}`);
+  const allowedDepartmentId = await getDepartmentIdByCode(args, normalizedDepartmentCode);
+  console.log(`Resolved departmentId for ${normalizedDepartmentCode}: ${allowedDepartmentId}`);
+
+  const course = await getCourse({ ...args, courseCode: normalizedCourseCode });
+  if (!Number.isFinite(course.departmentId)) {
+    throw new Error(`Course '${normalizedCourseCode}' does not include DepartmentId in API response.`);
+  }
+  if (course.departmentId !== allowedDepartmentId) {
+    throw new Error(
+      `Course '${normalizedCourseCode}' is not under ${normalizedDepartmentCode}. Allowed departmentId=${allowedDepartmentId}, course departmentId=${course.departmentId}.`
+    );
+  }
+
+  const courseId = course.id;
+  console.log(`Resolved courseId: ${courseId} (${course.code}${course.name ? ` - ${course.name}` : ""})`);
 
   const rawTopics = await apiRequest({
     baseUrl: args.baseUrl,
@@ -361,20 +457,43 @@ async function main() {
     }
   );
 
-  const encodedTopics = withCounts.filter((t) => t.existingCount > 0);
-  if (encodedTopics.length === 0) {
-    throw new Error("No encoded topics found (all matched topics have 0 existing questions).");
+  let distributedTopics;
+  let effectiveTotalQuestions = args.totalQuestions;
+
+  if (hasExactTopicPlan) {
+    if (withCounts.length !== args.topicsToUse) {
+      const topicList = withCounts.map((t) => `[${t.id}] ${t.title}`).join("; ");
+      throw new Error(
+        `Expected exactly ${args.topicsToUse} topic(s) after filters, but found ${withCounts.length}. Topics: ${topicList}`
+      );
+    }
+
+    distributedTopics = withCounts.map((t) => ({
+      ...t,
+      allocation: args.perTopicQuestions,
+    }));
+    effectiveTotalQuestions = args.topicsToUse * args.perTopicQuestions;
+
+    if (args.totalQuestions !== effectiveTotalQuestions) {
+      console.warn(`Adjusting totalQuestions from ${args.totalQuestions} to ${effectiveTotalQuestions} based on exact plan.`);
+    }
+  } else {
+    const encodedTopics = withCounts.filter((t) => t.existingCount > 0);
+    if (encodedTopics.length === 0) {
+      throw new Error("No encoded topics found (all matched topics have 0 existing questions).");
+    }
+
+    console.log(`Eligible encoded topics: ${encodedTopics.length}`);
+    encodedTopics.forEach((t) => {
+      console.log(` - [${t.id}] ${t.title} (existing: ${t.existingCount})`);
+    });
+
+    distributedTopics = computeDistribution(encodedTopics, args.totalQuestions);
   }
 
-  console.log(`Eligible encoded topics: ${encodedTopics.length}`);
-  encodedTopics.forEach((t) => {
-    console.log(` - [${t.id}] ${t.title} (existing: ${t.existingCount})`);
-  });
-
-  const distributedTopics = computeDistribution(encodedTopics, args.totalQuestions);
   const plannedTotal = distributedTopics.reduce((sum, t) => sum + t.allocation, 0);
-  if (plannedTotal !== args.totalQuestions) {
-    throw new Error(`Distribution mismatch: planned ${plannedTotal}, expected ${args.totalQuestions}`);
+  if (plannedTotal !== effectiveTotalQuestions) {
+    throw new Error(`Distribution mismatch: planned ${plannedTotal}, expected ${effectiveTotalQuestions}`);
   }
 
   console.log("\nDistribution plan:");
@@ -391,7 +510,7 @@ async function main() {
           topic,
           topicQuestionIndex: i,
           globalQuestionIndex,
-          totalQuestions: args.totalQuestions,
+          totalQuestions: effectiveTotalQuestions,
           subjectName: args.subjectName,
         })
       );
@@ -511,11 +630,11 @@ async function main() {
 
   console.log(`\nInserted total (validated): ${insertedTotal}`);
 
-  if (insertedTotal !== args.totalQuestions) {
-    throw new Error(`Expected exactly ${args.totalQuestions} inserted, but validated ${insertedTotal}.`);
+  if (insertedTotal !== effectiveTotalQuestions) {
+    throw new Error(`Expected exactly ${effectiveTotalQuestions} inserted, but validated ${insertedTotal}.`);
   }
 
-  console.log("\nSUCCESS: Exactly 300 questions inserted via API bulk import.");
+  console.log(`\nSUCCESS: Exactly ${effectiveTotalQuestions} questions inserted via API bulk import.`);
 }
 
 main().catch((err) => {

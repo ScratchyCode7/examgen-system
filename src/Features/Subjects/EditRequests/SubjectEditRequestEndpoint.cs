@@ -20,19 +20,19 @@ public sealed class SubjectEditRequestEndpoint : IEndpoint
     public void Endpoint(IEndpointRouteBuilder app)
     {
         app.MapPost("/api/subjects/{subjectId:int}/edit-requests", CreateAsync)
-            .RequireAuthorization();
+            .RequireAuthorization("AdminOnly");
 
         app.MapGet("/api/subjects/edit-requests", ListAsync)
-            .RequireAuthorization();
+            .RequireAuthorization("AdminOnly");
 
         app.MapPost("/api/subjects/edit-requests/{requestId:long}/resolve", ResolveAsync)
-            .RequireAuthorization();
+            .RequireAuthorization("AdminOnly");
 
         app.MapPost("/api/subjects/edit-requests/{requestId:long}/revoke", RevokeAsync)
-            .RequireAuthorization();
+            .RequireAuthorization("AdminOnly");
 
         app.MapPost("/api/subjects/edit-requests/{requestId:long}/dismiss", DismissAsync)
-            .RequireAuthorization();
+            .RequireAuthorization("AdminOnly");
     }
 
     private static async Task<IResult> CreateAsync(
@@ -155,6 +155,10 @@ public sealed class SubjectEditRequestEndpoint : IEndpoint
         {
             return TypedResults.BadRequest(new { message = "Scope must be one of: inbox, sent, all." });
         }
+
+        var isAdmin = await dbContext.Users
+            .AsNoTracking()
+            .AnyAsync(u => u.UserId == currentUserId.Value && u.IsAdmin, ct);
 
         var requestLogs = await dbContext.ActivityLogs
             .AsNoTracking()
@@ -291,7 +295,7 @@ public sealed class SubjectEditRequestEndpoint : IEndpoint
 
                 var canRevoke = resolution is not null
                     && (resolution.Action == ApproveAction || resolution.Action == ApproveDeleteAction)
-                    && ownerId == currentUserId.Value;
+                    && (ownerId == currentUserId.Value || isAdmin);
 
                 return new SubjectEditRequestResponse(
                     log.Id,
@@ -347,11 +351,13 @@ public sealed class SubjectEditRequestEndpoint : IEndpoint
             return TypedResults.NotFound(new { message = "Edit request not found." });
         }
 
-        var subjectId = requestLog.EntityId!.Value;
-        var subjectOwnerId = await GetSubjectOwnerIdAsync(dbContext, subjectId, ct);
-        if (!subjectOwnerId.HasValue || subjectOwnerId.Value != ownerUserId.Value)
+        var isAdminClaim = httpContext.User.HasClaim("isAdmin", "true");
+        var isAdminDb = await dbContext.Users
+            .AsNoTracking()
+            .AnyAsync(u => u.UserId == ownerUserId.Value && u.IsAdmin, ct);
+        if (!isAdminClaim && !isAdminDb)
         {
-            return TypedResults.Problem("Only the subject owner can resolve this edit request.", statusCode: StatusCodes.Status403Forbidden);
+            return TypedResults.Problem("Only administrators can resolve this edit request.", statusCode: StatusCodes.Status403Forbidden);
         }
 
         var latestResolution = await dbContext.ActivityLogs
@@ -528,9 +534,14 @@ public sealed class SubjectEditRequestEndpoint : IEndpoint
         var ownerId = await GetSubjectOwnerIdAsync(dbContext, subjectId, ct);
         var isRequester = requestLog.UserId!.Value == currentUserId.Value;
         var isOwner = ownerId.HasValue && ownerId.Value == currentUserId.Value;
-        if (!isRequester && !isOwner)
+        var isAdminClaim = httpContext.User.HasClaim("isAdmin", "true");
+        var isAdminDb = await dbContext.Users
+            .AsNoTracking()
+            .AnyAsync(u => u.UserId == currentUserId.Value && u.IsAdmin, ct);
+        var isAdmin = isAdminClaim || isAdminDb;
+        if (!isRequester && !isOwner && !isAdmin)
         {
-            return TypedResults.Problem("Only the subject owner or requester can dismiss this card.", statusCode: StatusCodes.Status403Forbidden);
+            return TypedResults.Problem("Only the subject owner, requester, or administrator can dismiss this card.", statusCode: StatusCodes.Status403Forbidden);
         }
 
         var latestResolution = await dbContext.ActivityLogs

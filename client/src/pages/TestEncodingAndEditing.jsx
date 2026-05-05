@@ -703,6 +703,7 @@ const TestEncodingAndEditing = () => {
     // Backend data state
     const [departments, setDepartments] = useState([]);
     const [courses, setCourses] = useState([]);
+    const [userCourses, setUserCourses] = useState([]);
     const [subjects, setSubjects] = useState([]);
     const [topics, setTopics] = useState([]);
     const [isLoadingCourses, setIsLoadingCourses] = useState(false);
@@ -884,6 +885,25 @@ const TestEncodingAndEditing = () => {
         }
     }, [departmentCode, departments]);
 
+    useEffect(() => {
+        if (!user?.userId || isAdmin) {
+            setUserCourses([]);
+            return;
+        }
+
+        const loadUserCourses = async () => {
+            try {
+                const data = await apiService.getUserCourses(user.userId);
+                setUserCourses(Array.isArray(data) ? data : []);
+            } catch (err) {
+                console.error('Failed to load user courses:', err);
+                setUserCourses([]);
+            }
+        };
+
+        void loadUserCourses();
+    }, [user?.userId, isAdmin]);
+
     // Load courses when department changes
     useEffect(() => {
         const loadCourses = async () => {
@@ -893,10 +913,16 @@ const TestEncodingAndEditing = () => {
             }
             const dept = departments.find(d => d.id === Number(department));
             if (!dept) return;
+
+            if (!isAdmin) {
+                const scopedCourses = userCourses.filter(course => course.departmentId === dept.id);
+                setCourses(scopedCourses);
+                return;
+            }
             
             try {
                 setIsLoadingCourses(true);
-                const data = await apiService.getCourses(dept.id);
+                const data = await apiService.getCourses(dept.id, { pageSize: 500 });
                 setCourses(Array.isArray(data) ? data : []);
             } catch (err) {
                 console.error('Failed to load courses:', err);
@@ -906,7 +932,7 @@ const TestEncodingAndEditing = () => {
             }
         };
         void loadCourses();
-    }, [department, departments]);
+    }, [department, departments, isAdmin, userCourses]);
 
     // Load subjects when course changes
     useEffect(() => {
@@ -2806,9 +2832,10 @@ const TestEncodingAndEditing = () => {
     const sortedBloomLevels = BLOOM_LEVELS.map(bl => bl.value).filter(level => groupedQuestions.hasOwnProperty(level));
 
     // Navigation helpers
+        const testGenerationLabel = isAdmin ? "Test Generation" : "Test Creation";
         const reportItems = isAdmin
             ? ["Test Generation", "Saved Exam Sets", "Print Requests"]
-            : ["Test Generation", "Saved Exam Sets"];
+            : [testGenerationLabel, "Saved Exam Sets"];
         const reportsNotificationCount = isAdmin ? pendingPrintRequestCount : 0;
     const isDataEntryActive = dataEntryTabs.includes(activeTab) || activeTab === 'Data Entry';
     const isReportsActive = reportItems.includes(activeTab) || activeTab === 'Reports';
@@ -3139,7 +3166,7 @@ const TestEncodingAndEditing = () => {
                             onSelect={(item) => {
                                 handleSetActiveTab(item);
                                 const deptCode = getActiveDepartmentCode();
-                                if (item === 'Test Generation') {
+                                if (item === testGenerationLabel) {
                                     navigate(`/test-generation/${deptCode}`);
                                 } else if (item === 'Saved Exam Sets') {
                                     navigate(`/reports/saved-exams/${deptCode}`);

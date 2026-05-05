@@ -169,93 +169,6 @@ public static class QuestionPermissionResolver
             .Select(kvp => kvp.Key)
             .ToList();
 
-        if (remainingQuestionIds.Count > 0)
-        {
-            var questionToTopicRows = await dbContext.Questions
-                .AsNoTracking()
-                .Where(q => remainingQuestionIds.Contains(q.Id))
-                .Select(q => new { q.Id, q.TopicId })
-                .ToListAsync(ct);
-
-            if (questionToTopicRows.Count > 0)
-            {
-                var topicIds = questionToTopicRows
-                    .Select(row => row.TopicId)
-                    .Distinct()
-                    .ToList();
-
-                var topicRequestRows = await dbContext.ActivityLogs
-                    .AsNoTracking()
-                    .Where(a =>
-                        a.Action == TopicPermissionResolver.RequestAction &&
-                        a.EntityType == TopicPermissionResolver.RequestEntityType &&
-                        a.EntityId.HasValue &&
-                        topicIds.Contains(a.EntityId.Value) &&
-                        a.UserId == currentUserId &&
-                        a.Id <= int.MaxValue)
-                    .Select(a => new { RequestId = (int)a.Id, TopicId = a.EntityId!.Value })
-                    .ToListAsync(ct);
-
-                var topicRequestById = topicRequestRows.ToDictionary(row => row.RequestId, row => row.TopicId);
-                var topicRequestIds = topicRequestRows
-                    .Select(row => row.RequestId)
-                    .Distinct()
-                    .ToList();
-
-                var topicResolutionRows = await dbContext.ActivityLogs
-                    .AsNoTracking()
-                    .Where(a =>
-                        a.EntityType == TopicPermissionResolver.ResolutionEntityType &&
-                        a.EntityId.HasValue &&
-                        topicRequestIds.Contains(a.EntityId.Value) &&
-                        (a.Action == TopicPermissionResolver.ApproveEditOnlyAction ||
-                         a.Action == TopicPermissionResolver.ApproveEditDeleteAction ||
-                         a.Action == TopicPermissionResolver.RevokeAction))
-                    .Select(a => new { RequestId = a.EntityId!.Value, a.Action, a.CreatedAt, a.Id })
-                    .ToListAsync(ct);
-
-                var topicPermissionByTopicId = topicResolutionRows
-                    .Where(row => topicRequestById.ContainsKey(row.RequestId))
-                    .Select(row => new
-                    {
-                        TopicId = topicRequestById[row.RequestId],
-                        row.Action,
-                        row.CreatedAt,
-                        row.Id
-                    })
-                    .GroupBy(row => row.TopicId)
-                    .ToDictionary(
-                        group => group.Key,
-                        group => group.OrderByDescending(row => row.CreatedAt).ThenByDescending(row => row.Id).First());
-
-                foreach (var row in questionToTopicRows)
-                {
-                    if (!topicPermissionByTopicId.TryGetValue(row.TopicId, out var topicResolution))
-                    {
-                        continue;
-                    }
-
-                    if (topicResolution.Action == TopicPermissionResolver.ApproveEditDeleteAction)
-                    {
-                        permissions[row.Id] = (true, true);
-                    }
-                    else if (topicResolution.Action == TopicPermissionResolver.ApproveEditOnlyAction)
-                    {
-                        permissions[row.Id] = (true, false);
-                    }
-                    else if (topicResolution.Action == TopicPermissionResolver.RevokeAction)
-                    {
-                        permissions[row.Id] = (false, false);
-                    }
-                }
-            }
-        }
-
-        remainingQuestionIds = permissions
-            .Where(kvp => !kvp.Value.CanEdit)
-            .Select(kvp => kvp.Key)
-            .ToList();
-
         if (remainingQuestionIds.Count == 0)
         {
             return permissions;
@@ -309,8 +222,11 @@ public static class QuestionPermissionResolver
                 group => group.Key,
                 group => group.OrderByDescending(row => row.CreatedAt).ThenByDescending(row => row.Id).First());
 
-        foreach (var (questionId, resolution) in latestEffectiveResolutionByQuestionId)
+        foreach (var entry in latestEffectiveResolutionByQuestionId)
         {
+            var questionId = entry.Key;
+            var resolution = entry.Value;
+
             if (resolution.Action == ApproveEditDeleteAction)
             {
                 permissions[questionId] = (true, true);

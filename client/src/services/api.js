@@ -135,6 +135,48 @@ export const apiService = {
     return response.data;
   },
 
+  assignUserCourses: async (userId, courseIds) => {
+    const response = await apiClient.post(`/api/users/${userId}/courses`, { 
+      courseIds 
+    });
+    return response.data;
+  },
+
+  addUserCourse: async (userId, courseId) => {
+    const response = await apiClient.post(`/api/users/${userId}/courses/${courseId}`);
+    return response.data;
+  },
+
+  removeUserCourse: async (userId, courseId) => {
+    const response = await apiClient.delete(`/api/users/${userId}/courses/${courseId}`);
+    return response.data;
+  },
+
+  addUserDepartment: async (userId, departmentId) => {
+    const response = await apiClient.post(`/api/users/${userId}/departments/${departmentId}`);
+    return response.data;
+  },
+
+  removeUserDepartment: async (userId, departmentId) => {
+    const response = await apiClient.delete(`/api/users/${userId}/departments/${departmentId}`);
+    return response.data;
+  },
+
+  getUserTopics: async (userId) => {
+    const response = await apiClient.get(`/api/users/${userId}/topics`);
+    return response.data;
+  },
+
+  addUserTopic: async (userId, topicId) => {
+    const response = await apiClient.post(`/api/users/${userId}/topics/${topicId}`);
+    return response.data;
+  },
+
+  removeUserTopic: async (userId, topicId) => {
+    const response = await apiClient.delete(`/api/users/${userId}/topics/${topicId}`);
+    return response.data;
+  },
+
   assignDeanStatus: async (userId, departmentId) => {
     const response = await apiClient.put(`/api/users/${userId}/departments/${departmentId}/dean`);
     return response.data;
@@ -179,39 +221,6 @@ export const apiService = {
 
   deleteSubject: async (id) => {
     const response = await apiClient.delete(`/api/subjects/${id}`);
-    return response.data;
-  },
-
-  createSubjectEditRequest: async (subjectId, message) => {
-    const response = await apiClient.post(`/api/subjects/${subjectId}/edit-requests`, {
-      message,
-    });
-    return response.data;
-  },
-
-  getSubjectEditRequests: async (scope = 'inbox') => {
-    const response = await apiClient.get(`/api/subjects/edit-requests?scope=${encodeURIComponent(scope)}`);
-    return response.data;
-  },
-
-  resolveSubjectEditRequest: async (requestId, approve, canDelete = false, note) => {
-    const response = await apiClient.post(`/api/subjects/edit-requests/${requestId}/resolve`, {
-      approve,
-      canDelete,
-      note,
-    });
-    return response.data;
-  },
-
-  revokeSubjectEditPermission: async (requestId, note = '') => {
-    const response = await apiClient.post(`/api/subjects/edit-requests/${requestId}/revoke`, {
-      note,
-    });
-    return response.data;
-  },
-
-  dismissSubjectEditRequest: async (requestId) => {
-    const response = await apiClient.post(`/api/subjects/edit-requests/${requestId}/dismiss`);
     return response.data;
   },
 
@@ -368,9 +377,19 @@ export const apiService = {
     return normalizeDepartmentArray(response.data);
   },
 
-  // Courses by department
-  getCourses: async (departmentId) => {
-    const response = await apiClient.get(`/api/courses?departmentId=${departmentId}`);
+  getUserCourses: async (userId) => {
+    const response = await apiClient.get(`/api/users/${userId}/courses`);
+    const data = response.data;
+    if (Array.isArray(data)) return data;
+    if (data?.items && Array.isArray(data.items)) return data.items;
+    if (data?.data && Array.isArray(data.data)) return data.data;
+    return [];
+  },
+
+  // Courses by department (non-admins only see UserCourses; use large pageSize so dropdowns are not truncated)
+  getCourses: async (departmentId, options = {}) => {
+    const pageSize = options.pageSize ?? 500;
+    const response = await apiClient.get(`/api/courses?departmentId=${departmentId}&pageSize=${pageSize}`);
     const data = response.data;
     console.log('getCourses: raw response for deptId', departmentId, data);
     if (Array.isArray(data)) return data;
@@ -473,39 +492,6 @@ export const apiService = {
 
   createTopic: async (topicData) => {
     const response = await apiClient.post('/api/topics', topicData);
-    return response.data;
-  },
-
-  createTopicEditRequest: async (topicId, message) => {
-    const response = await apiClient.post(`/api/topics/${topicId}/edit-requests`, {
-      message,
-    });
-    return response.data;
-  },
-
-  getTopicEditRequests: async (scope = 'inbox') => {
-    const response = await apiClient.get(`/api/topics/edit-requests?scope=${encodeURIComponent(scope)}`);
-    return response.data;
-  },
-
-  resolveTopicEditRequest: async (requestId, approve, canDelete = false, note) => {
-    const response = await apiClient.post(`/api/topics/edit-requests/${requestId}/resolve`, {
-      approve,
-      canDelete,
-      note,
-    });
-    return response.data;
-  },
-
-  revokeTopicEditPermission: async (requestId, note = '') => {
-    const response = await apiClient.post(`/api/topics/edit-requests/${requestId}/revoke`, {
-      note,
-    });
-    return response.data;
-  },
-
-  dismissTopicEditRequest: async (requestId) => {
-    const response = await apiClient.post(`/api/topics/edit-requests/${requestId}/dismiss`);
     return response.data;
   },
 

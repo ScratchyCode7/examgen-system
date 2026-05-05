@@ -18,6 +18,7 @@ public sealed record UpdateUserRequest(
     string LastName,
     string Username,
     int[] DepartmentIds,
+    int[] CourseIds,
     string Email,
     bool? IsAdmin,
     bool? IsActive,
@@ -42,6 +43,7 @@ public sealed class UpdateUserEndpoint : IEndpoint
         {
             var user = await dbContext.Users
                 .Include(u => u.UserDepartments)
+                .Include(u => u.UserCourses)
                 .FirstOrDefaultAsync(u => u.UserId == userId, ct);
 
             if (user is null)
@@ -141,6 +143,32 @@ public sealed class UpdateUserEndpoint : IEndpoint
                 return TypedResults.BadRequest("One or more departments do not exist.");
             }
 
+            var requestedCourseIds = request.CourseIds ?? Array.Empty<int>();
+            if (requestedCourseIds.Length > 0)
+            {
+                var courseRows = await dbContext.Courses
+                    .AsNoTracking()
+                    .Where(c => requestedCourseIds.Contains(c.Id))
+                    .Select(c => new { c.Id, c.DepartmentId })
+                    .ToListAsync(ct);
+
+                if (courseRows.Count != requestedCourseIds.Length)
+                {
+                    return TypedResults.BadRequest("One or more courses do not exist.");
+                }
+
+                var allowedDepartments = request.DepartmentIds.ToHashSet();
+                var invalidCourses = courseRows
+                    .Where(c => !allowedDepartments.Contains(c.DepartmentId))
+                    .Select(c => c.Id)
+                    .ToArray();
+
+                if (invalidCourses.Length > 0)
+                {
+                    return TypedResults.BadRequest("One or more courses are outside the assigned departments.");
+                }
+            }
+
             var currentDepartmentIds = user.UserDepartments
                 .Select(ud => ud.DepartmentId)
                 .ToHashSet();
@@ -191,6 +219,48 @@ public sealed class UpdateUserEndpoint : IEndpoint
             }
 
             user.UserDepartments = retainedAssignments;
+
+            var currentCourseIds = user.UserCourses
+                .Select(uc => uc.CourseId)
+                .ToHashSet();
+
+            var requestedCourseIdSet = requestedCourseIds
+                .Distinct()
+                .ToHashSet();
+
+            var courseAssignmentsToRemove = user.UserCourses
+                .Where(assignment => !requestedCourseIdSet.Contains(assignment.CourseId))
+                .ToArray();
+
+            if (courseAssignmentsToRemove.Length > 0)
+            {
+                dbContext.UserCourses.RemoveRange(courseAssignmentsToRemove);
+            }
+
+            var coursesToAdd = requestedCourseIdSet
+                .Where(courseId => !currentCourseIds.Contains(courseId))
+                .ToArray();
+
+            var retainedCourses = user.UserCourses
+                .Where(assignment => !courseAssignmentsToRemove
+                    .Select(removal => removal.CourseId)
+                    .Contains(assignment.CourseId))
+                .ToList();
+
+            if (coursesToAdd.Length > 0)
+            {
+                var newCourseAssignments = coursesToAdd
+                    .Select(courseId => new UserCourse
+                    {
+                        UserId = userId,
+                        CourseId = courseId
+                    })
+                    .ToList();
+
+                retainedCourses.AddRange(newCourseAssignments);
+            }
+
+            user.UserCourses = retainedCourses;
 
             if (request.IsAdmin.HasValue)
             {

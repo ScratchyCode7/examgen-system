@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Eye, EyeOff, Lock, ShieldOff, Pencil, Crown } from 'lucide-react';
 import { apiService } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
@@ -13,6 +13,8 @@ const UserManagement = ({ searchQuery = '' }) => {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [departments, setDepartments] = useState([]);
+  const [coursesByDepartment, setCoursesByDepartment] = useState({});
+  const [isLoadingCourses, setIsLoadingCourses] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
@@ -43,6 +45,7 @@ const UserManagement = ({ searchQuery = '' }) => {
     password: '',
     adminPasswordVerification: '',
     departmentIds: [],
+    courseIds: [],
     isAdmin: false
   });
 
@@ -50,6 +53,11 @@ const UserManagement = ({ searchQuery = '' }) => {
     loadUsers();
     loadDepartments();
   }, []);
+
+  useEffect(() => {
+    if (departments.length === 0) return;
+    void loadCoursesForDepartments(departments);
+  }, [departments]);
 
   const loadUsers = async () => {
     try {
@@ -71,6 +79,40 @@ const UserManagement = ({ searchQuery = '' }) => {
     } catch (err) {
       console.error('Failed to load departments:', err);
     }
+  };
+
+  const loadCoursesForDepartments = async (departmentList) => {
+    try {
+      setIsLoadingCourses(true);
+      const entries = await Promise.all(
+        departmentList.map(async (dept) => {
+          const courses = await apiService.getCourses(dept.id);
+          return [dept.id, Array.isArray(courses) ? courses : []];
+        })
+      );
+
+      const nextMap = entries.reduce((acc, [deptId, courses]) => {
+        acc[deptId] = courses;
+        return acc;
+      }, {});
+
+      setCoursesByDepartment(nextMap);
+    } catch (err) {
+      console.error('Failed to load courses for departments:', err);
+      setCoursesByDepartment({});
+    } finally {
+      setIsLoadingCourses(false);
+    }
+  };
+
+  const getCoursesForDepartments = (departmentIds) => {
+    if (!Array.isArray(departmentIds) || departmentIds.length === 0) return [];
+    const courses = [];
+    departmentIds.forEach((deptId) => {
+      const list = coursesByDepartment[deptId] || [];
+      courses.push(...list);
+    });
+    return courses;
   };
 
   const handleInputChange = (e) => {
@@ -96,11 +138,31 @@ const UserManagement = ({ searchQuery = '' }) => {
   };
 
   const handleDepartmentToggle = (deptId) => {
+    setFormData(prev => {
+      const nextDepartmentIds = prev.departmentIds.includes(deptId)
+        ? prev.departmentIds.filter(id => id !== deptId)
+        : [...prev.departmentIds, deptId];
+
+      const allowedCourseIds = new Set(
+        getCoursesForDepartments(nextDepartmentIds).map((course) => course.id)
+      );
+
+      const nextCourseIds = prev.courseIds.filter((courseId) => allowedCourseIds.has(courseId));
+
+      return {
+        ...prev,
+        departmentIds: nextDepartmentIds,
+        courseIds: nextCourseIds,
+      };
+    });
+  };
+
+  const handleCourseToggle = (courseId) => {
     setFormData(prev => ({
       ...prev,
-      departmentIds: prev.departmentIds.includes(deptId)
-        ? prev.departmentIds.filter(id => id !== deptId)
-        : [...prev.departmentIds, deptId]
+      courseIds: prev.courseIds.includes(courseId)
+        ? prev.courseIds.filter(id => id !== courseId)
+        : [...prev.courseIds, courseId]
     }));
   };
 
@@ -133,6 +195,7 @@ const UserManagement = ({ searchQuery = '' }) => {
           lastName: formData.lastName,
           username: formData.username,
           departmentIds: formData.departmentIds,
+          courseIds: formData.courseIds,
           email: formData.email,
           isAdmin: formData.isAdmin,
           isActive: true,
@@ -158,6 +221,7 @@ const UserManagement = ({ searchQuery = '' }) => {
           username: formData.username,
           password: formData.password,
           departmentIds: formData.departmentIds,
+          courseIds: formData.courseIds,
           email: formData.email,
           isAdmin: formData.isAdmin
         });
@@ -179,6 +243,7 @@ const UserManagement = ({ searchQuery = '' }) => {
             lastName: formData.lastName,
             username: formData.username,
             departmentIds: formData.departmentIds,
+            courseIds: formData.courseIds,
             email: formData.email,
             isAdmin: formData.isAdmin,
             isActive: true,
@@ -202,6 +267,7 @@ const UserManagement = ({ searchQuery = '' }) => {
       setLoading(true);
       // Fetch user's departments
       const userDepts = await apiService.getUserDepartments(user.userId);
+      const userCourses = await apiService.getUserCourses(user.userId);
       
       setEditingUser(user);
       setFormData({
@@ -212,6 +278,7 @@ const UserManagement = ({ searchQuery = '' }) => {
         password: MASKED_EXISTING_PASSWORD,
         adminPasswordVerification: '',
         departmentIds: userDepts.map(d => d.id),
+        courseIds: userCourses.map(c => c.id),
         isAdmin: user.isAdmin || false
       });
       setHasEditedPassword(false);
@@ -405,6 +472,7 @@ const UserManagement = ({ searchQuery = '' }) => {
       password: '',
       adminPasswordVerification: '',
       departmentIds: [],
+      courseIds: [],
       isAdmin: false
     });
     setShowModal(true);
@@ -424,6 +492,7 @@ const UserManagement = ({ searchQuery = '' }) => {
       password: '',
       adminPasswordVerification: '',
       departmentIds: [],
+      courseIds: [],
       isAdmin: false
     });
   };
@@ -438,6 +507,15 @@ const UserManagement = ({ searchQuery = '' }) => {
       || username.includes(normalizedSearch)
       || email.includes(normalizedSearch);
   });
+
+  const availableCourses = useMemo(() => {
+    const courses = getCoursesForDepartments(formData.departmentIds);
+    return [...courses].sort((left, right) => {
+      const leftLabel = `${left.code || ''} ${left.name || ''}`.trim().toLowerCase();
+      const rightLabel = `${right.code || ''} ${right.name || ''}`.trim().toLowerCase();
+      return leftLabel.localeCompare(rightLabel);
+    });
+  }, [formData.departmentIds, coursesByDepartment]);
 
   return (
     <div className={`user-management ${isDarkMode ? 'dark' : ''}`}>
@@ -667,6 +745,35 @@ const UserManagement = ({ searchQuery = '' }) => {
                     </label>
                   ))}
                 </div>
+              </div>
+
+              <div className="form-group">
+                <label>Enrolled Courses</label>
+                {isLoadingCourses ? (
+                  <p className="helper-text">Loading courses...</p>
+                ) : availableCourses.length === 0 ? (
+                  <p className="helper-text">Select at least one department to load courses.</p>
+                ) : (
+                  <div className="department-selector">
+                    {availableCourses.map(course => (
+                      <label
+                        key={course.id}
+                        className={`department-checkbox ${formData.courseIds.includes(course.id) ? 'selected' : ''}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={formData.courseIds.includes(course.id)}
+                          onChange={() => handleCourseToggle(course.id)}
+                          aria-label={`Select ${course.code || course.name}`}
+                        />
+                        <span className="dept-info">
+                          <strong>{course.name}</strong>
+                          <span className="dept-code">{course.code}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="form-group">

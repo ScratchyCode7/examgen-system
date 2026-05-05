@@ -3,7 +3,6 @@ using Databank.Common;
 using Databank.Database;
 using Databank.Entities;
 using Databank.Features.Topics;
-using Databank.Services;
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,7 +15,6 @@ public sealed class CreateTopicEndpoint : IEndpoint
         app.MapPost("/api/topics", async Task<IResult> (
                 CreateTopicRequest request,
                 AppDbContext dbContext,
-                IDepartmentAccessService departmentAccessService,
                 HttpContext httpContext,
                 CancellationToken ct) =>
         {
@@ -48,11 +46,18 @@ public sealed class CreateTopicEndpoint : IEndpoint
                         statusCode: StatusCodes.Status403Forbidden);
                 }
 
-                var hasAccess = await departmentAccessService.HasAccessToDepartmentAsync(userId, subject.Course.DepartmentId, ct);
-                if (!hasAccess)
+                var hasDepartmentAccess = await dbContext.UserDepartments
+                    .AsNoTracking()
+                    .AnyAsync(ud => ud.UserId == userId && ud.DepartmentId == subject.Course.DepartmentId, ct);
+
+                var hasCourseAccess = await dbContext.UserCourses
+                    .AsNoTracking()
+                    .AnyAsync(uc => uc.UserId == userId && uc.CourseId == subject.CourseId, ct);
+
+                if (!hasDepartmentAccess || !hasCourseAccess)
                 {
                     return TypedResults.Problem(
-                        "You do not have permission to create topics for this department.",
+                        "You do not have permission to create topics for this course.",
                         statusCode: StatusCodes.Status403Forbidden);
                 }
             }
@@ -91,7 +96,6 @@ public sealed class CreateTopicEndpoint : IEndpoint
             await dbContext.SaveChangesAsync(ct);
 
             var creatorId = TopicPermissionResolver.GetCurrentUserId(httpContext.User);
-            var isOwner = creatorId.HasValue;
             if (creatorId.HasValue)
             {
                 dbContext.ActivityLogs.Add(new ActivityLog
@@ -110,7 +114,34 @@ public sealed class CreateTopicEndpoint : IEndpoint
                 await dbContext.SaveChangesAsync(ct);
             }
 
-            return TypedResults.Created($"/api/topics/{topic.Id}", topic.ToResponse(canEdit: isOwner, canDelete: isOwner));
+            if (creatorId.HasValue && !isAdminUser)
+            {
+                var alreadyAssigned = await dbContext.UserTopics
+                    .AsNoTracking()
+                    .AnyAsync(ut => ut.UserId == creatorId.Value && ut.TopicId == topic.Id, ct);
+
+                if (!alreadyAssigned)
+                {
+                    dbContext.UserTopics.Add(new UserTopic
+                    {
+                        UserId = creatorId.Value,
+                        TopicId = topic.Id,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    });
+
+                    await dbContext.SaveChangesAsync(ct);
+                }
+            }
+
+            var isAdminCreator = string.Equals(
+                httpContext.User.FindFirst("isAdmin")?.Value,
+                "true",
+                StringComparison.OrdinalIgnoreCase);
+
+            return TypedResults.Created(
+                $"/api/topics/{topic.Id}",
+                topic.ToResponse(canEdit: isAdminCreator, canDelete: isAdminCreator));
         }).RequireAuthorization();
     }
 }

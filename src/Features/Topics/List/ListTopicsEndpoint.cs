@@ -2,6 +2,7 @@ using Databank.Abstract;
 using Databank.Common;
 using Databank.Database;
 using Databank.Features.Topics;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 
 namespace Databank.Features.Topics.List;
@@ -38,9 +39,34 @@ public sealed class ListTopicsEndpoint : IEndpoint
                 query = query.Where(t => t.IsActive == isActive.Value);
             }
 
-            var totalCount = await query.CountAsync(ct);
-
             var currentUserId = TopicPermissionResolver.GetCurrentUserId(httpContext.User);
+            if (!currentUserId.HasValue)
+            {
+                return TypedResults.Problem("Unable to determine current user.", statusCode: StatusCodes.Status401Unauthorized);
+            }
+
+            var topicIds = await query.Select(t => t.Id).ToListAsync(ct);
+            var accessibleTopicIds = await TopicPermissionResolver.ResolveViewAccessForUserAsync(
+                dbContext,
+                currentUserId.Value,
+                topicIds,
+                ct);
+
+            if (accessibleTopicIds.Count == 0)
+            {
+                return TypedResults.Ok(new PagedResponse<TopicResponse>
+                {
+                    Items = new List<TopicResponse>(),
+                    PageNumber = pagination.PageNumber,
+                    PageSize = pagination.PageSize,
+                    TotalCount = 0
+                });
+            }
+
+            var accessibleTopicIdList = accessibleTopicIds.ToList();
+            query = query.Where(t => accessibleTopicIdList.Contains(t.Id));
+
+            var totalCount = accessibleTopicIdList.Count;
 
             var topicRows = await query
                 .OrderBy(t => t.SubjectId)
@@ -50,7 +76,7 @@ public sealed class ListTopicsEndpoint : IEndpoint
                 .ToListAsync(ct);
 
             Dictionary<int, (bool CanEdit, bool CanDelete)> permissions = new();
-            if (currentUserId.HasValue)
+            if (topicRows.Count > 0)
             {
                 permissions = await TopicPermissionResolver.ResolvePermissionsForUserAsync(
                     dbContext,
@@ -62,9 +88,8 @@ public sealed class ListTopicsEndpoint : IEndpoint
             var topics = topicRows
                 .Select(t =>
                 {
-                    var canEdit = permissions.TryGetValue(t.Id, out var perms) && perms.CanEdit;
-                    var canDelete = permissions.TryGetValue(t.Id, out var perms2) && perms2.CanDelete;
-                    return t.ToResponse(canEdit, canDelete);
+                    permissions.TryGetValue(t.Id, out var perms);
+                    return t.ToResponse(perms.CanEdit, perms.CanDelete);
                 })
                 .ToList();
 

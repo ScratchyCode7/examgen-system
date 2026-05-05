@@ -724,6 +724,31 @@ namespace src.Migrations
                     b.ToTable("Users", (string)null);
                 });
 
+            modelBuilder.Entity("Databank.Entities.UserCourse", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CourseId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.HasKey("UserId", "CourseId");
+
+                    b.HasIndex("CourseId");
+
+                    b.ToTable("UserCourses", (string)null);
+                });
+
             modelBuilder.Entity("Databank.Entities.UserDepartment", b =>
                 {
                     b.Property<Guid>("UserId")
@@ -792,6 +817,31 @@ namespace src.Migrations
                     b.HasIndex("UserId", "Status");
 
                     b.ToTable("UserSessions", (string)null);
+                });
+
+            modelBuilder.Entity("Databank.Entities.UserTopic", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("TopicId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.HasKey("UserId", "TopicId");
+
+                    b.HasIndex("TopicId");
+
+                    b.ToTable("UserTopics", (string)null);
                 });
 
             modelBuilder.Entity("Databank.Entities.ActivityLog", b =>
@@ -976,6 +1026,25 @@ namespace src.Migrations
                     b.Navigation("Department");
                 });
 
+            modelBuilder.Entity("Databank.Entities.UserCourse", b =>
+                {
+                    b.HasOne("Databank.Entities.Course", "Course")
+                        .WithMany("UserCourses")
+                        .HasForeignKey("CourseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Databank.Entities.User", "User")
+                        .WithMany("UserCourses")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Course");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Databank.Entities.UserDepartment", b =>
                 {
                     b.HasOne("Databank.Entities.Department", "Department")
@@ -1006,9 +1075,30 @@ namespace src.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Databank.Entities.UserTopic", b =>
+                {
+                    b.HasOne("Databank.Entities.Topic", "Topic")
+                        .WithMany("UserTopics")
+                        .HasForeignKey("TopicId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Databank.Entities.User", "User")
+                        .WithMany("UserTopics")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Topic");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Databank.Entities.Course", b =>
                 {
                     b.Navigation("Subjects");
+
+                    b.Navigation("UserCourses");
                 });
 
             modelBuilder.Entity("Databank.Entities.Department", b =>
@@ -1046,6 +1136,8 @@ namespace src.Migrations
             modelBuilder.Entity("Databank.Entities.Topic", b =>
                 {
                     b.Navigation("Questions");
+
+                    b.Navigation("UserTopics");
                 });
 
             modelBuilder.Entity("Databank.Entities.User", b =>
@@ -1054,7 +1146,11 @@ namespace src.Migrations
 
                     b.Navigation("Sessions");
 
+                    b.Navigation("UserCourses");
+
                     b.Navigation("UserDepartments");
+
+                    b.Navigation("UserTopics");
                 });
 #pragma warning restore 612, 618
         }

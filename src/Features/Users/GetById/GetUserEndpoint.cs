@@ -13,6 +13,7 @@ public sealed class GetUserEndpoint : IEndpoint
             var user = await dbContext.Users
                 .AsNoTracking()
                 .Include(u => u.UserDepartments)
+                .Include(u => u.UserCourses)
                 .FirstOrDefaultAsync(u => u.UserId == userId, ct);
 
             return user is null

@@ -8,6 +8,7 @@ public sealed record UserResponse(
     string? ProfileImageData,
     [property: Obsolete("Use DepartmentIds instead")] int? DepartmentId,
     int[] DepartmentIds,
+    int[] CourseIds,
     string Username,
     string Email,
     bool IsAdmin,

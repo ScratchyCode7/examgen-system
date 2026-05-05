@@ -1,7 +1,6 @@
 using Databank.Abstract;
 using Databank.Common;
 using Databank.Database;
-using Databank.Features.Topics;
 using Microsoft.EntityFrameworkCore;
 
 namespace Databank.Features.Topics.Update;
@@ -22,26 +21,6 @@ public sealed class UpdateTopicEndpoint : IEndpoint
             if (topic is null)
             {
                 return TypedResults.NotFound();
-            }
-
-            var requesterId = TopicPermissionResolver.GetCurrentUserId(httpContext.User);
-            if (!requesterId.HasValue)
-            {
-                return TypedResults.Problem("Unable to determine the current user.", statusCode: StatusCodes.Status401Unauthorized);
-            }
-
-            var permission = await TopicPermissionResolver.ResolvePermissionsForUserAsync(
-                dbContext,
-                requesterId.Value,
-                new[] { id },
-                ct);
-
-            var canEdit = permission.TryGetValue(id, out var perms) && perms.CanEdit;
-            if (!canEdit)
-            {
-                return TypedResults.Problem(
-                    "You do not have permission to edit this topic. Request edit permission from the owner.",
-                    statusCode: StatusCodes.Status403Forbidden);
             }
 
             var normalizedTitle = DuplicateKeyNormalizer.NormalizeKey(request.Title);
@@ -84,6 +63,6 @@ public sealed class UpdateTopicEndpoint : IEndpoint
             await dbContext.SaveChangesAsync(ct);
 
             return TypedResults.Ok(topic.ToResponse());
-        }).RequireAuthorization();
+        }).RequireAuthorization("AdminOnly");
     }
 }

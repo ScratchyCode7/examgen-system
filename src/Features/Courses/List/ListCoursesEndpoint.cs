@@ -16,10 +16,45 @@ public sealed class ListCoursesEndpoint : IEndpoint
                 int pageNumber = 1,
                 int pageSize = 10,
                 AppDbContext dbContext = null!,
+                HttpContext httpContext = null!,
                 CancellationToken ct = default) =>
         {
             var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
             var query = dbContext.Courses.AsNoTracking();
+
+            var isAdmin = httpContext.User.HasClaim("isAdmin", "true");
+            if (!isAdmin)
+            {
+                var currentUserIdValue = httpContext.User.FindFirst("sub")?.Value
+                    ?? httpContext.User.FindFirst("userId")?.Value
+                    ?? httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+                if (!Guid.TryParse(currentUserIdValue, out var currentUserId))
+                {
+                    return TypedResults.Problem(
+                        "Unable to determine the current user.",
+                        statusCode: StatusCodes.Status403Forbidden);
+                }
+
+                var courseIds = await dbContext.UserCourses
+                    .AsNoTracking()
+                    .Where(uc => uc.UserId == currentUserId)
+                    .Select(uc => uc.CourseId)
+                    .ToListAsync(ct);
+
+                if (courseIds.Count == 0)
+                {
+                    return TypedResults.Ok(new PagedResponse<CourseResponse>
+                    {
+                        Items = [],
+                        PageNumber = pagination.PageNumber,
+                        PageSize = pagination.PageSize,
+                        TotalCount = 0
+                    });
+                }
+
+                query = query.Where(c => courseIds.Contains(c.Id));
+            }
 
             if (departmentId.HasValue)
             {

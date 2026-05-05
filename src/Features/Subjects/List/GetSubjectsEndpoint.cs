@@ -38,9 +38,42 @@ public sealed class GetSubjectsEndpoint : IEndpoint
                 query = query.Where(s => s.IsActive == isActive.Value);
             }
 
-            var totalCount = await query.CountAsync(ct);
-
             var isAdmin = httpContext.User.HasClaim("isAdmin", "true");
+
+            if (!isAdmin)
+            {
+                var currentUserIdValue = httpContext.User.FindFirst("sub")?.Value
+                    ?? httpContext.User.FindFirst("userId")?.Value
+                    ?? httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+                if (!Guid.TryParse(currentUserIdValue, out var currentUserId))
+                {
+                    return TypedResults.Problem(
+                        "Unable to determine the current user.",
+                        statusCode: StatusCodes.Status403Forbidden);
+                }
+
+                var courseIds = await dbContext.UserCourses
+                    .AsNoTracking()
+                    .Where(uc => uc.UserId == currentUserId)
+                    .Select(uc => uc.CourseId)
+                    .ToListAsync(ct);
+
+                if (courseIds.Count == 0)
+                {
+                    return TypedResults.Ok(new PagedResponse<SubjectResponse>
+                    {
+                        Items = [],
+                        PageNumber = pagination.PageNumber,
+                        PageSize = pagination.PageSize,
+                        TotalCount = 0
+                    });
+                }
+
+                query = query.Where(s => courseIds.Contains(s.CourseId));
+            }
+
+            var totalCount = await query.CountAsync(ct);
 
             var subjectRows = await query
                 .OrderBy(s => s.CourseId)

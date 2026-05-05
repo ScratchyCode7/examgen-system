@@ -34,6 +34,8 @@ public sealed class User
     public Department? Department { get; set; }
     
     public ICollection<UserDepartment> UserDepartments { get; set; } = new List<UserDepartment>();
+    public ICollection<UserCourse> UserCourses { get; set; } = new List<UserCourse>();
+    public ICollection<UserTopic> UserTopics { get; set; } = new List<UserTopic>();
     public ICollection<ActivityLog> ActivityLogs { get; set; } = new List<ActivityLog>();
     public ICollection<UserSession> Sessions { get; set; } = new List<UserSession>();
 }

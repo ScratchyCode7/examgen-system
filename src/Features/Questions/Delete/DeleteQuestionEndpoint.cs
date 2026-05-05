@@ -1,6 +1,7 @@
 using Databank.Abstract;
 using Databank.Database;
 using Databank.Features.Questions;
+using Databank.Features.Topics;
 using Databank.Services;
 using Microsoft.EntityFrameworkCore;
 
@@ -29,6 +30,26 @@ public sealed class DeleteQuestionEndpoint : IEndpoint
             if (!requesterId.HasValue)
             {
                 return TypedResults.Problem("Unable to determine the current user.", statusCode: StatusCodes.Status401Unauthorized);
+            }
+
+            var isAdmin = await dbContext.Users
+                .AsNoTracking()
+                .AnyAsync(u => u.UserId == requesterId.Value && u.IsAdmin, ct);
+
+            if (!isAdmin)
+            {
+                var viewableTopics = await TopicPermissionResolver.ResolveViewAccessForUserAsync(
+                    dbContext,
+                    requesterId.Value,
+                    new[] { question.TopicId },
+                    ct);
+
+                if (!viewableTopics.Contains(question.TopicId))
+                {
+                    return TypedResults.Problem(
+                        "You do not have access to this topic.",
+                        statusCode: StatusCodes.Status403Forbidden);
+                }
             }
 
             var permission = await QuestionPermissionResolver.ResolvePermissionsForUserAsync(

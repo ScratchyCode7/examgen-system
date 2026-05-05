@@ -6,8 +6,16 @@ using Databank.Entities;
 
 namespace Databank.Features.Users.Create;
 
-public sealed record CreateUserRequest(string FirstName, string LastName, int[] DepartmentIds, string Username, string Password, string Email, bool IsAdmin = false);
-public sealed record CreateUserResponse(string FirstName, string LastName, int[] DepartmentIds, string Username, string Email, bool IsAdmin);
+public sealed record CreateUserRequest(
+    string FirstName,
+    string LastName,
+    int[] DepartmentIds,
+    int[] CourseIds,
+    string Username,
+    string Password,
+    string Email,
+    bool IsAdmin = false);
+public sealed record CreateUserResponse(string FirstName, string LastName, int[] DepartmentIds, int[] CourseIds, string Username, string Email, bool IsAdmin);
 
 public sealed class CreateUserEndpoint : IEndpoint
 {
@@ -31,6 +39,32 @@ public sealed class CreateUserEndpoint : IEndpoint
             if (existingDeptCount != req.DepartmentIds.Length)
             {
                 return TypedResults.BadRequest("One or more departments do not exist.");
+            }
+
+            var courseIds = req.CourseIds ?? Array.Empty<int>();
+            if (courseIds.Length > 0)
+            {
+                var courseRows = await dbContext.Courses
+                    .AsNoTracking()
+                    .Where(c => courseIds.Contains(c.Id))
+                    .Select(c => new { c.Id, c.DepartmentId })
+                    .ToListAsync(ct);
+
+                if (courseRows.Count != courseIds.Length)
+                {
+                    return TypedResults.BadRequest("One or more courses do not exist.");
+                }
+
+                var allowedDepartments = req.DepartmentIds.ToHashSet();
+                var invalidCourses = courseRows
+                    .Where(c => !allowedDepartments.Contains(c.DepartmentId))
+                    .Select(c => c.Id)
+                    .ToArray();
+
+                if (invalidCourses.Length > 0)
+                {
+                    return TypedResults.BadRequest("One or more courses are outside the assigned departments.");
+                }
             }
 
             var exists = await dbContext.Users

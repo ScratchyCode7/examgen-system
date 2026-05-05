@@ -1,5 +1,6 @@
 using Databank.Database;
 using Databank.Features.Questions;
+using Databank.Features.Topics;
 using Databank.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -14,16 +15,12 @@ public sealed class SearchController : ControllerBase
 {
     private readonly ISearchService _searchService;
     private readonly AppDbContext _dbContext;
-    private readonly IDepartmentAccessService _departmentAccessService;
-
     public SearchController(
         ISearchService searchService,
-        AppDbContext dbContext,
-        IDepartmentAccessService departmentAccessService)
+        AppDbContext dbContext)
     {
         _searchService = searchService;
         _dbContext = dbContext;
-        _departmentAccessService = departmentAccessService;
     }
 
     [HttpGet]
@@ -52,8 +49,19 @@ public sealed class SearchController : ControllerBase
             return Ok(response);
         }
 
-        var allowedDepartmentIds = await _departmentAccessService.GetUserDepartmentIdsAsync(currentUserId.Value, ct);
-        if (allowedDepartmentIds.Length == 0)
+        var questionIds = response.Results.Select(r => r.Id).Distinct().ToList();
+        var topicByQuestionId = await _dbContext.Questions
+            .AsNoTracking()
+            .Where(q => questionIds.Contains(q.Id))
+            .Select(q => new
+            {
+                q.Id,
+                q.TopicId
+            })
+            .ToDictionaryAsync(x => x.Id, x => x.TopicId, ct);
+
+        var topicIds = topicByQuestionId.Values.Distinct().ToList();
+        if (topicIds.Count == 0)
         {
             return Ok(response with
             {
@@ -63,25 +71,29 @@ public sealed class SearchController : ControllerBase
             });
         }
 
-        var allowedDepartmentIdSet = allowedDepartmentIds.ToHashSet();
-        var questionIds = response.Results.Select(r => r.Id).Distinct().ToList();
-        var departmentByQuestionId = await _dbContext.Questions
-            .AsNoTracking()
-            .Where(q => questionIds.Contains(q.Id))
-            .Select(q => new
-            {
-                q.Id,
-                DepartmentId = q.Topic.Subject.Course.DepartmentId
-            })
-            .ToDictionaryAsync(x => x.Id, x => x.DepartmentId, ct);
+        var accessibleTopicIds = await TopicPermissionResolver.ResolveViewAccessForUserAsync(
+            _dbContext,
+            currentUserId.Value,
+            topicIds,
+            ct);
 
-        var departmentScopedResults = response.Results
+        if (accessibleTopicIds.Count == 0)
+        {
+            return Ok(response with
+            {
+                Results = new List<SearchResultItem>(),
+                TotalCount = 0,
+                SimilarCount = 0
+            });
+        }
+
+        var topicScopedResults = response.Results
             .Where(item =>
-                departmentByQuestionId.TryGetValue(item.Id, out var departmentId) &&
-                allowedDepartmentIdSet.Contains(departmentId))
+                topicByQuestionId.TryGetValue(item.Id, out var topicId) &&
+                accessibleTopicIds.Contains(topicId))
             .ToList();
 
-        if (departmentScopedResults.Count == 0)
+        if (topicScopedResults.Count == 0)
         {
             return Ok(response with
             {
@@ -94,10 +106,10 @@ public sealed class SearchController : ControllerBase
         var permissionsByQuestionId = await QuestionPermissionResolver.ResolvePermissionsForUserAsync(
             _dbContext,
             currentUserId.Value,
-            departmentScopedResults.Select(r => r.Id).ToList(),
+            topicScopedResults.Select(r => r.Id).ToList(),
             ct);
 
-        var permissionAwareResults = departmentScopedResults
+        var permissionAwareResults = topicScopedResults
             .Select(item =>
             {
                 permissionsByQuestionId.TryGetValue(item.Id, out var permission);

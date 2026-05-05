@@ -19,4 +19,5 @@ public sealed class Topic
     // Navigation
     public Subject Subject { get; set; } = null!;
     public ICollection<Question> Questions { get; set; } = new List<Question>();
+    public ICollection<UserTopic> UserTopics { get; set; } = new List<UserTopic>();
 }

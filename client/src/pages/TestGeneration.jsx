@@ -555,6 +555,8 @@ const TestGeneration = () => {
   const [showAnswerSheet, setShowAnswerSheet] = useState(false);
   const [departments, setDepartments] = useState([]);
   const [courses, setCourses] = useState([]);
+  /** Non-admin: programs the user is enrolled in (`/api/users/{id}/courses`). Used only for the Course dropdown. */
+  const [userCourses, setUserCourses] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [topics, setTopics] = useState([]);
   const [questionsByTopic, setQuestionsByTopic] = useState({}); // Store questions by topicId
@@ -801,6 +803,25 @@ const TestGeneration = () => {
     void loadDepartments();
   }, [user, isAdmin]);
 
+  useEffect(() => {
+    if (!user?.userId || isAdmin) {
+      setUserCourses([]);
+      return;
+    }
+
+    const loadUserCourses = async () => {
+      try {
+        const data = await apiService.getUserCourses(user.userId);
+        setUserCourses(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error('Failed to load user courses for Test Creation:', err);
+        setUserCourses([]);
+      }
+    };
+
+    void loadUserCourses();
+  }, [user?.userId, isAdmin]);
+
   const applySubjectQuestionsFromCache = React.useCallback((subjectId, topicList) => {
     if (!subjectId || !Array.isArray(topicList)) return false;
     const cached = subjectQuestionCacheRef.current.get(String(subjectId));
@@ -912,6 +933,40 @@ const TestGeneration = () => {
         return;
       }
 
+      if (!isAdmin) {
+        try {
+          setIsLoadingCourses(true);
+          const dept = departments.find(d => d.id === departmentId);
+          if (!dept) {
+            setCourses([]);
+            return;
+          }
+
+          // Test Creation: only programs the user is enrolled in (same source as User Management course access).
+          const list = userCourses.filter(
+            (c) => Number(c.departmentId) === Number(dept.id)
+          );
+          setCourses(list);
+          setSelectedCourse((prev) => {
+            if (!prev) return prev;
+            const exists = list.some(course => String(course.id) === String(prev));
+            return exists ? prev : '';
+          });
+          setSelectedSubject((prev) => {
+            if (!prev) return prev;
+            const hasValidCourse = selectedCourse && list.some(course => String(course.id) === String(selectedCourse));
+            return hasValidCourse ? prev : '';
+          });
+        } catch (err) {
+          console.error('Failed to load programs:', err);
+          setError(`Failed to load programs: ${err.message || 'Unknown error'}`);
+          setCourses([]);
+        } finally {
+          setIsLoadingCourses(false);
+        }
+        return;
+      }
+
       const cachedCourses = coursesCacheRef.current.get(departmentId);
       if (cachedCourses) {
         setCourses(cachedCourses);
@@ -939,7 +994,7 @@ const TestGeneration = () => {
           return;
         }
 
-        const data = await apiService.getCourses(dept.id);
+        const data = await apiService.getCourses(dept.id, { pageSize: 500 });
         console.log('Courses loaded for dept', dept.id, ':', data);
         const list = Array.isArray(data) ? data : [];
         coursesCacheRef.current.set(dept.id, list);
@@ -964,7 +1019,7 @@ const TestGeneration = () => {
     };
 
     void loadCourses();
-  }, [selectedDepartment, departments, selectedCourse]);
+  }, [selectedDepartment, departments, selectedCourse, isAdmin, userCourses]);
 
   // Load subjects for selected program
   useEffect(() => {
@@ -2661,7 +2716,7 @@ const TestGeneration = () => {
       if (subjectId) setIsLoadingTopics(true);
 
       const [coursesListRaw, subjectsListRaw, topicsListRaw] = await Promise.all([
-        departmentId ? apiService.getCourses(departmentId).catch(err => {
+        departmentId ? apiService.getCourses(departmentId, { pageSize: 500 }).catch(err => {
           console.error('Failed to load courses for print request:', err);
           return [];
         }) : Promise.resolve([]),
@@ -3263,9 +3318,10 @@ const TestGeneration = () => {
   }, [sampleExam, showToast, syncSpecWithExamQuestions]);
 
   const dataEntryItems = ["Program - Topic", "Test Encoding", "Test Question Editing"];
+  const testGenerationLabel = isAdmin ? "Test Generation" : "Test Creation";
   const reportItems = isAdmin
     ? ["Test Generation", "Saved Exam Sets", "Print Requests"]
-    : ["Test Generation", "Saved Exam Sets"];
+    : [testGenerationLabel, "Saved Exam Sets"];
   const availableDataEntryItems = isAdmin ? ["Program - Topic"] : dataEntryItems;
   const isDataEntryActive = availableDataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
   const isReportsActive = reportItems.includes(activeTab) || activeTab === 'Reports';
@@ -3345,7 +3401,7 @@ const TestGeneration = () => {
               onSelect={(item) => {
                 setActiveTab(item);
                 const code = resolveDepartmentCode();
-                if (item === 'Test Generation') {
+                if (item === testGenerationLabel) {
                   navigate(`/test-generation/${code}`);
                 } else if (item === 'Saved Exam Sets') {
                   navigate(`/reports/saved-exams/${code}`);
@@ -3403,7 +3459,7 @@ const TestGeneration = () => {
                   handleSearchNavigate();
                 }
               }}
-              aria-label="Search test generation page"
+              aria-label={`Search ${testGenerationLabel.toLowerCase()} page`}
             />
           </div>
         </div>
@@ -3563,7 +3619,7 @@ const TestGeneration = () => {
             </>
           ) : (
             <>
-              <h2>Test Generation</h2>
+              <h2>{testGenerationLabel}</h2>
               <p className="subtitle">Create a table of specifications and generate exams based on topics and cognitive levels</p>
 
           {/* Initial Inputs */}
@@ -3958,7 +4014,7 @@ const TestGeneration = () => {
               onClick={handleGenerateSample}
               disabled={!generatedSpec}
             >
-              <PlayCircle size={16} /> Generate Sample Exam
+              <PlayCircle size={16} /> {user?.isAdmin ? 'Generate Sample Exam' : 'Create Sample Test'}
             </button>
             <button
               className="btn btn-secondary"

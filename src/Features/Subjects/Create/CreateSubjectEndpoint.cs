@@ -1,7 +1,6 @@
 using Databank.Abstract;
 using Databank.Database;
 using Databank.Entities;
-using Databank.Services;
 using Microsoft.EntityFrameworkCore;
 using Databank.Features.Subjects;
 
@@ -14,7 +13,6 @@ public sealed class CreateSubjectEndpoint : IEndpoint
         app.MapPost("/api/subjects", async Task<IResult> (
                 SubjectRequest request,
                 AppDbContext dbContext,
-                IDepartmentAccessService departmentAccessService,
                 HttpContext httpContext,
                 CancellationToken ct) =>
         {
@@ -33,22 +31,6 @@ public sealed class CreateSubjectEndpoint : IEndpoint
             if (course is null)
             {
                 return TypedResults.BadRequest("Course not found.");
-            }
-
-            var isAdminUser = string.Equals(
-                httpContext.User.FindFirst("isAdmin")?.Value,
-                "true",
-                StringComparison.OrdinalIgnoreCase);
-
-            if (!isAdminUser)
-            {
-                var hasAccess = await departmentAccessService.HasAccessToDepartmentAsync(requesterId.Value, course.DepartmentId, ct);
-                if (!hasAccess)
-                {
-                    return TypedResults.Problem(
-                        "You do not have permission to create subjects for this department.",
-                        statusCode: StatusCodes.Status403Forbidden);
-                }
             }
 
             var exists = await dbContext.Subjects
@@ -89,7 +71,7 @@ public sealed class CreateSubjectEndpoint : IEndpoint
             await dbContext.SaveChangesAsync(ct);
 
             return TypedResults.Created($"/api/subjects/{subject.Id}", subject.ToResponse(canEdit: true, canDelete: true));
-        }).RequireAuthorization();
+        }).RequireAuthorization("AdminOnly");
     }
 }
 

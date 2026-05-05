@@ -103,6 +103,7 @@ const SavedExamsReport = () => {
   // Collections
   const [departments, setDepartments] = useState([]);
   const [courses, setCourses] = useState([]);
+  const [userCourses, setUserCourses] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [savedExamSets, setSavedExamSets] = useState([]);
 
@@ -223,6 +224,25 @@ const SavedExamsReport = () => {
   }, [user, isAdmin]);
 
   useEffect(() => {
+    if (!user?.userId || isAdmin) {
+      setUserCourses([]);
+      return;
+    }
+
+    const loadUserCourses = async () => {
+      try {
+        const data = await apiService.getUserCourses(user.userId);
+        setUserCourses(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error('Failed to load user courses:', err);
+        setUserCourses([]);
+      }
+    };
+
+    void loadUserCourses();
+  }, [user?.userId, isAdmin]);
+
+  useEffect(() => {
     if (!departments.length) return;
 
     if (departmentCode) {
@@ -256,6 +276,14 @@ const SavedExamsReport = () => {
           setCourses([]);
           return;
         }
+        if (!isAdmin) {
+          const scopedCourses = userCourses.filter(course => course.departmentId === dept.id);
+          setCourses(scopedCourses);
+          setSelectedCourse('');
+          setSelectedSubject('');
+          return;
+        }
+
         const data = await apiService.getCourses(dept.id);
         const nextCourses = Array.isArray(data) ? data : [];
         setCourses(nextCourses);
@@ -270,7 +298,7 @@ const SavedExamsReport = () => {
     };
 
     void fetchCourses();
-  }, [selectedDepartment, departments]);
+  }, [selectedDepartment, departments, isAdmin, userCourses]);
 
   useEffect(() => {
     const fetchSubjects = async () => {
@@ -989,9 +1017,10 @@ const SavedExamsReport = () => {
   };
 
   const dataEntryItems = ['Program - Topic', 'Test Encoding', 'Test Question Editing'];
+  const testGenerationLabel = isAdmin ? 'Test Generation' : 'Test Creation';
   const reportItems = isAdmin
     ? ['Test Generation', 'Saved Exam Sets', 'Print Requests']
-    : ['Test Generation', 'Saved Exam Sets'];
+    : [testGenerationLabel, 'Saved Exam Sets'];
   const reportsNotificationCount = isAdmin ? pendingPrintRequestCount : 0;
   const availableDataEntryItems = isAdmin ? ['Program - Topic'] : dataEntryItems;
   const isDataEntryActive = availableDataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
@@ -1060,7 +1089,7 @@ const SavedExamsReport = () => {
               onSelect={(item) => {
                 setActiveTab(item);
                 const code = resolveDepartmentCode();
-                if (item === 'Test Generation') {
+                if (item === testGenerationLabel) {
                   navigate(`/test-generation/${code}`);
                 } else if (item === 'Saved Exam Sets') {
                   navigate(`/reports/saved-exams/${code}`);

@@ -23,6 +23,15 @@ public static class CreateUserMapping
                 UserId = user.UserId
             })
             .ToList();
+
+        user.UserCourses = (req.CourseIds ?? Array.Empty<int>())
+            .Distinct()
+            .Select(courseId => new UserCourse
+            {
+                CourseId = courseId,
+                UserId = user.UserId
+            })
+            .ToList();
             
         return user;
     }
@@ -33,6 +42,7 @@ public static class CreateUserMapping
             user.FirstName,
             user.LastName,
             user.UserDepartments.Select(ud => ud.DepartmentId).ToArray(),
+            user.UserCourses.Select(uc => uc.CourseId).ToArray(),
             user.Username,
             user.Email,
             user.IsAdmin

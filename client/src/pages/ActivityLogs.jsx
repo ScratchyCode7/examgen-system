@@ -65,9 +65,10 @@ const ActivityLogs = () => {
   const availableDataEntryItems = user?.isAdmin ? ["Program - Topic"] : dataEntryItems;
   const isDataEntryActive = availableDataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
   
+  const testGenerationLabel = user?.isAdmin ? "Test Generation" : "Test Creation";
   const reportItems = user?.isAdmin
     ? ["Test Generation", "Saved Exam Sets", "Print Requests"]
-    : ["Test Generation", "Saved Exam Sets"];
+    : [testGenerationLabel, "Saved Exam Sets"];
   const reportsNotificationCount = user?.isAdmin ? pendingPrintRequestCount : 0;
   const isReportsActive = reportItems.includes(activeTab) || activeTab === 'Reports';
 
@@ -290,7 +291,7 @@ const ActivityLogs = () => {
                 setActiveTab(item);
                 const firstDept = departments?.find(d => d.code !== 'IT') || departments?.[0];
                 const code = firstDept?.code || 'CCS';
-                if (item === 'Test Generation') {
+                if (item === testGenerationLabel) {
                   navigate(`/test-generation/${code}`);
                 } else if (item === 'Saved Exam Sets') {
                   navigate(`/reports/saved-exams/${code}`);

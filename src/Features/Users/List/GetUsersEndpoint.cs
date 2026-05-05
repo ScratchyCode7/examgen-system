@@ -18,7 +18,8 @@ public sealed class GetUsersEndpoint : IEndpoint
             var pagination = new PaginationParams { PageNumber = pageNumber, PageSize = pageSize };
             var query = dbContext.Users
             .AsNoTracking()
-            .Include(u => u.UserDepartments);
+            .Include(u => u.UserDepartments)
+            .Include(u => u.UserCourses);
 
             var totalCount = await query.CountAsync(ct);
 

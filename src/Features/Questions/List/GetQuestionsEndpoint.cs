@@ -3,6 +3,8 @@ using Databank.Common;
 using Databank.Database;
 using Databank.Entities;
 using Databank.Features.Questions;
+using Databank.Features.Topics;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 
 namespace Databank.Features.Questions.List;
@@ -82,6 +84,42 @@ public sealed class GetQuestionsEndpoint : IEndpoint
 
             query = query.Where(q => q.IsActive);
 
+            Dictionary<int, (bool CanEdit, bool CanDelete)> permissionsByQuestionId = new();
+            var currentUserId = QuestionPermissionResolver.GetCurrentUserId(httpContext.User);
+            if (!currentUserId.HasValue)
+            {
+                return TypedResults.Problem("Unable to determine current user.", statusCode: StatusCodes.Status401Unauthorized);
+            }
+
+            var candidateTopicIds = await query
+                .Select(q => q.TopicId)
+                .Distinct()
+                .ToListAsync(ct);
+
+            if (candidateTopicIds.Count > 0)
+            {
+                var accessibleTopicIds = await TopicPermissionResolver.ResolveViewAccessForUserAsync(
+                    dbContext,
+                    currentUserId.Value,
+                    candidateTopicIds,
+                    ct);
+
+                if (accessibleTopicIds.Count == 0)
+                {
+                    var emptyResponse = new PagedResponse<QuestionResponse>
+                    {
+                        Items = new List<QuestionResponse>(),
+                        PageNumber = pagination.PageNumber,
+                        PageSize = pagination.PageSize,
+                        TotalCount = 0
+                    };
+
+                    return TypedResults.Ok(emptyResponse);
+                }
+
+                query = query.Where(q => accessibleTopicIds.Contains(q.TopicId));
+            }
+
             var totalCount = await query.CountAsync(ct);
 
             var questionEntities = await query
@@ -91,9 +129,7 @@ public sealed class GetQuestionsEndpoint : IEndpoint
                 .Take(pagination.Take)
                 .ToListAsync(ct);
 
-            Dictionary<int, (bool CanEdit, bool CanDelete)> permissionsByQuestionId = new();
-            var currentUserId = QuestionPermissionResolver.GetCurrentUserId(httpContext.User);
-            if (currentUserId.HasValue && questionEntities.Count > 0)
+            if (questionEntities.Count > 0)
             {
                 permissionsByQuestionId = await QuestionPermissionResolver.ResolvePermissionsForUserAsync(
                     dbContext,

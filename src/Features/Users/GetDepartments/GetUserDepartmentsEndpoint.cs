@@ -1,6 +1,7 @@
 using Databank.Abstract;
 using Databank.Database;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace Databank.Features.Users.GetDepartments;
 
@@ -13,8 +14,19 @@ public sealed class GetUserDepartmentsEndpoint : IEndpoint
         app.MapGet("/api/users/{userId:guid}/departments", async Task<IResult> (
                 Guid userId,
                 AppDbContext dbContext,
+                HttpContext httpContext,
                 CancellationToken ct) =>
         {
+            var isAdmin = httpContext.User.HasClaim("isAdmin", "true");
+            var currentUserIdValue = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? httpContext.User.FindFirst("sub")?.Value
+                ?? httpContext.User.FindFirst("userId")?.Value;
+
+            if (!isAdmin && (!Guid.TryParse(currentUserIdValue, out var currentUserId) || currentUserId != userId))
+            {
+                return TypedResults.Problem("You do not have permission to access this user.", statusCode: StatusCodes.Status403Forbidden);
+            }
+
             var user = await dbContext.Users
                 .Include(u => u.UserDepartments)
                     .ThenInclude(ud => ud.Department)

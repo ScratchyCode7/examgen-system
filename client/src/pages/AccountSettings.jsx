@@ -67,9 +67,10 @@ const AccountSettings = () => {
 
   const dataEntryItems = ['Program - Topic', 'Test Encoding', 'Test Question Editing'];
   const availableDataEntryItems = isAdmin ? ['Program - Topic'] : dataEntryItems;
+  const testGenerationLabel = isAdmin ? 'Test Generation' : 'Test Creation';
   const reportItems = isAdmin
     ? ['Test Generation', 'Saved Exam Sets', 'Print Requests']
-    : ['Test Generation', 'Saved Exam Sets'];
+    : [testGenerationLabel, 'Saved Exam Sets'];
   const reportsNotificationCount = isAdmin ? pendingPrintRequestCount : 0;
   const isDataEntryActive = availableDataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
   const isReportsActive = reportItems.includes(activeTab) || activeTab === 'Reports';
@@ -395,7 +396,7 @@ const AccountSettings = () => {
               onSelect={(item) => {
                 setActiveTab(item);
                 const code = resolveDepartmentCode();
-                if (item === 'Test Generation') {
+                if (item === testGenerationLabel) {
                   navigate(`/test-generation/${code}`);
                 } else if (item === 'Saved Exam Sets') {
                   navigate(`/reports/saved-exams/${code}`);

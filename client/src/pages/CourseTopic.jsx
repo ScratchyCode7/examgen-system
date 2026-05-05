@@ -4,7 +4,7 @@
 // See README for full details.
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search, FileText, Users, HelpCircle, Send, Check, X, ShieldOff, Pencil, Trash2, ChevronRight, ChevronDown } from 'lucide-react';
+import { Home, ClipboardList, BookOpen, Settings, LogOut, User, Sun, Moon, Search, FileText, Users, HelpCircle, Pencil, Trash2, ChevronRight, ChevronDown, Save, X, UserPlus, Building2, ShieldCheck, Tags } from 'lucide-react';
 import NavItem from '../components/NavItem';
 import DropdownNavItem from '../components/DropdownNavItem';
 import LogoutModal from '../components/LogoutModal';
@@ -23,6 +23,42 @@ import DEPARTMENT_LOGOS from '../constants/departmentLogos';
 import { HELP_CENTER_URL } from '../constants/helpLinks';
 import { getUserDisplayName, getUserProfileImageUrl } from '../utils/userDisplay';
 const dataEntryItems = ["Program - Topic", "Test Encoding", "Test Question Editing"];
+
+/** Maps a Subject API record to a CourseTopic history row (JSON description holds form metadata). */
+const mapSubjectApiToCourseTopicRow = (s) => {
+  if (!s) return null;
+  const subjectId = s.id ?? s.Id;
+  const courseIdRaw = s.courseId ?? s.CourseId;
+  if (subjectId == null) return null;
+  if (!s.description && (courseIdRaw == null || courseIdRaw === undefined)) return null;
+
+  try {
+    const meta = s.description ? JSON.parse(s.description) : {};
+    const courseIdFromMeta = meta.course != null ? Number(meta.course) : null;
+
+    const derivedCourseCode = meta.courseCode || meta.topicCode || s.code || '';
+    const derivedCourseTitle = meta.courseTitle || meta.topicTitle || meta.topicDesc || s.name || '';
+    const derivedCourseUnits = meta.courseUnits || meta.topicUnits || meta.value || '';
+    const derivedCourseHours = meta.courseHours || meta.hours || (s.hours ? Number(s.hours) : '');
+
+    if (!derivedCourseCode || !derivedCourseTitle) return null;
+
+    return {
+      subjectId,
+      courseId: courseIdRaw != null ? Number(courseIdRaw) : courseIdFromMeta,
+      courseCode: derivedCourseCode,
+      courseTitle: derivedCourseTitle,
+      courseUnits: derivedCourseUnits,
+      courseHours: derivedCourseHours,
+      createdAt: s.createdAt,
+      canEdit: s.canEdit === true,
+      canDelete: s.canDelete === true,
+    };
+  } catch (ex) {
+    console.warn('Invalid subject description JSON for subject', subjectId, ex);
+    return null;
+  }
+};
 
 const CourseTopic = () => {
   const { user, logout, isAdmin } = useAuth();
@@ -47,9 +83,10 @@ const CourseTopic = () => {
   const displayName = getUserDisplayName(user, 'User');
   const profileImageUrl = user?.profileImageData || getUserProfileImageUrl(user?.profileImagePath, user?.userId);
 
+  const testGenerationLabel = isAdmin ? "Test Generation" : "Test Creation";
   const reportItems = isAdmin
-    ? ["Test Generation", "Saved Exam Sets", "Print Requests"]
-    : ["Test Generation", "Saved Exam Sets"];
+    ? [testGenerationLabel, "Saved Exam Sets", "Print Requests"]
+    : [testGenerationLabel, "Saved Exam Sets"];
   const reportsNotificationCount = isAdmin ? pendingPrintRequestCount : 0;
 
   // Course topic form states
@@ -63,17 +100,10 @@ const CourseTopic = () => {
   const [departments, setDepartments] = useState([]);
   const [isLoadingCourses, setIsLoadingCourses] = useState(false);
   const [isLoadingDepartments, setIsLoadingDepartments] = useState(false);
+  const [userCourses, setUserCourses] = useState([]);
   const [history, setHistory] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [editingSubjectId, setEditingSubjectId] = useState(null);
-  const [isSubjectEditRequestModalOpen, setIsSubjectEditRequestModalOpen] = useState(false);
-  const [subjectEditRequestTarget, setSubjectEditRequestTarget] = useState(null);
-  const [subjectEditRequestMessage, setSubjectEditRequestMessage] = useState('');
-  const [isSubmittingSubjectEditRequest, setIsSubmittingSubjectEditRequest] = useState(false);
-  const [isTopicEditRequestModalOpen, setIsTopicEditRequestModalOpen] = useState(false);
-  const [topicEditRequestTarget, setTopicEditRequestTarget] = useState(null);
-  const [topicEditRequestMessage, setTopicEditRequestMessage] = useState('');
-  const [isSubmittingTopicEditRequest, setIsSubmittingTopicEditRequest] = useState(false);
 
   // Topic Management states
   const [expandedSubjectsMap, setExpandedSubjectsMap] = useState({});
@@ -82,12 +112,6 @@ const CourseTopic = () => {
   const [selectedSubjectForTopic, setSelectedSubjectForTopic] = useState(null);
   const [editingTopic, setEditingTopic] = useState(null);
   const [topicCreating, setTopicCreating] = useState(false);
-  const [topicRequestScope, setTopicRequestScope] = useState('inbox');
-  const [topicEditRequests, setTopicEditRequests] = useState([]);
-  const [topicRequestsLoading, setTopicRequestsLoading] = useState(false);
-  const [topicRequestPageNumber, setTopicRequestPageNumber] = useState(1);
-  const [adminRequestStatusFilter, setAdminRequestStatusFilter] = useState('all');
-  const [adminRequestTypeFilter, setAdminRequestTypeFilter] = useState('all');
   const [deleteConfirmation, setDeleteConfirmation] = useState(null);
   const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false);
   const [transferTopicModal, setTransferTopicModal] = useState({
@@ -106,9 +130,36 @@ const CourseTopic = () => {
   const [programFormData, setProgramFormData] = useState({ programName: '', programCode: '', programDescription: '' });
   const [isCreatingProgram, setIsCreatingProgram] = useState(false);
 
-  const availableDataEntryItems = isAdmin ? ['Program - Topic'] : dataEntryItems;
-  const TOPIC_REQUESTS_PAGE_SIZE = 5;
+  // User Enrollment states (for admins)
+  const [showUserEnrollmentModal, setShowUserEnrollmentModal] = useState(false);
+  const [enrollmentUsers, setEnrollmentUsers] = useState([]);
+  const [selectedUserForEnrollment, setSelectedUserForEnrollment] = useState(null);
+  const [selectedEnrollmentDepartment, setSelectedEnrollmentDepartment] = useState(null);
+  const [selectedEnrollmentDepartmentHasAccess, setSelectedEnrollmentDepartmentHasAccess] = useState(false);
+  const [selectedEnrollmentDepartmentExistingAccess, setSelectedEnrollmentDepartmentExistingAccess] = useState(false);
+  const [enrollmentCourses, setEnrollmentCourses] = useState([]);
+  const [isLoadingEnrollmentCourses, setIsLoadingEnrollmentCourses] = useState(false);
+  const [selectedEnrollmentCourse, setSelectedEnrollmentCourse] = useState(null);
+  const [selectedEnrollmentSubjectIds, setSelectedEnrollmentSubjectIds] = useState([]);
+  const [isCourseSelectorExpanded, setIsCourseSelectorExpanded] = useState(false);
+  const [selectedEnrollmentCourseHasAccess, setSelectedEnrollmentCourseHasAccess] = useState(false);
+  const [selectedEnrollmentCourseExistingAccess, setSelectedEnrollmentCourseExistingAccess] = useState(false);
+  const [selectedEnrollmentTopics, setSelectedEnrollmentTopics] = useState([]);
+  const [selectedEnrollmentTopicIds, setSelectedEnrollmentTopicIds] = useState([]);
+  const [existingEnrollmentTopicIds, setExistingEnrollmentTopicIds] = useState([]);
+  const [isLoadingEnrollmentTopics, setIsLoadingEnrollmentTopics] = useState(false);
+  const [isEnrollingUser, setIsEnrollingUser] = useState(false);
+  const [isTopicAccessModalOpen, setIsTopicAccessModalOpen] = useState(false);
+  const [topicAccessTarget, setTopicAccessTarget] = useState(null);
+  const [topicAccessCourseId, setTopicAccessCourseId] = useState(null);
+  const [selectedUserForTopicAccess, setSelectedUserForTopicAccess] = useState(null);
+  const [topicAccessHasAccess, setTopicAccessHasAccess] = useState(false);
+  const [topicAccessExisting, setTopicAccessExisting] = useState(false);
+  const [isGrantingTopicAccess, setIsGrantingTopicAccess] = useState(false);
 
+  const [allSubjects, setAllSubjects] = useState([]);
+
+  const availableDataEntryItems = isAdmin ? ['Program - Topic'] : dataEntryItems;
   const isDataEntryActive = availableDataEntryItems.includes(activeTab) || activeTab === 'Data Entry';
   const isReportsActive = reportItems.includes(activeTab) || activeTab === 'Reports';
   const normalizedSearchText = searchText.trim().toLowerCase();
@@ -154,81 +205,29 @@ const CourseTopic = () => {
     return fallbackMessage;
   }, []);
 
-  const sortedTopicRequests = useMemo(() => {
-    const getPriority = (request) => {
-      const status = String(request?.status || '').toLowerCase();
-      if (request?.canRevoke || status === 'approved') return 0;
-      if (status === 'pending') return 1;
-      if (status === 'rejected') return 2;
-      if (status === 'revoked') return 3;
-      return 4;
-    };
-
-    return [...topicEditRequests].sort((left, right) => {
-      const priorityDiff = getPriority(left) - getPriority(right);
-      if (priorityDiff !== 0) return priorityDiff;
-
-      const leftTime = new Date(left?.requestedAt || 0).getTime();
-      const rightTime = new Date(right?.requestedAt || 0).getTime();
-      return rightTime - leftTime;
-    });
-  }, [topicEditRequests]);
-
-  const adminRequestSummary = useMemo(() => {
-    return sortedTopicRequests.reduce(
-      (summary, request) => {
-        const normalizedStatus = String(request?.status || '').toLowerCase();
-        summary.total += 1;
-
-        if (normalizedStatus === 'pending') summary.pending += 1;
-        if (normalizedStatus === 'approved') summary.approved += 1;
-        if (normalizedStatus === 'rejected') summary.rejected += 1;
-        if (normalizedStatus === 'revoked') summary.revoked += 1;
-        if (request?.canRevoke) summary.actionable += 1;
-
-        return summary;
-      },
-      {
-        total: 0,
-        pending: 0,
-        approved: 0,
-        rejected: 0,
-        revoked: 0,
-        actionable: 0,
-      }
-    );
-  }, [sortedTopicRequests]);
-
-  const displayedTopicRequests = useMemo(() => {
-    if (!isAdmin) return sortedTopicRequests;
-
-    return sortedTopicRequests.filter((request) => {
-      const normalizedStatus = String(request?.status || '').toLowerCase();
-      const normalizedType = String(request?.requestType || '').toLowerCase();
-
-      const matchesStatus = adminRequestStatusFilter === 'all' || normalizedStatus === adminRequestStatusFilter;
-      const matchesType = adminRequestTypeFilter === 'all' || normalizedType === adminRequestTypeFilter;
-
-      return matchesStatus && matchesType;
-    });
-  }, [sortedTopicRequests, isAdmin, adminRequestStatusFilter, adminRequestTypeFilter]);
-
-  const topicRequestTotalPages = Math.max(1, Math.ceil(displayedTopicRequests.length / TOPIC_REQUESTS_PAGE_SIZE));
-
-  const pagedTopicRequests = useMemo(() => {
-    const startIndex = (topicRequestPageNumber - 1) * TOPIC_REQUESTS_PAGE_SIZE;
-    return displayedTopicRequests.slice(startIndex, startIndex + TOPIC_REQUESTS_PAGE_SIZE);
-  }, [displayedTopicRequests, topicRequestPageNumber, TOPIC_REQUESTS_PAGE_SIZE]);
-
   const resolveDepartmentCode = () => {
     if (departmentCode) return departmentCode;
     const fallback = departments.find(d => !['IT', 'ITS'].includes((d.code || '').toUpperCase())) || departments[0];
     return fallback?.code || 'CCS';
   };
 
+  const getCurrentDepartment = () => {
+    if (departmentCode) {
+      return departments.find(d => d.code === departmentCode);
+    }
+
+    if (courses.length > 0) {
+      return departments.find(d => d.id === courses[0].departmentId);
+    }
+
+    return undefined;
+  };
+
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) setIsUserMenuOpen(false);
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
+        setIsUserMenuOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -257,65 +256,62 @@ const CourseTopic = () => {
     grid.scrollTo({ left: Math.max(0, targetLeft), behavior: 'smooth' });
   }, [departmentCode, departments.length]);
 
-  // Load existing subjects that were created via this page (identified by JSON description)
-  const [allSubjects, setAllSubjects] = useState([]);
-
+  // Subjects for history: loaded per program (course) in the current department — not a global paged list,
+  // which previously mixed unrelated programs and broke the department filter.
   useEffect(() => {
-    const loadExistingSubjects = async () => {
+    let cancelled = false;
+
+    const loadSubjectsForDepartmentPrograms = async () => {
+      if (!departmentCode || !departments.length) {
+        if (!cancelled) setAllSubjects([]);
+        return;
+      }
+
+      const dept = departments.find((d) => d.code === departmentCode);
+      if (!dept || !courses.length) {
+        if (!cancelled) setAllSubjects([]);
+        return;
+      }
+
       try {
         setIsLoading(true);
-        // Call getSubjects with proper params object
-        const result = await apiService.getSubjects({ pageNumber: 1, pageSize: 100 });
-        const items = Array.isArray(result) ? result : (result?.items || result?.Items || []);
 
-        console.log('Raw API response for subjects:', result);
-        console.log('Items extracted:', items);
+        const perCourseResults = await Promise.all(
+          courses.map(async (c) => {
+            const courseId = Number(c.id);
+            if (!Number.isFinite(courseId)) return [];
 
-        const mapped = items
-          .map((s) => {
-            // prefer strongly-typed courseId returned by the API, fall back to metadata
-            let courseIdFromMeta = null;
-            if (!s.description && s.courseId == null) return null;
             try {
-              const meta = s.description ? JSON.parse(s.description) : {};
-              courseIdFromMeta = meta.course != null ? Number(meta.course) : null;
-
-              const derivedCourseCode = meta.courseCode || meta.topicCode || s.code || '';
-              const derivedCourseTitle = meta.courseTitle || meta.topicTitle || meta.topicDesc || s.name || '';
-              const derivedCourseUnits = meta.courseUnits || meta.topicUnits || meta.value || '';
-              const derivedCourseHours = meta.courseHours || meta.hours || (s.hours ? Number(s.hours) : '');
-
-              if (!derivedCourseCode || !derivedCourseTitle) return null;
-
-              return {
-                subjectId: s.id,
-                courseId: s.courseId != null ? Number(s.courseId) : courseIdFromMeta,
-                courseCode: derivedCourseCode,
-                courseTitle: derivedCourseTitle,
-                courseUnits: derivedCourseUnits,
-                courseHours: derivedCourseHours,
-                createdAt: s.createdAt,
-                canEdit: s.canEdit === true,
-                canDelete: s.canDelete === true,
-              };
-            } catch (ex) {
-              console.warn('Invalid subject description JSON for subject', s.id, ex);
-              return null;
+              const result = await apiService.getSubjects({ courseId, pageSize: 500 });
+              const items = Array.isArray(result)
+                ? result
+                : (result?.items || result?.Items || result?.data || []);
+              return (Array.isArray(items) ? items : [])
+                .map((s) => mapSubjectApiToCourseTopicRow(s))
+                .filter(Boolean);
+            } catch (err) {
+              console.error('Failed to load subjects for course', courseId, err);
+              return [];
             }
           })
-          .filter(Boolean);
-        
-        console.log('Loaded subjects:', mapped);
-        setAllSubjects(mapped);
+        );
+
+        if (!cancelled) {
+          setAllSubjects(perCourseResults.flat());
+        }
       } catch (err) {
         console.error('Failed to load subjects for CourseTopic history:', err);
+        if (!cancelled) setAllSubjects([]);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
 
-    loadExistingSubjects();
-  }, []);
+    void loadSubjectsForDepartmentPrograms();
+    return () => {
+      cancelled = true;
+    };
+  }, [departmentCode, departments, courses]);
 
   // Filter history to show only subjects from courses in the current department
   useEffect(() => {
@@ -370,14 +366,38 @@ const CourseTopic = () => {
   }, [user, isAdmin]);
 
   useEffect(() => {
+    if (!user?.userId || isAdmin) return;
+
+    const loadUserCourses = async () => {
+      try {
+        const data = await apiService.getUserCourses(user.userId);
+        const list = Array.isArray(data) ? data : [];
+        setUserCourses(list);
+      } catch (err) {
+        console.error('Failed to load user courses for CourseTopic:', err);
+        setUserCourses([]);
+      }
+    };
+
+    void loadUserCourses();
+  }, [user, isAdmin]);
+
+  useEffect(() => {
     const loadCourses = async () => {
       if (!departmentCode) return setCourses([]);
       const dept = departments.find(d => d.code === departmentCode);
       console.log('CourseTopic: departmentCode', departmentCode, 'matched dept', dept);
       if (!dept) return setCourses([]);
+
+      if (!isAdmin) {
+        const scopedCourses = userCourses.filter(course => course.departmentId === dept.id);
+        setCourses(scopedCourses);
+        return;
+      }
+
       try {
         setIsLoadingCourses(true);
-        const data = await apiService.getCourses(dept.id);
+        const data = await apiService.getCourses(dept.id, { pageSize: 500 });
         const list = Array.isArray(data) ? data : [];
         console.log('CourseTopic: loaded courses for', dept.id, list);
         // API returns array
@@ -391,7 +411,7 @@ const CourseTopic = () => {
     };
 
     void loadCourses();
-  }, [departmentCode, departments]);
+  }, [departmentCode, departments, isAdmin, userCourses]);
 
   const loadTransferUsers = useCallback(async () => {
     if (!isAdmin) {
@@ -425,62 +445,28 @@ const CourseTopic = () => {
     }
   }, [isAdmin, showToast]);
 
+  const loadEnrollmentUsers = useCallback(async () => {
+    if (!isAdmin) return;
+    
+    try {
+      const data = await apiService.getUsers(1, 100); // Load more users for enrollment
+      setEnrollmentUsers(data.items || data || []);
+    } catch (err) {
+      console.error('Failed to load users for enrollment:', err);
+      setEnrollmentUsers([]);
+      showToast({ message: 'Failed to load users for enrollment.', type: 'error' });
+    }
+  }, [isAdmin, showToast]);
+
   useEffect(() => {
     if (!isAdmin) return;
     void loadTransferUsers();
   }, [isAdmin, loadTransferUsers]);
 
-  const refreshAccessRequests = useCallback(async (scope = topicRequestScope) => {
-    try {
-      setTopicRequestsLoading(true);
-
-      const [topicRequestsRaw, subjectRequestsRaw] = await Promise.all([
-        apiService.getTopicEditRequests(scope),
-        apiService.getSubjectEditRequests(scope),
-      ]);
-
-      const topicRequests = (Array.isArray(topicRequestsRaw) ? topicRequestsRaw : []).map((request) => ({
-        ...request,
-        requestType: 'Topic',
-        entityId: request.topicId,
-      }));
-
-      const subjectRequests = (Array.isArray(subjectRequestsRaw) ? subjectRequestsRaw : []).map((request) => ({
-        ...request,
-        requestType: 'Course',
-        entityId: request.subjectId,
-      }));
-
-      const merged = [...topicRequests, ...subjectRequests]
-        .sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime());
-
-      setTopicEditRequests(merged);
-    } catch (err) {
-      console.error('Failed to load access requests:', err);
-      setTopicEditRequests([]);
-    } finally {
-      setTopicRequestsLoading(false);
-    }
-  }, [topicRequestScope]);
-
-  useEffect(() => {
-    void refreshAccessRequests(topicRequestScope);
-  }, [refreshAccessRequests, topicRequestScope]);
-
-  useEffect(() => {
-    setTopicRequestPageNumber(1);
-  }, [topicRequestScope]);
-
   useEffect(() => {
     if (!isAdmin) return;
-    setTopicRequestPageNumber(1);
-  }, [isAdmin, adminRequestStatusFilter, adminRequestTypeFilter]);
-
-  useEffect(() => {
-    if (topicRequestPageNumber > topicRequestTotalPages) {
-      setTopicRequestPageNumber(topicRequestTotalPages);
-    }
-  }, [topicRequestPageNumber, topicRequestTotalPages]);
+    void loadEnrollmentUsers();
+  }, [isAdmin, loadEnrollmentUsers]);
 
   const handleUserAction = (action) => {
     setIsUserMenuOpen(false);
@@ -561,18 +547,12 @@ const CourseTopic = () => {
           const updatedSubject = await apiService.updateSubject(editingSubjectId, subjectPayload);
           console.log('Subject updated:', updatedSubject);
 
-          setHistory((prev) => prev.map((entry) => (
-            entry.subjectId === editingSubjectId
-              ? {
-                  ...entry,
-                  courseId: updatedSubject.courseId || Number(course),
-                  courseCode,
-                  courseTitle,
-                  courseUnits,
-                  courseHours,
-                }
-              : entry
-          )));
+          const mapped = mapSubjectApiToCourseTopicRow(updatedSubject);
+          if (mapped) {
+            setAllSubjects((prev) => prev.map((entry) => (
+              entry.subjectId === editingSubjectId ? mapped : entry
+            )));
+          }
 
           showToast({ message: 'Course entry updated successfully.', type: 'success' });
           setEditingSubjectId(null);
@@ -580,21 +560,10 @@ const CourseTopic = () => {
           const createdSubject = await apiService.createSubject(subjectPayload);
           console.log('Subject created:', createdSubject);
 
-          // Update local history table
-          setHistory((prev) => [
-            ...prev,
-            {
-              subjectId: createdSubject.id,
-              courseId: createdSubject.courseId || Number(course),
-              courseCode,
-              courseTitle,
-              courseUnits,
-              courseHours,
-              createdAt: createdSubject.createdAt,
-              canEdit: createdSubject.canEdit === true,
-              canDelete: createdSubject.canDelete === true,
-            },
-          ]);
+          const mapped = mapSubjectApiToCourseTopicRow(createdSubject);
+          if (mapped) {
+            setAllSubjects((prev) => [...prev, mapped]);
+          }
 
           showToast({ message: 'Course entry created successfully.', type: 'success' });
         }
@@ -673,7 +642,7 @@ const CourseTopic = () => {
 
       if (deleteConfirmation.type === 'course') {
         await apiService.deleteSubject(deleteConfirmation.subjectId);
-        setHistory((prev) => prev.filter((entry) => entry.subjectId !== deleteConfirmation.subjectId));
+        setAllSubjects((prev) => prev.filter((entry) => entry.subjectId !== deleteConfirmation.subjectId));
         if (editingSubjectId === deleteConfirmation.subjectId) {
           setEditingSubjectId(null);
           setCourse("");
@@ -698,65 +667,6 @@ const CourseTopic = () => {
     } finally {
       setIsDeleteSubmitting(false);
       setDeleteConfirmation(null);
-    }
-  };
-
-  const closeSubjectEditRequestModal = () => {
-    if (isSubmittingSubjectEditRequest) return;
-
-    setIsSubjectEditRequestModalOpen(false);
-    setSubjectEditRequestTarget(null);
-    setSubjectEditRequestMessage('');
-  };
-
-  const submitSubjectEditRequest = async () => {
-    if (!subjectEditRequestTarget?.subjectId) return;
-
-    try {
-      setIsSubmittingSubjectEditRequest(true);
-      await apiService.createSubjectEditRequest(subjectEditRequestTarget.subjectId, subjectEditRequestMessage);
-      await refreshAccessRequests();
-      showToast({ message: 'Access request submitted.', type: 'success' });
-      closeSubjectEditRequestModal();
-    } catch (err) {
-      console.error('Failed to request course access:', err);
-      const errorMessage = toErrorMessage(err, 'Failed to submit request.');
-      showToast({ message: errorMessage, type: 'error' });
-    } finally {
-      setIsSubmittingSubjectEditRequest(false);
-    }
-  };
-
-  const openTopicEditRequestModal = (topic) => {
-    if (!topic?.id) return;
-    setTopicEditRequestTarget(topic);
-    setTopicEditRequestMessage('');
-    setIsTopicEditRequestModalOpen(true);
-  };
-
-  const closeTopicEditRequestModal = () => {
-    if (isSubmittingTopicEditRequest) return;
-
-    setIsTopicEditRequestModalOpen(false);
-    setTopicEditRequestTarget(null);
-    setTopicEditRequestMessage('');
-  };
-
-  const submitTopicEditRequest = async () => {
-    if (!topicEditRequestTarget?.id) return;
-
-    try {
-      setIsSubmittingTopicEditRequest(true);
-      await apiService.createTopicEditRequest(topicEditRequestTarget.id, topicEditRequestMessage);
-      await refreshAccessRequests();
-      showToast({ message: 'Access request submitted.', type: 'success' });
-      closeTopicEditRequestModal();
-    } catch (err) {
-      console.error('Failed to request topic access:', err);
-      const errorMessage = toErrorMessage(err, 'Failed to submit request.');
-      showToast({ message: errorMessage, type: 'error' });
-    } finally {
-      setIsSubmittingTopicEditRequest(false);
     }
   };
 
@@ -986,26 +896,6 @@ const CourseTopic = () => {
     });
   };
 
-  const openTransferTopicOwnershipModal = (subjectId, topic) => {
-    if (!isAdmin) {
-      showToast({ message: 'Only admins can transfer ownership.', type: 'error' });
-      return;
-    }
-
-    if (transferUsers.length === 0 && !isLoadingTransferUsers) {
-      void loadTransferUsers();
-    }
-
-    setTransferTopicModal({
-      isOpen: true,
-      subjectId,
-      topic,
-      targetUserId: '',
-      transferQuestions: false,
-      isSubmitting: false,
-    });
-  };
-
   const closeTransferTopicOwnershipModal = () => {
     if (transferTopicModal.isSubmitting) return;
     setTransferTopicModal({
@@ -1066,87 +956,6 @@ const CourseTopic = () => {
     await handleAddTopic();
   };
 
-  const handleRequestTopicAccess = (topic) => {
-    openTopicEditRequestModal(topic);
-  };
-
-  const getRequestMessageText = (request) => {
-    const raw = String(request?.message || '').trim();
-    if (!raw) return 'No message provided.';
-
-    const normalized = raw.toLowerCase();
-    if (normalized === 'edit access requested') {
-      return 'No message provided.';
-    }
-
-    const prefix = 'edit access requested:';
-    if (normalized.startsWith(prefix)) {
-      const stripped = raw.slice(prefix.length).trim();
-      return stripped || 'No message provided.';
-    }
-
-    return raw;
-  };
-
-  const handleResolveTopicRequest = async (request, approve, canDelete = false) => {
-    try {
-      if (request.requestType === 'Course') {
-        await apiService.resolveSubjectEditRequest(request.requestId, approve, canDelete, '');
-      } else {
-        await apiService.resolveTopicEditRequest(request.requestId, approve, canDelete, '');
-      }
-
-      await refreshAccessRequests();
-
-      const expandedSubjectIds = Object.keys(expandedSubjectsMap)
-        .filter(key => expandedSubjectsMap[key])
-        .map(key => Number(key));
-      await Promise.all(expandedSubjectIds.map(subjectId => refreshSubjectTopics(subjectId)));
-
-      showToast({
-        message: approve ? (canDelete ? 'Approved with edit + delete access.' : 'Approved with edit access.') : 'Request rejected.',
-        type: 'success',
-      });
-    } catch (err) {
-      console.error('Failed to resolve topic request:', err);
-      const message = toErrorMessage(err, 'Failed to resolve request.');
-      showToast({ message, type: 'error' });
-    }
-  };
-
-  const handleRevokeTopicRequest = async (request) => {
-    try {
-      if (request.requestType === 'Course') {
-        await apiService.revokeSubjectEditPermission(request.requestId, '');
-      } else {
-        await apiService.revokeTopicEditPermission(request.requestId, '');
-      }
-
-      await refreshAccessRequests();
-      showToast({ message: 'Permission revoked.', type: 'success' });
-    } catch (err) {
-      console.error('Failed to revoke topic permission:', err);
-      const message = toErrorMessage(err, 'Failed to revoke permission.');
-      showToast({ message, type: 'error' });
-    }
-  };
-
-  const handleDismissTopicRequest = async (request) => {
-    try {
-      if (request.requestType === 'Course') {
-        await apiService.dismissSubjectEditRequest(request.requestId);
-      } else {
-        await apiService.dismissTopicEditRequest(request.requestId);
-      }
-
-      await refreshAccessRequests();
-    } catch (err) {
-      console.error('Failed to dismiss topic request:', err);
-      const message = toErrorMessage(err, 'Failed to dismiss request.');
-      showToast({ message, type: 'error' });
-    }
-  };
-
   // Create new program for current department (admin only)
   const handleAddProgram = () => {
     if (!programFormData.programName || !programFormData.programCode) {
@@ -1196,6 +1005,443 @@ const CourseTopic = () => {
     };
 
     void createProgramAsync();
+  };
+
+  const loadEnrollmentCoursesForDepartment = useCallback(async (departmentId) => {
+    if (!departmentId) {
+      setEnrollmentCourses([]);
+      return;
+    }
+
+    try {
+      setIsLoadingEnrollmentCourses(true);
+      const data = await apiService.getCourses(departmentId, { pageSize: 500 });
+      const list = Array.isArray(data) ? data : [];
+      setEnrollmentCourses(list);
+    } catch (err) {
+      console.error('Failed to load courses for enrollment:', err);
+      setEnrollmentCourses([]);
+    } finally {
+      setIsLoadingEnrollmentCourses(false);
+    }
+  }, []);
+
+  const loadEnrollmentAccessForUser = useCallback(async (userId, courseId, subjectId = null) => {
+    if (!userId || !courseId) {
+      setSelectedEnrollmentCourseHasAccess(false);
+      setSelectedEnrollmentCourseExistingAccess(false);
+      return;
+    }
+
+    try {
+      const userCourseList = await apiService.getUserCourses(userId);
+
+      const hasAccess = Array.isArray(userCourseList)
+        ? userCourseList.some((course) => Number(course.id) === Number(courseId))
+        : false;
+
+      setSelectedEnrollmentCourseHasAccess(hasAccess);
+      setSelectedEnrollmentCourseExistingAccess(hasAccess);
+    } catch (err) {
+      console.error('Failed to load user access for enrollment:', err);
+      setSelectedEnrollmentCourseHasAccess(false);
+      setSelectedEnrollmentCourseExistingAccess(false);
+    }
+  }, []);
+
+  const handleEnrollUser = async () => {
+    if (!selectedUserForEnrollment) {
+      showToast({ message: 'Please select a user.', type: 'error' });
+      return;
+    }
+
+    if (!selectedEnrollmentDepartment?.id) {
+      showToast({ message: 'Please select a department.', type: 'error' });
+      return;
+    }
+
+    if (!selectedEnrollmentCourse?.id) {
+      showToast({ message: 'Please select a program to enroll the user in.', type: 'error' });
+      return;
+    }
+
+    if (!selectedEnrollmentDepartmentHasAccess && selectedEnrollmentCourseHasAccess) {
+      showToast({ message: 'Grant department access before assigning programs.', type: 'error' });
+      return;
+    }
+
+    if (!selectedEnrollmentDepartmentHasAccess && selectedEnrollmentTopicIds.length > 0) {
+      showToast({ message: 'Grant department access before assigning topics.', type: 'error' });
+      return;
+    }
+
+    if (selectedEnrollmentTopicIds.length > 0 && !selectedEnrollmentCourseHasAccess) {
+      showToast({ message: 'Grant program access before assigning topics.', type: 'error' });
+      return;
+    }
+
+    try {
+      setIsEnrollingUser(true);
+
+      if (selectedEnrollmentDepartmentHasAccess && !selectedEnrollmentDepartmentExistingAccess) {
+        await apiService.addUserDepartment(selectedUserForEnrollment.userId, selectedEnrollmentDepartment.id);
+      } else if (!selectedEnrollmentDepartmentHasAccess && selectedEnrollmentDepartmentExistingAccess) {
+        await apiService.removeUserDepartment(selectedUserForEnrollment.userId, selectedEnrollmentDepartment.id);
+      }
+
+      if (selectedEnrollmentCourseHasAccess && !selectedEnrollmentCourseExistingAccess) {
+        await apiService.addUserCourse(selectedUserForEnrollment.userId, selectedEnrollmentCourse.id);
+      } else if (!selectedEnrollmentCourseHasAccess && selectedEnrollmentCourseExistingAccess) {
+        await apiService.removeUserCourse(selectedUserForEnrollment.userId, selectedEnrollmentCourse.id);
+      }
+
+      const topicsToAdd = selectedEnrollmentTopicIds.filter(
+        (topicId) => !existingEnrollmentTopicIds.includes(topicId)
+      );
+      const topicsToRemove = existingEnrollmentTopicIds.filter(
+        (topicId) => !selectedEnrollmentTopicIds.includes(topicId)
+      );
+
+      for (const topicId of topicsToAdd) {
+        await apiService.addUserTopic(selectedUserForEnrollment.userId, topicId);
+      }
+
+      for (const topicId of topicsToRemove) {
+        await apiService.removeUserTopic(selectedUserForEnrollment.userId, topicId);
+      }
+
+      showToast({
+        message: `Assignments updated for "${selectedUserForEnrollment.firstName} ${selectedUserForEnrollment.lastName}".`,
+        type: 'success'
+      });
+
+      await loadEnrollmentUsers();
+
+      setSelectedEnrollmentCourse(null);
+      setSelectedEnrollmentSubjectIds([]);
+      setSelectedEnrollmentDepartment(null);
+      setSelectedUserForEnrollment(null);
+      setSelectedEnrollmentCourseHasAccess(false);
+      setSelectedEnrollmentCourseExistingAccess(false);
+      setSelectedEnrollmentTopicIds([]);
+      setExistingEnrollmentTopicIds([]);
+      setShowUserEnrollmentModal(false);
+    } catch (err) {
+      console.error('Failed to update user assignments:', err);
+      const message = toErrorMessage(err, 'Failed to update user assignments.');
+      showToast({ message, type: 'error' });
+    } finally {
+      setIsEnrollingUser(false);
+    }
+  };
+
+  const openCourseEnrollmentModal = (subjectRow) => {
+    if (!isAdmin) {
+      showToast({ message: 'Only admins can add users to courses.', type: 'error' });
+      return;
+    }
+
+    const normalizedCourseId = Number(subjectRow?.courseId ?? subjectRow?.id);
+    if (!Number.isFinite(normalizedCourseId)) {
+      showToast({ message: 'Course selection is required.', type: 'error' });
+      return;
+    }
+
+    const currentDept = getCurrentDepartment();
+
+    setSelectedEnrollmentDepartment(currentDept || null);
+    setEnrollmentCourses(courses);
+    setSelectedEnrollmentCourse({
+      id: normalizedCourseId,
+      code: subjectRow.courseCode || subjectRow.code || '',
+      name: subjectRow.courseTitle || subjectRow.name || '',
+    });
+    setSelectedEnrollmentSubjectIds(subjectRow?.subjectId ? [Number(subjectRow.subjectId)] : []);
+    setSelectedEnrollmentTopics([]);
+    setSelectedEnrollmentTopicIds([]);
+    setExistingEnrollmentTopicIds([]);
+    setSelectedUserForEnrollment(null);
+    setSelectedEnrollmentCourseHasAccess(false);
+    setSelectedEnrollmentCourseExistingAccess(false);
+    setSelectedEnrollmentDepartmentHasAccess(false);
+    setSelectedEnrollmentDepartmentExistingAccess(false);
+    setShowUserEnrollmentModal(true);
+
+    if (subjectRow?.subjectId) {
+      void applyEnrollmentSubjects([Number(subjectRow.subjectId)]);
+    }
+  };
+
+  const openCourseEnrollmentForSelected = () => {
+    if (!isAdmin) {
+      showToast({ message: 'Only admins can add users to courses.', type: 'error' });
+      return;
+    }
+
+    const currentDept = getCurrentDepartment();
+
+    setSelectedEnrollmentDepartment(currentDept || null);
+    setEnrollmentCourses(courses);
+    setSelectedEnrollmentCourse(null);
+    setSelectedEnrollmentSubjectIds([]);
+    setIsCourseSelectorExpanded(false);
+    setSelectedEnrollmentTopics([]);
+    setSelectedEnrollmentTopicIds([]);
+    setExistingEnrollmentTopicIds([]);
+    setSelectedUserForEnrollment(null);
+    setSelectedEnrollmentCourseHasAccess(false);
+    setSelectedEnrollmentCourseExistingAccess(false);
+    setSelectedEnrollmentDepartmentHasAccess(false);
+    setSelectedEnrollmentDepartmentExistingAccess(false);
+    setShowUserEnrollmentModal(true);
+
+    if (currentDept?.id) {
+      void loadEnrollmentCoursesForDepartment(currentDept.id);
+    }
+  };
+
+  const loadSelectedCourseAccessForEnrollment = useCallback(async (userId, courseId, departmentId, subjectId = null) => {
+    if (!userId || !departmentId) {
+      setSelectedEnrollmentDepartmentHasAccess(false);
+      setSelectedEnrollmentDepartmentExistingAccess(false);
+    }
+
+    try {
+      const userDepartmentList = await apiService.getUserDepartments(userId);
+      const hasDepartmentAccess = Array.isArray(userDepartmentList)
+        ? userDepartmentList.some((dept) => Number(dept.id) === Number(departmentId))
+        : false;
+
+      setSelectedEnrollmentDepartmentHasAccess(hasDepartmentAccess);
+      setSelectedEnrollmentDepartmentExistingAccess(hasDepartmentAccess);
+
+      if (!courseId) {
+        setSelectedEnrollmentCourseHasAccess(false);
+        setSelectedEnrollmentCourseExistingAccess(false);
+        setSelectedEnrollmentSubjectIds([]);
+        setSelectedEnrollmentTopics([]);
+        setSelectedEnrollmentTopicIds([]);
+        setExistingEnrollmentTopicIds([]);
+        return;
+      }
+
+      await loadEnrollmentAccessForUser(userId, courseId, subjectId);
+
+      const availableSubjectIds = Array.from(new Set(
+        history
+          .filter((item) => Number(item.courseId) === Number(courseId))
+          .map((item) => Number(item.subjectId))
+          .filter(Number.isFinite)
+      ));
+
+      if (availableSubjectIds.length === 0) {
+        setSelectedEnrollmentSubjectIds([]);
+        setSelectedEnrollmentTopics([]);
+        setSelectedEnrollmentTopicIds([]);
+        setExistingEnrollmentTopicIds([]);
+        return;
+      }
+
+      const userTopicList = await apiService.getUserTopics(userId);
+      const existingTopicIds = Array.isArray(userTopicList)
+        ? userTopicList
+            .filter((topic) => availableSubjectIds.includes(Number(topic.subjectId)))
+            .map((topic) => Number(topic.id))
+        : [];
+
+      const existingSubjectIds = availableSubjectIds.filter((id) =>
+        Array.isArray(userTopicList)
+          ? userTopicList.some((topic) => Number(topic.subjectId) === id)
+          : false
+      );
+
+      setSelectedEnrollmentSubjectIds(existingSubjectIds);
+      setExistingEnrollmentTopicIds(existingTopicIds);
+      void applyEnrollmentSubjects(existingSubjectIds, existingTopicIds);
+    } catch (err) {
+      console.error('Failed to load user departments for enrollment:', err);
+      setSelectedEnrollmentDepartmentHasAccess(false);
+      setSelectedEnrollmentDepartmentExistingAccess(false);
+      setSelectedEnrollmentCourseHasAccess(false);
+      setSelectedEnrollmentCourseExistingAccess(false);
+      setSelectedEnrollmentSubjectIds([]);
+      setSelectedEnrollmentTopics([]);
+      setSelectedEnrollmentTopicIds([]);
+      setExistingEnrollmentTopicIds([]);
+    }
+  }, [history, loadEnrollmentAccessForUser]);
+
+  const applyEnrollmentSubjects = useCallback(async (subjectIds, preselectedTopicIds = null) => {
+    const normalizedSubjectIds = Array.from(new Set(subjectIds.map((id) => Number(id)).filter(Number.isFinite)));
+
+    if (normalizedSubjectIds.length === 0) {
+      setSelectedEnrollmentTopics([]);
+      setSelectedEnrollmentTopicIds([]);
+      return;
+    }
+
+    try {
+      setIsLoadingEnrollmentTopics(true);
+      const topicLists = await Promise.all(
+        normalizedSubjectIds.map((subjectId) => apiService.getTopics(subjectId))
+      );
+
+      const mergedTopics = [];
+      const seenTopicIds = new Set();
+      for (const list of topicLists) {
+        const topicArray = Array.isArray(list) ? list : [];
+        for (const topic of topicArray) {
+          const topicId = Number(topic?.id);
+          if (!Number.isFinite(topicId) || seenTopicIds.has(topicId)) continue;
+          seenTopicIds.add(topicId);
+          mergedTopics.push(topic);
+        }
+      }
+
+      setSelectedEnrollmentTopics(mergedTopics);
+      if (Array.isArray(preselectedTopicIds)) {
+        const allowedTopicIds = new Set(mergedTopics.map((topic) => Number(topic.id)));
+        setSelectedEnrollmentTopicIds(
+          preselectedTopicIds
+            .map((id) => Number(id))
+            .filter((id) => allowedTopicIds.has(id))
+        );
+      } else {
+        setSelectedEnrollmentTopicIds(mergedTopics.map((topic) => Number(topic.id)));
+      }
+    } catch (err) {
+      console.error('Failed to load topics for selected subjects:', err);
+      setSelectedEnrollmentTopics([]);
+      setSelectedEnrollmentTopicIds([]);
+    } finally {
+      setIsLoadingEnrollmentTopics(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!selectedUserForEnrollment?.userId || !selectedEnrollmentDepartment?.id) {
+      return;
+    }
+
+    void loadSelectedCourseAccessForEnrollment(
+      selectedUserForEnrollment.userId,
+      selectedEnrollmentCourse?.id,
+      selectedEnrollmentDepartment.id,
+      null
+    );
+  }, [
+    selectedUserForEnrollment,
+    selectedEnrollmentDepartment,
+    selectedEnrollmentCourse,
+    loadSelectedCourseAccessForEnrollment,
+  ]);
+
+  const openTopicAccessModal = (topic, courseId) => {
+    if (!isAdmin) {
+      showToast({ message: 'Only admins can add users to topics.', type: 'error' });
+      return;
+    }
+
+    if (!topic?.id) {
+      showToast({ message: 'Topic selection is required.', type: 'error' });
+      return;
+    }
+
+    setTopicAccessTarget(topic);
+    setTopicAccessCourseId(courseId || null);
+    setSelectedUserForTopicAccess(null);
+    setTopicAccessHasAccess(false);
+    setTopicAccessExisting(false);
+    setIsTopicAccessModalOpen(true);
+  };
+
+  const closeTopicAccessModal = () => {
+    if (isGrantingTopicAccess) return;
+    setIsTopicAccessModalOpen(false);
+    setTopicAccessTarget(null);
+    setTopicAccessCourseId(null);
+    setSelectedUserForTopicAccess(null);
+    setTopicAccessHasAccess(false);
+    setTopicAccessExisting(false);
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadTopicAccess = async () => {
+      if (!topicAccessTarget?.id || !selectedUserForTopicAccess?.userId) {
+        if (isMounted) {
+          setTopicAccessExisting(false);
+          setTopicAccessHasAccess(false);
+        }
+        return;
+      }
+
+      try {
+        const userTopics = await apiService.getUserTopics(selectedUserForTopicAccess.userId);
+        const hasAccess = Array.isArray(userTopics)
+          ? userTopics.some((topic) => Number(topic.id) === Number(topicAccessTarget.id))
+          : false;
+
+        if (isMounted) {
+          setTopicAccessExisting(hasAccess);
+          setTopicAccessHasAccess(hasAccess);
+        }
+      } catch (err) {
+        console.error('Failed to load topic access for user:', err);
+        if (isMounted) {
+          setTopicAccessExisting(false);
+          setTopicAccessHasAccess(false);
+        }
+      }
+    };
+
+    void loadTopicAccess();
+    return () => {
+      isMounted = false;
+    };
+  }, [topicAccessTarget, selectedUserForTopicAccess]);
+
+  const submitTopicAccess = async () => {
+    if (!topicAccessTarget?.id || !selectedUserForTopicAccess?.userId) {
+      showToast({ message: 'Please select a topic and a user.', type: 'error' });
+      return;
+    }
+
+    try {
+      setIsGrantingTopicAccess(true);
+
+      if (topicAccessHasAccess) {
+        if (!topicAccessExisting) {
+          await apiService.addUserTopic(
+            selectedUserForTopicAccess.userId,
+            topicAccessTarget.id
+          );
+          showToast({ message: 'Topic access granted successfully.', type: 'success' });
+        } else {
+          showToast({ message: 'User already has access to this topic.', type: 'info' });
+        }
+      } else if (topicAccessExisting) {
+        await apiService.removeUserTopic(
+          selectedUserForTopicAccess.userId,
+          topicAccessTarget.id
+        );
+        showToast({ message: 'Topic access revoked.', type: 'success' });
+      } else {
+        showToast({ message: 'No topic access changes to apply.', type: 'info' });
+      }
+
+      if (topicAccessTarget.subjectId) {
+        await refreshSubjectTopics(topicAccessTarget.subjectId);
+      }
+      closeTopicAccessModal();
+    } catch (err) {
+      console.error('Failed to update topic access:', err);
+      const message = toErrorMessage(err, 'Failed to update topic access.');
+      showToast({ message, type: 'error' });
+    } finally {
+      setIsGrantingTopicAccess(false);
+    }
   };
 
   return (
@@ -1263,7 +1509,7 @@ const CourseTopic = () => {
               onSelect={(item) => {
                 setActiveTab(item);
                 const targetCode = resolveDepartmentCode();
-                if (item === 'Test Generation') {
+                if (item === testGenerationLabel) {
                   navigate(`/test-generation/${targetCode}`);
                 } else if (item === 'Saved Exam Sets') {
                   navigate(`/reports/saved-exams/${targetCode}`);
@@ -1306,7 +1552,7 @@ const CourseTopic = () => {
           </div>
         </nav>
 
-        {/* Search bar (same as Dashboard.jsx) */}
+        {/* Search bar for all users */}
         <div className="search-and-view" style={{ maxWidth: '1140px', margin: '0 auto 20px auto' }}>
           <div className="search-bar">
             <Search className="search-icon" onClick={() => void handleSearchNavigate()} />
@@ -1330,7 +1576,6 @@ const CourseTopic = () => {
         <div className="course-topic-container" ref={courseSectionRef}>
           <h2>Program & Topic Management</h2>
 
-          {/* Program Header */}
           <div className="program-header-line">
             {isLoadingDepartments ? (
               <p>Loading department...</p>
@@ -1387,40 +1632,42 @@ const CourseTopic = () => {
             })()}
           </div>
 
-          {/* Fields */}
-          <div className="field-container" ref={courseFormRef}>
-            <label>Program</label>
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
-              <select 
-                value={course} 
-                onChange={(e) => setCourse(e.target.value)}
-                style={{ flex: 1 }}
-              >
-                <option value="">Select Program</option>
-                {isLoadingCourses ? (
-                  <option disabled>Loading programs...</option>
-                ) : courses.length === 0 ? (
-                  <option disabled>No programs found for this department</option>
-                ) : (
-                  courses.map(c => (
-                    <option key={c.id} value={c.id}>{(c.code ? `${c.code} - ` : '') + c.name}</option>
-                  ))
-                )}
-              </select>
-              {isAdmin && (
-                <button 
-                  type="button"
-                  className="add-program-btn"
-                  onClick={() => setShowProgramForm(!showProgramForm)}
-                  title="Add a new program to this department"
+          {isAdmin ? (
+            <div className="field-container" ref={courseFormRef}>
+              <label>Program</label>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
+                <select 
+                  value={course} 
+                  onChange={(e) => setCourse(e.target.value)}
+                  style={{ flex: 1 }}
                 >
-                  + Add Program
-                </button>
-              )}
+                  <option value="">Select Program</option>
+                  {isLoadingCourses ? (
+                    <option disabled>Loading programs...</option>
+                  ) : courses.length === 0 ? (
+                    <option disabled>No programs found for this department</option>
+                  ) : (
+                    courses.map(c => (
+                      <option key={c.id} value={c.id}>{(c.code ? `${c.code} - ` : '') + c.name}</option>
+                    ))
+                  )}
+                </select>
+                {isAdmin && (
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button 
+                      type="button"
+                      className="add-program-btn"
+                      onClick={() => setShowProgramForm(!showProgramForm)}
+                      title="Add a new program to this department"
+                    >
+                      + Add Program
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          ) : null}
 
-          {/* Program Creation Form (admin only) */}
           {isAdmin && showProgramForm && (
             <div className="program-form-section">
               <div className="program-form-card">
@@ -1493,48 +1740,66 @@ const CourseTopic = () => {
             </div>
           )}
 
-          <div className="row-fields">
-            <div className="field-container half-width">
-              <label>Course ID</label>
-              <input
-                ref={courseCodeInputRef}
-                type="text"
-                value={courseCode}
-                onChange={(e) => setCourseCode(e.target.value)}
-                placeholder="Enter course ID (e.g., FCL100)"
-              />
-            </div>
-            <div className="field-container half-width">
-              <label>Course Title</label>
-              <input
-                type="text"
-                value={courseTitle}
-                onChange={(e) => setCourseTitle(e.target.value)}
-                placeholder="Enter course title"
-              />
-            </div>
-          </div>
+          {isAdmin ? (
+            <>
+              <div className="row-fields">
+                <div className="field-container half-width">
+                  <label>Course ID</label>
+                  <input
+                    ref={courseCodeInputRef}
+                    type="text"
+                    value={courseCode}
+                    onChange={(e) => setCourseCode(e.target.value)}
+                    placeholder="Enter course ID (e.g., FCL100)"
+                  />
+                </div>
+                <div className="field-container half-width">
+                  <label>Course Title</label>
+                  <input
+                    type="text"
+                    value={courseTitle}
+                    onChange={(e) => setCourseTitle(e.target.value)}
+                    placeholder="Enter course title"
+                  />
+                </div>
+              </div>
 
-          <div className="row-fields">
-            <div className="field-container flex-2">
-              <label>Units</label>
-              <input type="text" value={courseUnits} onChange={(e) => setCourseUnits(e.target.value)} placeholder="Enter units (e.g., 3)" />
-            </div>
-            <div className="field-container flex-1">
-              <label>Allotted Hours</label>
-              <input type="number" value={courseHours} onChange={(e) => setCourseHours(e.target.value)} onWheel={preventNumberInputWheel} placeholder="Enter hours" />
-            </div>
-          </div>
+              <div className="row-fields">
+                <div className="field-container flex-2">
+                  <label>Units</label>
+                  <input type="text" value={courseUnits} onChange={(e) => setCourseUnits(e.target.value)} placeholder="Enter units (e.g., 3)" />
+                </div>
+                <div className="field-container flex-1">
+                  <label>Allotted Hours</label>
+                  <input type="number" value={courseHours} onChange={(e) => setCourseHours(e.target.value)} onWheel={preventNumberInputWheel} placeholder="Enter hours" />
+                </div>
+              </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-            {editingSubjectId && (
-              <button className="save-btn" onClick={handleCancelSubjectEdit}>Cancel</button>
-            )}
-            <button className="save-btn" onClick={handleSave}>{editingSubjectId ? 'Save Changes' : 'Save'}</button>
-          </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                {editingSubjectId && (
+                  <button className="save-btn" onClick={handleCancelSubjectEdit}>Cancel</button>
+                )}
+                <button className="save-btn" onClick={handleSave}>{editingSubjectId ? 'Save Changes' : 'Save'}</button>
+              </div>
+            </>
+          ) : null}
 
           {/* History Table - Subject and Topic */}
-          <p className="history-table-note">To add topics, click an encoded course row below.</p>
+          {isAdmin ? (
+            <p className="history-table-note">To add topics, click an encoded course row below.</p>
+          ) : null}
+          {isAdmin ? (
+            <div className="history-table-toolbar">
+              <button
+                type="button"
+                className="add-course-user-btn"
+                onClick={openCourseEnrollmentForSelected}
+              >
+                <UserPlus size={16} />
+                Add User to Course
+              </button>
+            </div>
+          ) : null}
           <div className="history-table" ref={historyTableRef}>
             <div className="history-row header">
               <span className="history-cell index">#</span>
@@ -1707,17 +1972,7 @@ const CourseTopic = () => {
                               <span className="history-cell course-title">• {topic.title}</span>
                               <span className="history-cell hours hours-cell">{topic.allocatedHours}</span>
                               <span className="history-cell actions topic-row-actions">
-                                {isAdmin && (
-                                  <button
-                                    className="topic-action-btn"
-                                    onClick={() => openTransferTopicOwnershipModal(item.subjectId, topic)}
-                                    title="Transfer topic ownership"
-                                    aria-label="Transfer topic ownership"
-                                  >
-                                    <Users size={14} />
-                                  </button>
-                                )}
-                                {topic.canEdit ? (
+                                {topic.canEdit && (
                                   <button
                                     className="topic-action-btn"
                                     onClick={() => handleEditTopic(item.subjectId, topic)}
@@ -1725,15 +1980,6 @@ const CourseTopic = () => {
                                     aria-label="Edit topic"
                                   >
                                     <Pencil size={14} />
-                                  </button>
-                                ) : (
-                                  <button
-                                    className="topic-action-btn request"
-                                    onClick={() => handleRequestTopicAccess(topic)}
-                                    title="Request topic access"
-                                    aria-label="Request topic access"
-                                  >
-                                    <Send size={14} className="btn-icon" />
                                   </button>
                                 )}
                                 {topic.canDelete && (
@@ -1760,315 +2006,474 @@ const CourseTopic = () => {
             ))}
           </div>
 
-          <div className="topic-requests-panel">
-            <div className="topic-requests-header">
-              <div>
-                <h4>Course & Topic Access Requests</h4>
-                {isAdmin ? (
-                  <p className="topic-requests-subtitle">
-                    Admin queue for monitoring requests and revoking access across programs.
-                  </p>
-                ) : null}
-              </div>
-              <div className="topic-request-toolbar-actions">
-                {isAdmin ? (
-                  <button
-                    type="button"
-                    className="topic-admin-manage-btn"
-                    onClick={() => navigate('/admin', { state: { openUsers: true } })}
-                  >
-                    <Users size={14} className="btn-icon" /> Manage Users
-                  </button>
-                ) : null}
-                <div className="topic-request-scope">
-                  <button
-                    type="button"
-                    className={topicRequestScope === 'inbox' ? 'active' : ''}
-                    onClick={() => setTopicRequestScope('inbox')}
-                  >
-                    Inbox
-                  </button>
-                  <button
-                    type="button"
-                    className={topicRequestScope === 'sent' ? 'active' : ''}
-                    onClick={() => setTopicRequestScope('sent')}
-                  >
-                    Sent
-                  </button>
-                  <button
-                    type="button"
-                    className={topicRequestScope === 'all' ? 'active' : ''}
-                    onClick={() => setTopicRequestScope('all')}
-                  >
-                    All
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {isAdmin ? (
-              <div className="topic-request-admin-dashboard">
-                <div className="topic-request-summary-grid">
-                  <div className="topic-request-summary-card">
-                    <span className="summary-label">Total</span>
-                    <strong>{adminRequestSummary.total}</strong>
-                  </div>
-                  <div className="topic-request-summary-card pending">
-                    <span className="summary-label">Pending</span>
-                    <strong>{adminRequestSummary.pending}</strong>
-                  </div>
-                  <div className="topic-request-summary-card actionable">
-                    <span className="summary-label">Revokable</span>
-                    <strong>{adminRequestSummary.actionable}</strong>
-                  </div>
-                  <div className="topic-request-summary-card approved">
-                    <span className="summary-label">Approved</span>
-                    <strong>{adminRequestSummary.approved}</strong>
-                  </div>
-                </div>
-
-                <div className="topic-request-filter-row">
-                  <div className="topic-request-filter-group">
-                    <span>Status</span>
-                    <button
-                      type="button"
-                      className={adminRequestStatusFilter === 'all' ? 'active' : ''}
-                      onClick={() => setAdminRequestStatusFilter('all')}
-                    >
-                      All
-                    </button>
-                    <button
-                      type="button"
-                      className={adminRequestStatusFilter === 'pending' ? 'active' : ''}
-                      onClick={() => setAdminRequestStatusFilter('pending')}
-                    >
-                      Pending
-                    </button>
-                    <button
-                      type="button"
-                      className={adminRequestStatusFilter === 'approved' ? 'active' : ''}
-                      onClick={() => setAdminRequestStatusFilter('approved')}
-                    >
-                      Approved
-                    </button>
-                    <button
-                      type="button"
-                      className={adminRequestStatusFilter === 'rejected' ? 'active' : ''}
-                      onClick={() => setAdminRequestStatusFilter('rejected')}
-                    >
-                      Rejected
-                    </button>
-                  </div>
-                  <div className="topic-request-filter-group">
-                    <span>Type</span>
-                    <button
-                      type="button"
-                      className={adminRequestTypeFilter === 'all' ? 'active' : ''}
-                      onClick={() => setAdminRequestTypeFilter('all')}
-                    >
-                      All
-                    </button>
-                    <button
-                      type="button"
-                      className={adminRequestTypeFilter === 'course' ? 'active' : ''}
-                      onClick={() => setAdminRequestTypeFilter('course')}
-                    >
-                      Course
-                    </button>
-                    <button
-                      type="button"
-                      className={adminRequestTypeFilter === 'topic' ? 'active' : ''}
-                      onClick={() => setAdminRequestTypeFilter('topic')}
-                    >
-                      Topic
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            {topicRequestsLoading ? (
-              <p>Loading access requests...</p>
-            ) : displayedTopicRequests.length === 0 ? (
-              <p>{isAdmin ? 'No requests match your current filters.' : 'No access requests found.'}</p>
-            ) : (
-              <>
-              <div className="topic-request-list">
-                {pagedTopicRequests.map((request) => {
-                  const isOwnerOfRequest = String(request.ownerUserId || '').toLowerCase() === String(user?.userId || '').toLowerCase();
-                  const requesterName = request.requesterName || 'Unknown user';
-                  const requesterInitials = requesterName
-                    .split(' ')
-                    .filter(Boolean)
-                    .slice(0, 2)
-                    .map((part) => part.charAt(0).toUpperCase())
-                    .join('') || 'U';
-                  const requestedTargetLabel = `${request.requestType} #${request.entityId}`;
-                  const requestedAtLabel = request.requestedAt
-                    ? new Date(request.requestedAt).toLocaleString()
-                    : null;
-                  const normalizedStatus = String(request.status || '').toLowerCase();
-
-                  return (
-                  <div key={`${request.requestType}-${request.requestId}`} className={`topic-request-item request-status-${normalizedStatus}`}>
-                    <div className="topic-request-main">
-                      <div className="topic-request-identity">
-                        <span className="requester-avatar" aria-hidden="true">{requesterInitials}</span>
-                        <div className="topic-request-title-group">
-                          <p className="topic-request-title">
-                            <strong>{requesterName}</strong> requested access to <span>{requestedTargetLabel}</span>
-                          </p>
-                          {requestedAtLabel ? <span className="topic-request-time">{requestedAtLabel}</span> : null}
-                        </div>
-                      </div>
-                      <div className="topic-request-main-actions">
-                        <span className={`status-badge status-${request.status.toLowerCase()}`}>{request.status}</span>
-                        {normalizedStatus === 'revoked' && (
-                          <button
-                            type="button"
-                            className="request-card-close-btn"
-                            onClick={() => handleDismissTopicRequest(request)}
-                            title="Close card"
-                            aria-label="Close card"
-                          >
-                            ×
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    <p className="topic-request-message">
-                      <strong>Message:</strong> {getRequestMessageText(request)}
-                    </p>
-                    <div className="topic-request-meta">
-                      <span className="request-meta-pill">Type: {request.requestType}</span>
-                      <span className="request-meta-pill">Permission: {request.permissionLevel}</span>
-                      {request.isMine ? <span className="request-meta-pill mine">Your Request</span> : null}
-                    </div>
-                    <div className="topic-request-actions">
-                      {((isAdmin && Boolean(request.canRevoke)) || (!isAdmin && isOwnerOfRequest && Boolean(request.canRevoke))) && (
-                        <button type="button" className="danger action-revoke" onClick={() => handleRevokeTopicRequest(request)}>
-                          <ShieldOff size={14} className="btn-icon" /> Revoke Access
-                        </button>
-                      )}
-                      {request.status === 'Pending' && !request.isMine && !isAdmin && (
-                        <>
-                          <button type="button" className="action-approve" onClick={() => handleResolveTopicRequest(request, true, false)}>
-                            <Check size={14} className="btn-icon" /> Approve Edit
-                          </button>
-                          <button type="button" className="action-approve" onClick={() => handleResolveTopicRequest(request, true, true)}>
-                            <Check size={14} className="btn-icon" /> Approve Edit+Delete
-                          </button>
-                          <button type="button" className="danger action-reject" onClick={() => handleResolveTopicRequest(request, false, false)}>
-                            <X size={14} className="btn-icon" /> Reject
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  );
-                })}
-              </div>
-              {displayedTopicRequests.length > TOPIC_REQUESTS_PAGE_SIZE ? (
-                <div className="history-pagination-bar">
-                  <button
-                    type="button"
-                    className="history-pagination-btn"
-                    onClick={() => setTopicRequestPageNumber((prev) => Math.max(1, prev - 1))}
-                    disabled={topicRequestPageNumber <= 1 || topicRequestsLoading}
-                  >
-                    ‹
-                  </button>
-                  <span className="history-pagination-info">Page {topicRequestPageNumber} of {topicRequestTotalPages}</span>
-                  <button
-                    type="button"
-                    className="history-pagination-btn"
-                    onClick={() => setTopicRequestPageNumber((prev) => Math.min(topicRequestTotalPages, prev + 1))}
-                    disabled={topicRequestPageNumber >= topicRequestTotalPages || topicRequestsLoading}
-                  >
-                    ›
-                  </button>
-                </div>
-              ) : null}
-              </>
-            )}
-          </div>
         </div>
       </div>
 
       {/* Logout Modal */}
-      {isTopicEditRequestModalOpen && (
-        <div className="edit-request-modal-overlay" onClick={closeTopicEditRequestModal}>
-          <div className={`edit-request-modal ${isDarkMode ? 'dark' : ''}`} onClick={(event) => event.stopPropagation()}>
-            <h3>Request Edit Permission</h3>
-            <p>
-              Send a request to the topic owner for Topic ID <strong>{topicEditRequestTarget?.id}</strong>.
-            </p>
-            <label htmlFor="topic-edit-request-message">Message (optional)</label>
-            <textarea
-              id="topic-edit-request-message"
-              value={topicEditRequestMessage}
-              onChange={(event) => setTopicEditRequestMessage(event.target.value)}
-              placeholder="Write why you need to edit this topic..."
-              maxLength={1000}
-            />
-            <div className="edit-request-modal-actions">
-              <button
-                type="button"
-                className="btn-cancel"
-                onClick={closeTopicEditRequestModal}
-                disabled={isSubmittingTopicEditRequest}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn-confirm"
-                onClick={submitTopicEditRequest}
-                disabled={isSubmittingTopicEditRequest}
-              >
-                {isSubmittingTopicEditRequest ? 'Sending...' : 'Send Request'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* User Enrollment Modal */}
+      {showUserEnrollmentModal && (() => {
+        const availableDepartments = departments
+          .filter((dept) => (dept.code || '').toUpperCase() !== 'ITS');
+        const departmentUsers = enrollmentUsers;
+        const availablePrograms = selectedEnrollmentDepartment
+          ? enrollmentCourses
+          : [];
+        const availableSubjects = selectedEnrollmentCourse?.id
+          ? history.filter((item) => Number(item.courseId) === Number(selectedEnrollmentCourse.id))
+          : [];
 
-      {isSubjectEditRequestModalOpen && (
-        <div className="edit-request-modal-overlay" onClick={closeSubjectEditRequestModal}>
-          <div className={`edit-request-modal ${isDarkMode ? 'dark' : ''}`} onClick={(event) => event.stopPropagation()}>
-            <h3>Request Edit Permission</h3>
-            <p>
-              Send a request to the course owner for Course ID <strong>{subjectEditRequestTarget?.subjectId}</strong>.
-            </p>
-            <label htmlFor="course-edit-request-message">Message (optional)</label>
-            <textarea
-              id="course-edit-request-message"
-              value={subjectEditRequestMessage}
-              onChange={(event) => setSubjectEditRequestMessage(event.target.value)}
-              placeholder="Write why you need to edit this course entry..."
-              maxLength={1000}
-            />
-            <div className="edit-request-modal-actions">
-              <button
-                type="button"
-                className="btn-cancel"
-                onClick={closeSubjectEditRequestModal}
-                disabled={isSubmittingSubjectEditRequest}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn-confirm"
-                onClick={submitSubjectEditRequest}
-                disabled={isSubmittingSubjectEditRequest}
-              >
-                {isSubmittingSubjectEditRequest ? 'Sending...' : 'Send Request'}
-              </button>
+        return (
+          <div className="app-confirmation-overlay" onClick={() => {
+            setSelectedEnrollmentCourse(null);
+            setSelectedEnrollmentSubjectIds([]);
+            setIsCourseSelectorExpanded(false);
+            setSelectedEnrollmentDepartment(null);
+            setSelectedUserForEnrollment(null);
+            setSelectedEnrollmentCourseHasAccess(false);
+            setSelectedEnrollmentCourseExistingAccess(false);
+            setSelectedEnrollmentDepartmentHasAccess(false);
+            setSelectedEnrollmentDepartmentExistingAccess(false);
+            setSelectedEnrollmentTopicIds([]);
+            setExistingEnrollmentTopicIds([]);
+            setShowUserEnrollmentModal(false);
+          }}>
+            <div className={`app-confirmation-modal enrollment-modal ${isDarkMode ? 'dark' : ''}`} onClick={(e) => e.stopPropagation()}>
+              <h3>
+                <span className="label-icon" aria-hidden="true">
+                  <UserPlus size={20} />
+                </span>
+                Add User to Course
+              </h3>
+              
+              <div className="enrollment-section">
+                {/* LEFT COLUMN: Department & User Selection */}
+                <div className="enrollment-column">
+                  <div className="enrollment-column-header">Organization</div>
+                  
+                  <div className="enrollment-field">
+                    <label>
+                      <span className="label-icon" aria-hidden="true">
+                        <Building2 size={14} />
+                      </span>
+                      Select Department
+                    </label>
+                    <select
+                      value={selectedEnrollmentDepartment?.id || ''}
+                      onChange={(e) => {
+                        const departmentId = Number(e.target.value || 0);
+                        const dept = availableDepartments.find((item) => Number(item.id) === departmentId) || null;
+                        setSelectedEnrollmentDepartment(dept);
+                        setSelectedEnrollmentCourse(null);
+                        setSelectedEnrollmentSubjectIds([]);
+                        setIsCourseSelectorExpanded(false);
+                        setSelectedEnrollmentCourseHasAccess(false);
+                        setSelectedEnrollmentCourseExistingAccess(false);
+                        setSelectedEnrollmentTopicIds([]);
+                        setExistingEnrollmentTopicIds([]);
+                        if (dept) {
+                          void loadEnrollmentCoursesForDepartment(dept.id);
+                        } else {
+                          setEnrollmentCourses([]);
+                        }
+                        if (selectedUserForEnrollment?.userId && dept?.id) {
+                          void loadSelectedCourseAccessForEnrollment(
+                            selectedUserForEnrollment.userId,
+                            selectedEnrollmentCourse?.id,
+                            dept.id,
+                            null
+                          );
+                        }
+                      }}
+                    >
+                      <option value="">Choose a department...</option>
+                      {availableDepartments.map((dept) => (
+                        <option key={dept.id} value={dept.id}>
+                          {dept.code} - {dept.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="enrollment-field">
+                    <label>
+                      <span className="label-icon" aria-hidden="true">
+                        <User size={14} />
+                      </span>
+                      Select User
+                    </label>
+                    <select
+                      value={selectedUserForEnrollment?.userId || ''}
+                      onChange={(e) => {
+                        const userId = e.target.value;
+                        const user = departmentUsers.find(u => u.userId === userId);
+                        setSelectedUserForEnrollment(user || null);
+                        if (userId && selectedEnrollmentCourse?.id && selectedEnrollmentDepartment?.id) {
+                          void loadSelectedCourseAccessForEnrollment(
+                            userId,
+                            selectedEnrollmentCourse.id,
+                            selectedEnrollmentDepartment.id,
+                            null
+                          );
+                        }
+                      }}
+                    >
+                      <option value="">Choose a user...</option>
+                      {departmentUsers.map((user) => (
+                        <option key={user.userId} value={user.userId}>
+                          {user.firstName} {user.lastName} ({user.username})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {selectedEnrollmentDepartment && selectedUserForEnrollment && (
+                    <div className="enrollment-field">
+                      <label>
+                        <span className="label-icon" aria-hidden="true">
+                          <ShieldCheck size={14} />
+                        </span>
+                        Department Access
+                      </label>
+                      <div className="course-checkbox-label" style={{ cursor: 'default' }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedEnrollmentDepartmentHasAccess}
+                          onChange={(e) => {
+                            const nextValue = e.target.checked;
+                            setSelectedEnrollmentDepartmentHasAccess(nextValue);
+                            if (!nextValue) {
+                              setSelectedEnrollmentCourseHasAccess(false);
+                              setSelectedEnrollmentTopicIds([]);
+                            }
+                          }}
+                        />
+                        <span>{selectedEnrollmentDepartment.name}</span>
+                      </div>
+                      <span className="input-hint">Grant or revoke access to this department.</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* CENTER COLUMN: Course Selection & Access */}
+                <div className="enrollment-column">
+                  <div className="enrollment-column-header">Course Details</div>
+                  
+                  {selectedEnrollmentDepartment && (
+                    <div className="enrollment-field">
+                      <label>
+                        <span className="label-icon" aria-hidden="true">
+                          <BookOpen size={14} />
+                        </span>
+                        Select Program
+                      </label>
+                      <select
+                        value={selectedEnrollmentCourse?.id || ''}
+                        onChange={(e) => {
+                          const courseId = Number(e.target.value || 0);
+                          const course = availablePrograms.find((item) => Number(item.id) === courseId) || null;
+                          setSelectedEnrollmentCourse(course);
+                          setSelectedEnrollmentSubjectIds([]);
+                          setIsCourseSelectorExpanded(false);
+                          setSelectedEnrollmentCourseHasAccess(false);
+                          setSelectedEnrollmentCourseExistingAccess(false);
+                          setSelectedEnrollmentTopicIds([]);
+                          setExistingEnrollmentTopicIds([]);
+                          setSelectedEnrollmentTopics([]);
+                          if (selectedUserForEnrollment?.userId && course?.id && selectedEnrollmentDepartment?.id) {
+                            void loadSelectedCourseAccessForEnrollment(
+                              selectedUserForEnrollment.userId,
+                              course.id,
+                              selectedEnrollmentDepartment.id,
+                              null
+                            );
+                          }
+                        }}
+                      >
+                        <option value="">Choose a program...</option>
+                        {isLoadingEnrollmentCourses ? (
+                          <option disabled>Loading programs...</option>
+                        ) : availablePrograms.length === 0 ? (
+                          <option disabled>No programs found</option>
+                        ) : (
+                          availablePrograms.map((course) => (
+                            <option key={course.id} value={course.id}>
+                              {(course.code ? `${course.code} - ` : '') + course.name}
+                            </option>
+                          ))
+                        )}
+                      </select>
+                    </div>
+                  )}
+
+                  {selectedEnrollmentCourse && (
+                    <div className="enrollment-field enrollment-field-scrollable">
+                      <label>
+                        <span className="label-icon" aria-hidden="true">
+                          <FileText size={14} />
+                        </span>
+                        Select Courses
+                      </label>
+                      <div className="course-selector-toolbar">
+                        <span className="course-selection-count">
+                          {selectedEnrollmentSubjectIds.length} selected
+                        </span>
+                        <div className="course-selector-actions">
+                          <button
+                            type="button"
+                            className="course-selector-link"
+                            onClick={() => {
+                              const allIds = availableSubjects.map((subject) => Number(subject.subjectId));
+                              setSelectedEnrollmentSubjectIds(allIds);
+                              void applyEnrollmentSubjects(allIds);
+                            }}
+                            disabled={availableSubjects.length === 0}
+                          >
+                            Select all
+                          </button>
+                          <button
+                            type="button"
+                            className="course-selector-link"
+                            onClick={() => {
+                              setSelectedEnrollmentSubjectIds([]);
+                              void applyEnrollmentSubjects([]);
+                            }}
+                            disabled={selectedEnrollmentSubjectIds.length === 0}
+                          >
+                            Clear
+                          </button>
+                          <button
+                            type="button"
+                            className="course-selector-toggle"
+                            onClick={() => setIsCourseSelectorExpanded((prev) => !prev)}
+                            disabled={availableSubjects.length === 0}
+                          >
+                            {isCourseSelectorExpanded ? 'Hide courses' : 'Choose courses'}
+                          </button>
+                        </div>
+                      </div>
+                      {availableSubjects.length === 0 ? (
+                        <p className="enrollment-loading">No courses found.</p>
+                      ) : isCourseSelectorExpanded ? (
+                        <div className="topic-assign-list">
+                          {availableSubjects.map((subject) => {
+                            const subjectId = Number(subject.subjectId);
+                            const isChecked = selectedEnrollmentSubjectIds.includes(subjectId);
+                            return (
+                              <label key={subject.subjectId} className="course-checkbox-label">
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={(e) => {
+                                    const nextIds = e.target.checked
+                                      ? [...selectedEnrollmentSubjectIds, subjectId]
+                                      : selectedEnrollmentSubjectIds.filter((id) => id !== subjectId);
+                                    setSelectedEnrollmentSubjectIds(nextIds);
+                                    void applyEnrollmentSubjects(nextIds);
+                                  }}
+                                />
+                                <span>{(subject.courseCode ? `${subject.courseCode} - ` : '') + subject.courseTitle}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="enrollment-loading">Expand to manage course access.</p>
+                      )}
+                    </div>
+                  )}
+
+                  {selectedUserForEnrollment && selectedEnrollmentCourse && (
+                    <div className="enrollment-field">
+                      <label>
+                        <span className="label-icon" aria-hidden="true">
+                          <ShieldCheck size={14} />
+                        </span>
+                        Program Access
+                      </label>
+                      <div className="course-checkbox-label" style={{ cursor: 'default' }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedEnrollmentCourseHasAccess}
+                          onChange={(e) => {
+                            const nextValue = e.target.checked;
+                            setSelectedEnrollmentCourseHasAccess(nextValue);
+                            if (!nextValue) {
+                              setSelectedEnrollmentTopicIds([]);
+                            }
+                          }}
+                        />
+                        <span>{selectedEnrollmentCourse.name}</span>
+                      </div>
+                      <span className="input-hint">Check to grant access, uncheck to revoke access for this program only.</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* RIGHT COLUMN: Topics Assignment */}
+                <div className="enrollment-column">
+                  <div className="enrollment-column-header">Topic Access</div>
+                  
+                  {selectedEnrollmentSubjectIds.length > 0 && (
+                    <div className="enrollment-field enrollment-field-scrollable">
+                      <label>
+                        <span className="label-icon" aria-hidden="true">
+                          <Tags size={14} />
+                        </span>
+                        Assign Topics
+                      </label>
+                      {isLoadingEnrollmentTopics ? (
+                        <p className="enrollment-loading">Loading topics...</p>
+                      ) : selectedEnrollmentTopics.length === 0 ? (
+                        <p className="enrollment-loading">No topics available.</p>
+                      ) : (
+                        <div className="topic-assign-list">
+                          {selectedEnrollmentTopics.map((topic) => (
+                            <label key={topic.id} className="course-checkbox-label">
+                              <input
+                                type="checkbox"
+                                checked={selectedEnrollmentTopicIds.includes(topic.id)}
+                                onChange={(e) => {
+                                  const nextValue = e.target.checked;
+                                  setSelectedEnrollmentTopicIds((prev) => {
+                                    if (nextValue) {
+                                      return prev.includes(topic.id) ? prev : [...prev, topic.id];
+                                    }
+                                    return prev.filter((id) => id !== topic.id);
+                                  });
+                                }}
+                              />
+                              <span>{topic.title}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                      <span className="input-hint">Topics are filtered by the selected course.</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="enrollment-actions">
+                <button
+                  type="button"
+                  className="enrollment-cancel-btn"
+                  onClick={() => {
+                    setSelectedEnrollmentCourse(null);
+                    setSelectedEnrollmentSubjectIds([]);
+                    setIsCourseSelectorExpanded(false);
+                    setSelectedEnrollmentDepartment(null);
+                    setSelectedUserForEnrollment(null);
+                    setSelectedEnrollmentCourseHasAccess(false);
+                    setSelectedEnrollmentCourseExistingAccess(false);
+                    setSelectedEnrollmentDepartmentHasAccess(false);
+                    setSelectedEnrollmentDepartmentExistingAccess(false);
+                    setSelectedEnrollmentTopicIds([]);
+                    setExistingEnrollmentTopicIds([]);
+                    setShowUserEnrollmentModal(false);
+                  }}
+                >
+                  <span className="enrollment-action-icon" aria-hidden="true">
+                    <X size={16} />
+                  </span>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="enrollment-confirm-btn"
+                  onClick={handleEnrollUser}
+                  disabled={!selectedUserForEnrollment || !selectedEnrollmentDepartment || !selectedEnrollmentCourse || isEnrollingUser}
+                >
+                  <span className="enrollment-action-icon" aria-hidden="true">
+                    <Save size={16} />
+                  </span>
+                  {isEnrollingUser ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
+
+      {isTopicAccessModalOpen && (() => {
+        const selectedDept = getCurrentDepartment();
+        const departmentUsers = selectedDept
+          ? enrollmentUsers.filter(user => Array.isArray(user.departmentIds) && user.departmentIds.includes(selectedDept.id))
+          : [];
+        const topicAccessUsers = topicAccessCourseId
+          ? departmentUsers.filter(user => Array.isArray(user.courseIds) && user.courseIds.includes(topicAccessCourseId))
+          : departmentUsers;
+
+        return (
+          <div className="app-confirmation-overlay" onClick={closeTopicAccessModal}>
+            <div className={`app-confirmation-modal enrollment-modal ${isDarkMode ? 'dark' : ''}`} onClick={(e) => e.stopPropagation()}>
+              <h3>Add User to Topic</h3>
+
+              <div className="enrollment-section">
+                <div className="enrollment-field">
+                  <label>Topic</label>
+                  <div className="course-checkbox-label" style={{ cursor: 'default' }}>
+                    <span>{topicAccessTarget?.title || 'Selected topic'}</span>
+                  </div>
+                </div>
+                <div className="enrollment-field">
+                  <label>Select User</label>
+                  <select
+                    value={selectedUserForTopicAccess?.userId || ''}
+                    onChange={(e) => {
+                      const userId = e.target.value;
+                      const user = topicAccessUsers.find(u => u.userId === userId);
+                      setSelectedUserForTopicAccess(user || null);
+                    }}
+                  >
+                    <option value="">Choose a user...</option>
+                    {topicAccessUsers.map((user) => (
+                      <option key={user.userId} value={user.userId}>
+                        {user.firstName} {user.lastName} ({user.username})
+                      </option>
+                    ))}
+                  </select>
+                  <span className="input-hint">Only users already enrolled in this course are shown.</span>
+                </div>
+                <div className="enrollment-field">
+                  <label>Access</label>
+                  <label className="course-checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={topicAccessHasAccess}
+                      onChange={(e) => {
+                        setTopicAccessHasAccess(e.target.checked);
+                      }}
+                    />
+                    <span>Grant topic access</span>
+                  </label>
+                  {topicAccessExisting && (
+                    <span className="input-hint">User already has access. Uncheck to revoke.</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="enrollment-actions">
+                <button
+                  type="button"
+                  className="enrollment-cancel-btn"
+                  onClick={closeTopicAccessModal}
+                  disabled={isGrantingTopicAccess}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="enrollment-confirm-btn"
+                  onClick={submitTopicAccess}
+                  disabled={!selectedUserForTopicAccess || isGrantingTopicAccess}
+                >
+                  {isGrantingTopicAccess ? 'Adding...' : 'Add User'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       <LogoutModal
         isOpen={isLogoutModalOpen}

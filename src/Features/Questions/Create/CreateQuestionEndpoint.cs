@@ -4,6 +4,7 @@ using Databank.Database;
 using Databank.Entities;
 using Databank.Features.Options;
 using Databank.Features.Questions;
+using Databank.Features.Topics;
 using Databank.Services;
 using Microsoft.EntityFrameworkCore;
 
@@ -31,6 +32,32 @@ public sealed class CreateQuestionEndpoint : IEndpoint
             {
                 logger.LogWarning("Topic {TopicId} not found", request.TopicId);
                 return TypedResults.BadRequest("Topic not found.");
+            }
+
+            var requesterId = QuestionPermissionResolver.GetCurrentUserId(httpContext.User);
+            if (!requesterId.HasValue)
+            {
+                return TypedResults.Problem("Unable to determine the current user.", statusCode: StatusCodes.Status401Unauthorized);
+            }
+
+            var isAdmin = await dbContext.Users
+                .AsNoTracking()
+                .AnyAsync(u => u.UserId == requesterId.Value && u.IsAdmin, ct);
+
+            if (!isAdmin)
+            {
+                var viewableTopics = await TopicPermissionResolver.ResolveViewAccessForUserAsync(
+                    dbContext,
+                    requesterId.Value,
+                    new[] { request.TopicId },
+                    ct);
+
+                if (!viewableTopics.Contains(request.TopicId))
+                {
+                    return TypedResults.Problem(
+                        "You do not have access to this topic.",
+                        statusCode: StatusCodes.Status403Forbidden);
+                }
             }
 
             logger.LogInformation("Topic {TopicId} exists, creating question...", request.TopicId);
@@ -68,7 +95,7 @@ public sealed class CreateQuestionEndpoint : IEndpoint
             var question = new Question
             {
                 TopicId = request.TopicId,
-                CreatedByUserId = QuestionPermissionResolver.GetCurrentUserId(httpContext.User),
+                CreatedByUserId = requesterId.Value,
                 Content = questionContent,
                 QuestionType = request.QuestionType,
                 BloomLevel = request.BloomLevel,

@@ -4,6 +4,7 @@ using Databank.Database;
 using Databank.Entities;
 using Databank.Features.Options;
 using Databank.Features.Questions;
+using Databank.Features.Topics;
 using Databank.Services;
 using Microsoft.EntityFrameworkCore;
 
@@ -39,6 +40,10 @@ public sealed class UpdateQuestionEndpoint : IEndpoint
                 return TypedResults.Problem("Unable to determine the current user.", statusCode: StatusCodes.Status401Unauthorized);
             }
 
+            var isAdmin = await dbContext.Users
+                .AsNoTracking()
+                .AnyAsync(u => u.UserId == requesterId.Value && u.IsAdmin, ct);
+
             var permission = await QuestionPermissionResolver.ResolvePermissionsForUserAsync(
                 dbContext,
                 requesterId.Value,
@@ -59,6 +64,22 @@ public sealed class UpdateQuestionEndpoint : IEndpoint
             if (!topicExists)
             {
                 return TypedResults.BadRequest("Topic not found.");
+            }
+
+            if (!isAdmin)
+            {
+                var viewableTopics = await TopicPermissionResolver.ResolveViewAccessForUserAsync(
+                    dbContext,
+                    requesterId.Value,
+                    new[] { request.TopicId },
+                    ct);
+
+                if (!viewableTopics.Contains(request.TopicId))
+                {
+                    return TypedResults.Problem(
+                        "You do not have access to this topic.",
+                        statusCode: StatusCodes.Status403Forbidden);
+                }
             }
 
             var sanitizedContent = TextInputSanitizer.SanitizeRichTextHtml(request.Content);

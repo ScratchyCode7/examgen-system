@@ -18,4 +18,5 @@ public sealed class Course
     // Navigation
     public Department Department { get; set; } = null!;
     public ICollection<Subject> Subjects { get; set; } = [];
+    public ICollection<UserCourse> UserCourses { get; set; } = [];
 }
