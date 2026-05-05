@@ -515,7 +515,7 @@ const UserManagement = ({ searchQuery = '' }) => {
       const rightLabel = `${right.code || ''} ${right.name || ''}`.trim().toLowerCase();
       return leftLabel.localeCompare(rightLabel);
     });
-  }, [formData.departmentIds, coursesByDepartment]);
+  }, [formData.departmentIds, coursesByDepartment, getCoursesForDepartments]);
 
   return (
     <div className={`user-management ${isDarkMode ? 'dark' : ''}`}>

@@ -1135,43 +1135,6 @@ const CourseTopic = () => {
     }
   };
 
-  const openCourseEnrollmentModal = (subjectRow) => {
-    if (!isAdmin) {
-      showToast({ message: 'Only admins can add users to courses.', type: 'error' });
-      return;
-    }
-
-    const normalizedCourseId = Number(subjectRow?.courseId ?? subjectRow?.id);
-    if (!Number.isFinite(normalizedCourseId)) {
-      showToast({ message: 'Course selection is required.', type: 'error' });
-      return;
-    }
-
-    const currentDept = getCurrentDepartment();
-
-    setSelectedEnrollmentDepartment(currentDept || null);
-    setEnrollmentCourses(courses);
-    setSelectedEnrollmentCourse({
-      id: normalizedCourseId,
-      code: subjectRow.courseCode || subjectRow.code || '',
-      name: subjectRow.courseTitle || subjectRow.name || '',
-    });
-    setSelectedEnrollmentSubjectIds(subjectRow?.subjectId ? [Number(subjectRow.subjectId)] : []);
-    setSelectedEnrollmentTopics([]);
-    setSelectedEnrollmentTopicIds([]);
-    setExistingEnrollmentTopicIds([]);
-    setSelectedUserForEnrollment(null);
-    setSelectedEnrollmentCourseHasAccess(false);
-    setSelectedEnrollmentCourseExistingAccess(false);
-    setSelectedEnrollmentDepartmentHasAccess(false);
-    setSelectedEnrollmentDepartmentExistingAccess(false);
-    setShowUserEnrollmentModal(true);
-
-    if (subjectRow?.subjectId) {
-      void applyEnrollmentSubjects([Number(subjectRow.subjectId)]);
-    }
-  };
-
   const openCourseEnrollmentForSelected = () => {
     if (!isAdmin) {
       showToast({ message: 'Only admins can add users to courses.', type: 'error' });
@@ -1269,7 +1232,7 @@ const CourseTopic = () => {
       setSelectedEnrollmentTopicIds([]);
       setExistingEnrollmentTopicIds([]);
     }
-  }, [history, loadEnrollmentAccessForUser]);
+  }, [applyEnrollmentSubjects, history, loadEnrollmentAccessForUser]);
 
   const applyEnrollmentSubjects = useCallback(async (subjectIds, preselectedTopicIds = null) => {
     const normalizedSubjectIds = Array.from(new Set(subjectIds.map((id) => Number(id)).filter(Number.isFinite)));
@@ -1335,25 +1298,6 @@ const CourseTopic = () => {
     selectedEnrollmentCourse,
     loadSelectedCourseAccessForEnrollment,
   ]);
-
-  const openTopicAccessModal = (topic, courseId) => {
-    if (!isAdmin) {
-      showToast({ message: 'Only admins can add users to topics.', type: 'error' });
-      return;
-    }
-
-    if (!topic?.id) {
-      showToast({ message: 'Topic selection is required.', type: 'error' });
-      return;
-    }
-
-    setTopicAccessTarget(topic);
-    setTopicAccessCourseId(courseId || null);
-    setSelectedUserForTopicAccess(null);
-    setTopicAccessHasAccess(false);
-    setTopicAccessExisting(false);
-    setIsTopicAccessModalOpen(true);
-  };
 
   const closeTopicAccessModal = () => {
     if (isGrantingTopicAccess) return;
